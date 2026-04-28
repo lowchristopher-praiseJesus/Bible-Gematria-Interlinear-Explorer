@@ -41,6 +41,7 @@ export function ChatSidebar() {
           text: data.message || '',
           type: data.type,
           data: data.data,
+          route: data.route,
         }
         setMessages((prev) => [...prev, assistantMsg])
       } catch {
@@ -122,6 +123,12 @@ export function ChatSidebar() {
                 <div className="whitespace-pre-wrap">{msg.text}</div>
               )}
               {msg.isStreaming && <span className="animate-pulse">▌</span>}
+              {msg.role === 'assistant' && msg.route && !msg.isStreaming && (
+                <div className="mt-2 pt-2 border-t border-gray-200 font-mono text-[10px] text-gray-400 break-all">
+                  <span className="inline-block font-bold text-[9px] uppercase tracking-wide border rounded px-1 mr-1.5 align-middle" style={{ color: '#c9a227', borderColor: '#c9a227' }}>Route</span>
+                  {msg.route}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -192,11 +199,24 @@ function LoadingDots() {
   )
 }
 
+const SECTION_LABELS: Record<string, string> = {
+  historical_setting: 'Historical Setting',
+  cultural_background: 'Cultural Background',
+  author_and_audience: 'Author & Audience',
+  literary_context: 'Literary Context',
+  genre_and_style: 'Genre & Style',
+  language_and_translation: 'Language & Translation',
+  theological_themes: 'Theological Themes',
+  immediate_purpose: 'Immediate Purpose',
+}
+
 function VerseCard({ data }: { data: any }) {
   const [selected, setSelected] = useState<string | null>(null)
+  const [contextOpen, setContextOpen] = useState(false)
   const translations = data.translations as Record<string, string>
   const keys = Object.keys(translations)
   const activeKey = selected || keys[0]
+  const ctx = data.book_context
 
   return (
     <div>
@@ -218,6 +238,32 @@ function VerseCard({ data }: { data: any }) {
           </button>
         ))}
       </div>
+      {ctx && (
+        <div className="mt-2 pt-2 border-t border-gray-200">
+          <button
+            onClick={() => setContextOpen((o) => !o)}
+            className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide"
+            style={{ color: '#c9a227' }}
+          >
+            <span>{contextOpen ? '▾' : '▸'}</span>
+            {ctx.book_name} — Book Context
+          </button>
+          {contextOpen && (
+            <dl className="mt-2 flex flex-col gap-2">
+              {Object.entries(ctx.sections as Record<string, string | null>)
+                .filter(([, v]) => v)
+                .map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                      {SECTION_LABELS[k] ?? k}
+                    </dt>
+                    <dd className="text-xs text-gray-700 leading-relaxed mt-0.5">{v}</dd>
+                  </div>
+                ))}
+            </dl>
+          )}
+        </div>
+      )}
     </div>
   )
 }
