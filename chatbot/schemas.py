@@ -47,6 +47,12 @@ class StrongsResponse(BaseModel):
     words: Dict[str, Any] = Field(..., description="Strong's entries keyed by number")
 
 
+class BookContextResponse(BaseModel):
+    book: str = Field(..., description="USFM code")
+    book_name: str = Field(..., description="Full book name")
+    sections: Dict[str, Optional[str]] = Field(..., description="Section key -> content, or null if not available")
+
+
 class SSEChunk(BaseModel):
     chunk: str = Field(..., description="Streaming text chunk")
     done: bool = Field(False, description="Whether this is the final chunk")

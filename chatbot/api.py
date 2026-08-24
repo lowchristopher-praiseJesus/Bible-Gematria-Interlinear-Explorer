@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from chatbot.schemas import (
+    BookContextResponse,
     ChatRequest,
     ChatResponse,
     StrongsResponse,
@@ -17,6 +18,7 @@ from chatbot.tools import (
     fetch_scripture_study,
     fetch_strongs,
 )
+from chatbot.book_context import get_book_context
 from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups
 from chatbot.streaming import sse_stream, sse_event
 
@@ -67,6 +69,15 @@ async def get_strongs_endpoint(
 
     result = await fetch_strongs(numbers=numbers, words=words)
     return StrongsResponse(**result)
+
+
+@router.get("/book_context/{book}", response_model=BookContextResponse)
+async def get_book_context_endpoint(book: str):
+    """Fetch book-level context (historical setting, themes, etc.) for a NT book."""
+    ctx = get_book_context(book)
+    if not ctx:
+        raise HTTPException(status_code=404, detail="No context available for this book")
+    return BookContextResponse(**ctx)
 
 
 # ---------------------------------------------------------------------------
