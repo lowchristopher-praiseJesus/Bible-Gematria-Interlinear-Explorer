@@ -64,6 +64,35 @@ describe('ChatPane', () => {
     expect(useArtifactStore.getState().activeArtifact).toEqual({ type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } })
   })
 
+  it('renders a VerseBubble with translation text for a verse-type message', () => {
+    const session = useSessionsStore.getState().createSession('verse', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'm1',
+      role: 'assistant',
+      text: 'Here is **JHN 3:16**.',
+      type: 'verse',
+      data: { reference: 'JHN 3:16', translations: { 'eng-KJV': 'For God so loved the world...' } },
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.getByText('For God so loved the world...')).toBeInTheDocument()
+  })
+
+  it('renders a StrongsBubble with word data for a strongs-type message', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'm1',
+      role: 'assistant',
+      text: "Here is the Strong's entry.",
+      type: 'strongs',
+      data: { words: { G0025: { lemma: 'ἀγαπάω', definition: 'to love' } } },
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.getByText('G0025')).toBeInTheDocument()
+    expect(screen.getByText('to love')).toBeInTheDocument()
+  })
+
   it('shows a "Mark day complete" action for reading_plan sessions', () => {
     const session = useSessionsStore.getState().createSession('reading_plan', { plan: 'chronological', dayIndex: 0, completedDays: [] })
     useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'assistant', text: 'Day 1 reading' })

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useArtifactStore } from '@/store/useArtifactStore'
 import type { ExplorerResponse } from '@/types/api'
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
 
 export function InterlinearArtifact({ data }: Props) {
   const [tab, setTab] = useState<'text' | 'manuscript'>('text')
+  const openArtifact = useArtifactStore((s) => s.openArtifact)
   const { verse, kjvWords, originalWords } = data
 
   return (
@@ -40,7 +42,15 @@ export function InterlinearArtifact({ data }: Props) {
           <div className="flex flex-col gap-1">
             {kjvWords.map((w, i) => (
               <div key={i} className="flex items-baseline gap-2 text-xs border-b border-[var(--color-theme-border)] pb-1">
-                <span className="font-mono px-1 rounded bg-[var(--color-surface-alt)]">{w.strongsNumber}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openArtifact({ type: 'strongs', label: `${w.strongsNumber} ▸`, params: { id: w.strongsNumber } })
+                  }
+                  className="font-mono px-1 rounded bg-[var(--color-surface-alt)] hover:underline"
+                >
+                  {w.strongsNumber}
+                </button>
                 <span
                   dangerouslySetInnerHTML={{
                     __html: w.kjvText.replace(/<st SN="[^"]*">/g, '').replace(/<\/st>/g, ''),

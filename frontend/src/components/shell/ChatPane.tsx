@@ -3,6 +3,8 @@ import { postChat } from '@/lib/chatApi'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
+import { VerseBubble } from './VerseBubble'
+import { StrongsBubble } from './StrongsBubble'
 import type { ArtifactLink, SessionMessage } from '@/types/session'
 
 interface Props {
@@ -84,6 +86,8 @@ export function ChatPane({ sessionId }: Props) {
               }`}
             >
               {renderMarkdown(msg.text)}
+              {msg.type === 'verse' && msg.data && <VerseBubble data={msg.data} />}
+              {msg.type === 'strongs' && msg.data && <StrongsBubble data={msg.data} />}
               {msg.artifacts && msg.artifacts.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {msg.artifacts.map((link: ArtifactLink, i: number) => (
