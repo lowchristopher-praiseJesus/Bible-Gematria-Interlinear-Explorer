@@ -33,6 +33,48 @@ function genId(): string {
   return `session-${Date.now()}-${++idCounter}`
 }
 
+interface PersistedSessionsShape {
+  sessions?: unknown
+  activeSessionId?: unknown
+}
+
+/**
+ * A persisted session is only usable if it has the fields the rest of
+ * the app assumes are always present. Anything else (an old shape, a
+ * hand-edited localStorage blob, a partially-written entry from a
+ * crashed tab) gets dropped rather than crashing ChatPane on render.
+ */
+function isValidSession(value: unknown): value is Session {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.mode === 'string' &&
+    Array.isArray(candidate.messages)
+  )
+}
+
+function sanitizeSessions(sessions: unknown): Record<string, Session> {
+  if (!sessions || typeof sessions !== 'object') return {}
+  const out: Record<string, Session> = {}
+  for (const [id, value] of Object.entries(sessions as Record<string, unknown>)) {
+    if (isValidSession(value)) out[id] = value
+  }
+  return out
+}
+
+function sanitizePersistedState(
+  persistedState: unknown
+): Pick<SessionsState, 'sessions' | 'activeSessionId'> {
+  const state = (persistedState ?? {}) as PersistedSessionsShape
+  const sessions = sanitizeSessions(state.sessions)
+  const activeSessionId =
+    typeof state.activeSessionId === 'string' && sessions[state.activeSessionId]
+      ? state.activeSessionId
+      : null
+  return { sessions, activeSessionId }
+}
+
 export const useSessionsStore = create<SessionsState>()(
   persist(
     (set, get) => ({
@@ -102,6 +144,20 @@ export const useSessionsStore = create<SessionsState>()(
 
       listSessions: () => Object.values(get().sessions).sort((a, b) => b.updatedAt - a.updatedAt),
     }),
-    { name: 'bible-explorer-sessions' }
+    {
+      name: 'bible-explorer-sessions',
+      version: 1,
+      // `migrate` only runs when the persisted version differs from the
+      // one above, so it alone can't catch corruption written under the
+      // current version (the actual incident this defends against: a
+      // response bug wrote `text: undefined`, which JSON.stringify then
+      // silently dropped on the next persist). `merge` runs on every
+      // hydration regardless of version, so sanitize there too.
+      migrate: (persistedState) => sanitizePersistedState(persistedState) as SessionsState,
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...sanitizePersistedState(persistedState),
+      }),
+    }
   )
 )

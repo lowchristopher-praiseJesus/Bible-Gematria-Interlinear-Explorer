@@ -48,4 +48,41 @@ describe('useSessionsStore', () => {
     expect(list[0].id).toBe(a.id)
     expect(list[1].id).toBe(b.id)
   })
+
+  it('drops a corrupt persisted session instead of crashing on rehydration', async () => {
+    localStorage.setItem(
+      'bible-explorer-sessions',
+      JSON.stringify({
+        state: {
+          sessions: {
+            // Missing `messages` — the shape that previously crashed ChatPane on render.
+            bad: { id: 'bad', mode: 'freeform' },
+            // Not even an object.
+            alsoBad: 'not-a-session',
+            ok: {
+              id: 'ok',
+              mode: 'freeform',
+              modeParams: {},
+              title: 'Ask Anything',
+              messages: [],
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+          activeSessionId: 'bad',
+        },
+        version: 1,
+      })
+    )
+
+    await useSessionsStore.persist.rehydrate()
+
+    const state = useSessionsStore.getState()
+    expect(state.sessions.bad).toBeUndefined()
+    expect(state.sessions.alsoBad).toBeUndefined()
+    expect(state.sessions.ok).toBeDefined()
+    // The active session pointed at a dropped entry, so it resets rather
+    // than pointing at nothing.
+    expect(state.activeSessionId).toBeNull()
+  })
 })

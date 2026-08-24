@@ -14,6 +14,6 @@ export const useThemeStore = create<ThemeState>()(
       theme: 'scholarly',
       setTheme: (theme) => set({ theme }),
     }),
-    { name: 'bible-explorer-theme' }
+    { name: 'bible-explorer-theme', version: 1 }
   )
 )
