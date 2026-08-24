@@ -6,6 +6,7 @@ import type {
   GematriaResponse,
   StrongsResponse,
 } from '@/types/api'
+import type { ArtifactLink } from '@/types/session'
 
 const CHAT_API = '/api/bible-chat'
 
@@ -23,7 +24,7 @@ interface ChatApiResponse {
   data?: Record<string, unknown> | null
   route?: string
   follow_up_questions?: string[]
-  artifacts?: { type: string; label: string; params: Record<string, unknown> }[]
+  artifacts?: ArtifactLink[]
 }
 
 export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {

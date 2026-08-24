@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { postChat } from '@/lib/chatApi'
 import { listParables, listTopics, type ParableEntry, type TopicEntry } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
-import type { ArtifactLink, ModeParams, SessionMessage, SessionMode } from '@/types/session'
+import type { ModeParams, SessionMessage, SessionMode } from '@/types/session'
 
 interface Props {
   onSessionStarted: (sessionId: string) => void
@@ -25,14 +25,14 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
 
   async function startSession(mode: SessionMode, modeParams: ModeParams) {
     const session = createSession(mode, modeParams)
-    const response = await postChat({ message: '', mode, mode_params: modeParams as Record<string, unknown> })
+    const response = await postChat({ message: '', mode, mode_params: { ...modeParams } })
     const message: SessionMessage = {
       id: genId(),
       role: 'assistant',
       text: response.message,
       type: response.type,
       data: response.data ?? undefined,
-      artifacts: response.artifacts as ArtifactLink[] | undefined,
+      artifacts: response.artifacts,
       followUpQuestions: response.follow_up_questions,
     }
     appendMessage(session.id, message)
