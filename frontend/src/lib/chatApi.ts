@@ -71,6 +71,19 @@ export async function parseJsonResponse<T>(res: Response): Promise<T> {
   return res.json()
 }
 
+/**
+ * A verse reference always ends in `chapter:verse` or
+ * `chapter:verse-verse_end`. Strip a trailing range down to its start
+ * verse so callers always resolve to the first verse of the range —
+ * Flask's own range parsing does `second_n.isdigit()` on the substring
+ * after the chapter's colon and silently falls back to verse 1 when a
+ * range like "11-32" is present, since it never parses the "-32" suffix.
+ * A bare book/chapter reference with no chapter:verse is left unchanged.
+ */
+function stripVerseRange(reference: string): string {
+  return reference.replace(/^(.*\d+:\d+)-\d+$/, '$1')
+}
+
 export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {
   const { mode_params, ...rest } = payload
   const res = await fetch(`${CHAT_API}/chat`, {
@@ -85,7 +98,9 @@ export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {
 }
 
 export async function fetchInterlinear(reference: string): Promise<ExplorerResponse> {
-  const res = await fetch(`/api/explorer?reference=${encodeURIComponent(usfmToFullRef(reference))}`)
+  const res = await fetch(
+    `/api/explorer?reference=${encodeURIComponent(usfmToFullRef(stripVerseRange(reference)))}`
+  )
   return parseJsonResponse<ExplorerResponse>(res)
 }
 

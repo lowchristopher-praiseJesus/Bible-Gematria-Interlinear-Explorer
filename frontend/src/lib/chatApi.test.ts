@@ -67,6 +67,24 @@ describe('chatApi', () => {
     expect(fetch).toHaveBeenCalledWith('/api/explorer?reference=Matthew%206%3A28')
   })
 
+  it('fetchInterlinear strips a verse range down to its start verse', async () => {
+    mockFetchOnce({ verse: { ref: 'John 3:16' } })
+    await fetchInterlinear('JHN 3:16-18')
+    expect(fetch).toHaveBeenCalledWith('/api/explorer?reference=John%203%3A16')
+  })
+
+  it('fetchInterlinear strips a verse range for a full book name reference', async () => {
+    mockFetchOnce({ verse: { ref: '1 Corinthians 13:4' } })
+    await fetchInterlinear('1 Corinthians 13:4-7')
+    expect(fetch).toHaveBeenCalledWith('/api/explorer?reference=1%20Corinthians%2013%3A4')
+  })
+
+  it('fetchInterlinear leaves a bare book/chapter reference (no verse) unchanged', async () => {
+    mockFetchOnce({ verse: { ref: 'Matthew 6' } })
+    await fetchInterlinear('MAT 6')
+    expect(fetch).toHaveBeenCalledWith('/api/explorer?reference=Matthew%206')
+  })
+
   it('fetchStrongsEntry calls /api/strongs', async () => {
     mockFetchOnce({ definition: null, verses: [], resultSummary: 'No results' })
     await fetchStrongsEntry('G26')
