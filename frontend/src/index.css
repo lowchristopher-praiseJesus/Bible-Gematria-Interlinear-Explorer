@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'TaameyFrank';
+  src: url('/fonts/TaameyFrankCLM/TaameyFrankCLM-Medium.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@theme {
+  --font-hebrew: 'TaameyFrank', 'SBL Hebrew', serif;
+  --font-greek: 'Source Sans Pro', 'Cardo', serif;
+  --color-accent: #5b6ef5;
+  --color-accent-dark: #4356e0;
+  --color-green: #22863a;
+  --color-gold: #b8860b;
+}
+
+@theme {
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-theme-accent: var(--theme-accent);
+  --color-theme-accent-contrast: var(--theme-accent-contrast);
+  --color-theme-border: var(--theme-border);
+}
+
+/* Modern Scholarly — default */
+:root,
+:root[data-theme='scholarly'] {
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --theme-accent: #4338ca;
+  --theme-accent-contrast: #ffffff;
+  --theme-border: #e2e8f0;
+}
+
+:root[data-theme='illuminated'] {
+  --surface: #faf3e6;
+  --surface-alt: #f3e6cc;
+  --text-primary: #4a3520;
+  --text-secondary: #7a5c3a;
+  --theme-accent: #5a1f2e;
+  --theme-accent-contrast: #f3e6cc;
+  --theme-border: #e0cba0;
+}
+
+:root[data-theme='midnight'] {
+  --surface: #1a1a2e;
+  --surface-alt: #16162a;
+  --text-primary: #d8d8e8;
+  --text-secondary: #8a8aa8;
+  --theme-accent: #e8c874;
+  --theme-accent-contrast: #1a1a2e;
+  --theme-border: #2a2a45;
+}
+
+:root[data-theme='papyrus'] {
+  --surface: #fdfbf7;
+  --surface-alt: #f5efe4;
+  --text-primary: #2d2926;
+  --text-secondary: #6b5d4f;
+  --theme-accent: #a34a2f;
+  --theme-accent-contrast: #fdfbf7;
+  --theme-border: #e0d3bd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+/* Hebrew/Greek word element */
+w {
+  display: inline;
+  font-family: var(--font-hebrew);
+  font-size: 1.4rem;
+  direction: rtl;
+  cursor: pointer;
+}
+
+/* Custom XML elements used in original word HTML */
+esv, qere, reversednun, gw, pe, samekh {
+  display: inline;
+}
+
+/* KJV markup */
+divine { font-variant: small-caps; }
+inscription { font-style: italic; }
+psalmheader { font-style: italic; font-weight: bold; }
+headingletter { font-weight: bold; }
+colophon { font-style: italic; }
+
+/* Strong's number links */
+.sn-link {
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.sn-link:hover { text-decoration: underline; }
+
+/* Match highlight for English search */
+.match-highlight {
+  background: #fff176;
+  border-radius: 2px;
+}
