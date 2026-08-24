@@ -9,8 +9,10 @@ from chatbot.schemas import (
     BookContextResponse,
     ChatRequest,
     ChatResponse,
+    ParablesResponse,
     StrongsResponse,
     StudyResponse,
+    TopicsResponse,
     VerseResponse,
 )
 from chatbot.tools import (
@@ -19,6 +21,8 @@ from chatbot.tools import (
     fetch_strongs,
 )
 from chatbot.book_context import get_book_context
+from chatbot.data.parables import PARABLES
+from chatbot.data.topics import TOPICS
 from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups
 from chatbot.streaming import sse_stream, sse_event
 
@@ -78,6 +82,18 @@ async def get_book_context_endpoint(book: str):
     if not ctx:
         raise HTTPException(status_code=404, detail="No context available for this book")
     return BookContextResponse(**ctx)
+
+
+@router.get("/parables", response_model=ParablesResponse)
+async def list_parables():
+    """List the curated parables available for Parable Study mode."""
+    return ParablesResponse(parables=PARABLES)
+
+
+@router.get("/topics", response_model=TopicsResponse)
+async def list_topics():
+    """List the curated topics available for Topical Study mode."""
+    return TopicsResponse(topics=TOPICS)
 
 
 # ---------------------------------------------------------------------------

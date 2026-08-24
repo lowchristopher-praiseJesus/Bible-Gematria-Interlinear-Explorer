@@ -53,6 +53,26 @@ class BookContextResponse(BaseModel):
     sections: Dict[str, Optional[str]] = Field(..., description="Section key -> content, or null if not available")
 
 
+class ParableEntry(BaseModel):
+    id: str = Field(..., description="Unique identifier for the parable")
+    name: str = Field(..., description="Human-readable name")
+    reference: str = Field(..., description="Verse reference (e.g., 'Luke 15:11-32')")
+
+
+class ParablesResponse(BaseModel):
+    parables: List[ParableEntry] = Field(..., description="List of available parables")
+
+
+class TopicEntry(BaseModel):
+    id: str = Field(..., description="Unique identifier for the topic")
+    name: str = Field(..., description="Human-readable name")
+    seed_references: List[str] = Field(..., description="Key verse references for this topic")
+
+
+class TopicsResponse(BaseModel):
+    topics: List[TopicEntry] = Field(..., description="List of available topics")
+
+
 class SSEChunk(BaseModel):
     chunk: str = Field(..., description="Streaming text chunk")
     done: bool = Field(False, description="Whether this is the final chunk")
