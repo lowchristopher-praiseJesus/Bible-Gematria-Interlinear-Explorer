@@ -7,9 +7,9 @@ interface Props {
 }
 
 export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }: Props) {
-  const listSessions = useSessionsStore((s) => s.listSessions)
+  const sessions = useSessionsStore((s) => s.sessions)
   const deleteSession = useSessionsStore((s) => s.deleteSession)
-  const sessions = listSessions()
+  const sessionList = Object.values(sessions).sort((a, b) => b.updatedAt - a.updatedAt)
 
   return (
     <div className="h-full flex flex-col">
@@ -22,7 +22,7 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
         </button>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {sessions.map((session) => (
+        {sessionList.map((session) => (
           <div
             key={session.id}
             className={`flex items-center justify-between px-3 py-2 cursor-pointer text-sm ${
