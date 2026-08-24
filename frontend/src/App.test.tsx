@@ -32,6 +32,54 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /new session/i })).toBeInTheDocument()
   })
 
+  it('renders a Sessions/Chat/Artifact tab bar for narrow viewports', () => {
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Artifact' })).toBeInTheDocument()
+  })
+
+  it('defaults to the chat pane active and switches panes via the tab bar', async () => {
+    render(<App />)
+    const chatTab = screen.getByRole('button', { name: 'Chat' })
+    const sessionsTab = screen.getByRole('button', { name: 'Sessions' })
+    expect(chatTab).toHaveAttribute('aria-current', 'true')
+
+    await userEvent.click(sessionsTab)
+    expect(sessionsTab).toHaveAttribute('aria-current', 'true')
+    expect(chatTab).not.toHaveAttribute('aria-current')
+  })
+
+  it('opening an artifact link switches the active pane to Artifact', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+
+    useArtifactStore.getState().openArtifact({ type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } })
+
+    expect(await screen.findByRole('button', { name: 'Artifact' })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('selecting a different session from the sessions pane brings the Chat pane forward', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+
+    // A second session, created directly on the store, gives the list a
+    // distinct entry to click that actually changes the active session id.
+    const otherSession = useSessionsStore.getState().createSession('topic', { topicId: 'grace' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'true')
+
+    await userEvent.click(screen.getByText(otherSession.title))
+
+    expect(screen.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-current', 'true')
+  })
+
   it('switching the active session resets the artifact store to idle', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
