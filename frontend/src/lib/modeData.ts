@@ -1,3 +1,5 @@
+import { parseJsonResponse } from './chatApi'
+
 export interface ParableEntry {
   id: string
   name: string
@@ -12,12 +14,12 @@ export interface TopicEntry {
 
 export async function listParables(): Promise<ParableEntry[]> {
   const res = await fetch('/api/bible-chat/parables')
-  const body = await res.json()
+  const body = await parseJsonResponse<{ parables: ParableEntry[] }>(res)
   return body.parables
 }
 
 export async function listTopics(): Promise<TopicEntry[]> {
   const res = await fetch('/api/bible-chat/topics')
-  const body = await res.json()
+  const body = await parseJsonResponse<{ topics: TopicEntry[] }>(res)
   return body.topics
 }

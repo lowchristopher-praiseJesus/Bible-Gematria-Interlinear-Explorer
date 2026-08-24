@@ -90,4 +90,17 @@ describe('chatApi', () => {
     await fetchEnglishSearch('love')
     expect(fetch).toHaveBeenCalledWith('/api/english?words=love')
   })
+
+  it('postChat throws on a non-ok response instead of resolving with the error body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({ error: 'boom' }),
+      })
+    )
+    await expect(postChat({ message: 'hi' })).rejects.toThrow(/500/)
+  })
 })

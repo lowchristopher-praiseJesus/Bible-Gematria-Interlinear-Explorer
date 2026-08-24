@@ -4,6 +4,7 @@ import { ChatPane } from '@/components/shell/ChatPane'
 import { ArtifactPane } from '@/components/shell/ArtifactPane'
 import { SessionsPane } from '@/components/shell/SessionsPane'
 import { SettingsPanel } from '@/components/shell/SettingsPanel'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useThemeStore } from '@/store/useThemeStore'
 
@@ -42,24 +43,30 @@ export default function App() {
           <SettingsPanel />
         </div>
         <div className="flex-1 min-h-0">
-          <SessionsPane
-            activeSessionId={sessionId}
-            onSelectSession={setSessionId}
-            onNewSession={() => setSessionId(null)}
-          />
+          <ErrorBoundary>
+            <SessionsPane
+              activeSessionId={sessionId}
+              onSelectSession={setSessionId}
+              onNewSession={() => setSessionId(null)}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 
       <div className="flex-1 min-w-0 border-r border-[var(--color-theme-border)]">
-        {activeSession ? (
-          <ChatPane sessionId={activeSession.id} />
-        ) : (
-          <ModePickerScreen onSessionStarted={setSessionId} />
-        )}
+        <ErrorBoundary>
+          {activeSession ? (
+            <ChatPane sessionId={activeSession.id} />
+          ) : (
+            <ModePickerScreen onSessionStarted={setSessionId} />
+          )}
+        </ErrorBoundary>
       </div>
 
       <div className="w-96 shrink-0">
-        <ArtifactPane />
+        <ErrorBoundary>
+          <ArtifactPane />
+        </ErrorBoundary>
       </div>
     </div>
   )

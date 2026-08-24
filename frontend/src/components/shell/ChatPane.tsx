@@ -45,6 +45,12 @@ export function ChatPane({ sessionId }: Props) {
           artifacts: response.artifacts,
           followUpQuestions: response.follow_up_questions,
         })
+      } catch (err) {
+        appendMessage(sessionId, {
+          id: genId(),
+          role: 'assistant',
+          text: 'Sorry, something went wrong: ' + (err instanceof Error ? err.message : String(err)),
+        })
       } finally {
         setLoading(false)
       }

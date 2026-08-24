@@ -25,17 +25,25 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
 
   async function startSession(mode: SessionMode, modeParams: ModeParams) {
     const session = createSession(mode, modeParams)
-    const response = await postChat({ message: '', mode, mode_params: { ...modeParams } })
-    const message: SessionMessage = {
-      id: genId(),
-      role: 'assistant',
-      text: response.message,
-      type: response.type,
-      data: response.data ?? undefined,
-      artifacts: response.artifacts,
-      followUpQuestions: response.follow_up_questions,
+    try {
+      const response = await postChat({ message: '', mode, mode_params: { ...modeParams } })
+      const message: SessionMessage = {
+        id: genId(),
+        role: 'assistant',
+        text: response.message,
+        type: response.type,
+        data: response.data ?? undefined,
+        artifacts: response.artifacts,
+        followUpQuestions: response.follow_up_questions,
+      }
+      appendMessage(session.id, message)
+    } catch (err) {
+      appendMessage(session.id, {
+        id: genId(),
+        role: 'assistant',
+        text: 'Sorry, something went wrong: ' + (err instanceof Error ? err.message : String(err)),
+      })
     }
-    appendMessage(session.id, message)
     onSessionStarted(session.id)
   }
 

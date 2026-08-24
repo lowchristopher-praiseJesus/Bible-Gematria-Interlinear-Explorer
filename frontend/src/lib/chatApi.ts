@@ -58,6 +58,19 @@ interface ChatApiResponse {
   artifacts?: ArtifactLink[]
 }
 
+/**
+ * Shared response guard for every fetch in this module. `fetch` only
+ * rejects on network failure — an HTTP error (4xx/5xx) still resolves
+ * with a body, so without this check a malformed error response gets
+ * parsed as if it were success data.
+ */
+export async function parseJsonResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    throw new Error(`Request failed: ${res.status} ${res.statusText}`)
+  }
+  return res.json()
+}
+
 export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {
   const { mode_params, ...rest } = payload
   const res = await fetch(`${CHAT_API}/chat`, {
@@ -68,30 +81,30 @@ export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {
       ...(mode_params && { mode_params: toWireModeParams(mode_params) }),
     }),
   })
-  return res.json()
+  return parseJsonResponse<ChatApiResponse>(res)
 }
 
 export async function fetchInterlinear(reference: string): Promise<ExplorerResponse> {
   const res = await fetch(`/api/explorer?reference=${encodeURIComponent(usfmToFullRef(reference))}`)
-  return res.json()
+  return parseJsonResponse<ExplorerResponse>(res)
 }
 
 export async function fetchStrongsEntry(id: string): Promise<StrongsResponse> {
   const res = await fetch(`/api/strongs?strongsnumber=${encodeURIComponent(id)}`)
-  return res.json()
+  return parseJsonResponse<StrongsResponse>(res)
 }
 
 export async function fetchBookContext(book: string): Promise<BookContextResponse> {
   const res = await fetch(`${CHAT_API}/book_context/${encodeURIComponent(book)}`)
-  return res.json()
+  return parseJsonResponse<BookContextResponse>(res)
 }
 
 export async function fetchGematria(value: number): Promise<GematriaResponse> {
   const res = await fetch(`/api/gematria?value=${value}`)
-  return res.json()
+  return parseJsonResponse<GematriaResponse>(res)
 }
 
 export async function fetchEnglishSearch(query: string): Promise<EnglishResponse> {
   const res = await fetch(`/api/english?words=${encodeURIComponent(query)}`)
-  return res.json()
+  return parseJsonResponse<EnglishResponse>(res)
 }
