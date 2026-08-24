@@ -661,7 +661,8 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
     if mode == "verse":
         reference = mode_params.get("reference")
         if reference:
-            ref = reference
+            refs = _find_verse_refs(reference)
+            ref = _format_reference(*refs[0]) if refs else reference
         else:
             book, chapter, verse = await random_verse()
             ref = _format_reference("", book, str(chapter), str(verse))

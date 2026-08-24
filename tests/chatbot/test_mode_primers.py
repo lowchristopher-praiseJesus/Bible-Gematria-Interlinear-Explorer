@@ -67,6 +67,35 @@ async def test_verse_primer_random(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_verse_primer_full_name_reference_normalized(monkeypatch):
+    calls = []
+
+    async def fake_fetch(reference, languages=None):
+        calls.append(reference)
+        return {"eng": "For God so loved the world..."}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    result = await build_mode_primer("verse", {"reference": "John 3:16"})
+    assert calls == ["JHN 3:16"]
+    assert result["type"] == "verse"
+    assert result["data"]["reference"] == "JHN 3:16"
+
+
+@pytest.mark.asyncio
+async def test_verse_primer_unparsable_reference_passthrough(monkeypatch):
+    calls = []
+
+    async def fake_fetch(reference, languages=None):
+        calls.append(reference)
+        return {"eng": "..."}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    result = await build_mode_primer("verse", {"reference": "not a real reference"})
+    assert calls == ["not a real reference"]
+    assert result["type"] == "verse"
+
+
+@pytest.mark.asyncio
 async def test_freeform_primer():
     result = await build_mode_primer("freeform", {})
     assert result["type"] == "chat"
