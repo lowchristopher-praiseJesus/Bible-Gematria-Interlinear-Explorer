@@ -13,7 +13,7 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from chatbot.tools import fetch_verse_translations, fetch_scripture_study, fetch_strongs
+from chatbot.tools import fetch_verse_translations, fetch_scripture_study, fetch_strongs, search_gematria, search_english
 from chatbot.book_context import get_book_context
 
 # ---------------------------------------------------------------------------
@@ -58,6 +58,8 @@ BOOK_LEVEL_KEYWORDS = [
     "when was", "when did", "literary context",
 ]
 STRONGS_KEYWORDS = ["strong's", "strongs", "greek", "hebrew", "original language", "lemma"]
+GEMATRIA_VALUE_PATTERN = re.compile(r"gematria(?:\s+value)?\s+(\d+)", re.IGNORECASE)
+ENGLISH_SEARCH_PATTERN = re.compile(r"search\s+(?:for\s+)?[\"']([^\"']+)[\"']", re.IGNORECASE)
 
 # Any mention of the original language (however "interpretation"/"insight"/
 # "analysis" ends up phrased or misspelled) means the user wants an answer
@@ -333,6 +335,45 @@ async def route_deterministic(
             context_ref = _ref_from_history(history)
             if context_ref:
                 context_source = "our conversation"
+
+    # Gematria value / English full-text search (deterministic tool lookups,
+    # no verse ref needed) — checked ahead of the Strong's block so a
+    # message like `search for "lovingkindness"` isn't shadowed by it.
+    gematria_match = GEMATRIA_VALUE_PATTERN.search(message)
+    if gematria_match:
+        value = int(gematria_match.group(1))
+        result = await search_gematria(value)
+        word_count = len(result.get("wordResults", []))
+        verse_count = len(result.get("verseResults", []))
+        return {
+            "type": "gematria",
+            "message": f"Found {word_count} word{'s' if word_count != 1 else ''} and {verse_count} verse{'s' if verse_count != 1 else ''} with gematria value **{value}**.",
+            "data": None,
+            "route": "Deterministic → Gematria value match → search_gematria()",
+            "artifacts": [
+                {"type": "gematria", "label": f"View gematria {value} results ▸", "params": {"value": value}},
+            ],
+            "follow_up_questions": [
+                f"Show me the words with gematria value {value}",
+                f"Show me the verses with gematria value {value}",
+            ],
+        }
+
+    english_match = ENGLISH_SEARCH_PATTERN.search(message)
+    if english_match:
+        query = english_match.group(1)
+        result = await search_english(query)
+        result_count = len(result.get("results", []))
+        return {
+            "type": "english_search",
+            "message": f"Found {result_count} verse{'s' if result_count != 1 else ''} containing \"{query}\".",
+            "data": None,
+            "route": "Deterministic → English search match → search_english()",
+            "artifacts": [
+                {"type": "english_search", "label": f'View results for "{query}" ▸', "params": {"query": query}},
+            ],
+            "follow_up_questions": [f'Search for a different word or phrase'],
+        }
 
     # Strong's patterns (no verse ref needed)
     if any(kw in text_lower for kw in STRONGS_KEYWORDS):

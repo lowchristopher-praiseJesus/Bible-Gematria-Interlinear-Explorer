@@ -52,3 +52,8 @@ def test_get_day_reading_rejects_out_of_range():
         get_day_reading("canonical", 365)
     with pytest.raises(ValueError):
         get_day_reading("canonical", -1)
+
+
+def test_get_reading_plan_rejects_invalid_plan():
+    with pytest.raises(ValueError):
+        get_reading_plan("not_a_real_plan")

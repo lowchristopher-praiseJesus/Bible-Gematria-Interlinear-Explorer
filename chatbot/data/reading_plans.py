@@ -75,6 +75,8 @@ def _build_plan(book_order: List[str], days: int = _DAYS) -> List[List[Dict[str,
 
 
 def get_reading_plan(plan: str) -> List[List[Dict[str, int]]]:
+    if plan not in ("canonical", "chronological"):
+        raise ValueError(f"plan must be 'canonical' or 'chronological', got {plan!r}")
     if plan not in _PLANS_CACHE:
         order = CANONICAL_ORDER if plan == "canonical" else CHRONOLOGICAL_ORDER
         _PLANS_CACHE[plan] = _build_plan(order)
