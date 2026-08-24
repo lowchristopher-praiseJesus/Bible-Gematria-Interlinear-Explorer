@@ -6,7 +6,7 @@ import type {
   GematriaResponse,
   StrongsResponse,
 } from '@/types/api'
-import type { ArtifactLink } from '@/types/session'
+import type { ArtifactLink, ModeParams } from '@/types/session'
 
 const CHAT_API = '/api/bible-chat'
 
@@ -15,7 +15,38 @@ interface ChatPayload {
   history?: { role: 'user' | 'assistant'; text: string }[]
   page_context?: string
   mode?: string
-  mode_params?: Record<string, unknown>
+  mode_params?: ModeParams
+}
+
+/**
+ * Translate the camelCase ModeParams session model into the snake_case
+ * keys the FastAPI backend expects on the wire
+ * (dayIndex -> day_index, completedDays -> completed_days,
+ *  parableId -> parable_id, topicId -> topic_id).
+ * Unknown keys pass through unchanged so the mapper stays forward-compatible.
+ */
+export function toWireModeParams(params: ModeParams): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue
+    switch (key) {
+      case 'dayIndex':
+        out.day_index = value
+        break
+      case 'completedDays':
+        out.completed_days = value
+        break
+      case 'parableId':
+        out.parable_id = value
+        break
+      case 'topicId':
+        out.topic_id = value
+        break
+      default:
+        out[key] = value
+    }
+  }
+  return out
 }
 
 interface ChatApiResponse {
@@ -28,10 +59,14 @@ interface ChatApiResponse {
 }
 
 export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {
+  const { mode_params, ...rest } = payload
   const res = await fetch(`${CHAT_API}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...rest,
+      ...(mode_params && { mode_params: toWireModeParams(mode_params) }),
+    }),
   })
   return res.json()
 }

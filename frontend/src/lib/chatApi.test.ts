@@ -19,6 +19,11 @@ function mockFetchOnce(body: unknown) {
   )
 }
 
+function postedBody() {
+  const [, init] = vi.mocked(fetch).mock.calls[0]
+  return JSON.parse((init as RequestInit).body as string)
+}
+
 describe('chatApi', () => {
   it('postChat posts to /api/bible-chat/chat', async () => {
     mockFetchOnce({ type: 'chat', message: 'hi' })
@@ -28,6 +33,32 @@ describe('chatApi', () => {
       '/api/bible-chat/chat',
       expect.objectContaining({ method: 'POST' })
     )
+  })
+
+  it('postChat translates parableId to parable_id in mode_params', async () => {
+    mockFetchOnce({ type: 'chat', message: 'hi' })
+    await postChat({ message: '', mode: 'parable', mode_params: { parableId: 'prodigal_son' } })
+    expect(postedBody().mode_params).toEqual({ parable_id: 'prodigal_son' })
+  })
+
+  it('postChat translates dayIndex and completedDays to snake_case in mode_params', async () => {
+    mockFetchOnce({ type: 'chat', message: 'hi' })
+    await postChat({
+      message: '',
+      mode: 'reading_plan',
+      mode_params: { plan: 'chronological', dayIndex: 1, completedDays: [0] },
+    })
+    expect(postedBody().mode_params).toEqual({
+      plan: 'chronological',
+      day_index: 1,
+      completed_days: [0],
+    })
+  })
+
+  it('postChat passes reference through unchanged in mode_params', async () => {
+    mockFetchOnce({ type: 'chat', message: 'hi' })
+    await postChat({ message: '', mode: 'verse', mode_params: { reference: 'John 3:16' } })
+    expect(postedBody().mode_params).toEqual({ reference: 'John 3:16' })
   })
 
   it('fetchInterlinear converts USFM reference to full name before calling /api/explorer', async () => {
