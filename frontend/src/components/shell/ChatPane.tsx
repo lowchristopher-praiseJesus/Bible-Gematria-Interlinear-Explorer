@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { postChat } from '@/lib/chatApi'
+import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import type { ArtifactLink, SessionMessage } from '@/types/session'
@@ -82,7 +83,7 @@ export function ChatPane({ sessionId }: Props) {
                   : 'bg-[var(--color-surface-alt)] text-[var(--color-text-primary)] rounded-bl-sm'
               }`}
             >
-              {msg.text}
+              {renderMarkdown(msg.text)}
               {msg.artifacts && msg.artifacts.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {msg.artifacts.map((link: ArtifactLink, i: number) => (

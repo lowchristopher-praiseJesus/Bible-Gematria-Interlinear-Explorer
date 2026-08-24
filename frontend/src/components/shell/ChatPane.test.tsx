@@ -34,6 +34,20 @@ describe('ChatPane', () => {
     expect(updated.messages[1]).toMatchObject({ role: 'user', text: 'What is love?' })
   })
 
+  it('renders markdown bold spans and paragraph breaks in assistant messages', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'm1',
+      role: 'assistant',
+      text: 'This is **bold** text.\n\nA second paragraph.',
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+
+    expect(screen.getByText('bold').tagName).toBe('STRONG')
+    expect(screen.getByText('A second paragraph.')).toBeInTheDocument()
+  })
+
   it('clicking an artifact link opens it in the artifact store', async () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {
