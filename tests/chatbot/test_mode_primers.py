@@ -49,6 +49,11 @@ async def test_verse_primer_specified_reference(monkeypatch):
     result = await build_mode_primer("verse", {"reference": "JHN 3:16"})
     assert result["type"] == "verse"
     assert result["data"]["reference"] == "JHN 3:16"
+    artifact_types = [a["type"] for a in result["artifacts"]]
+    assert "interlinear" in artifact_types
+    assert result["artifacts"][0]["params"]["reference"] == "JHN 3:16"
+    # John has book_context data, so a book_context artifact should also be offered
+    assert "book_context" in artifact_types
 
 
 @pytest.mark.asyncio
@@ -64,6 +69,8 @@ async def test_verse_primer_random(monkeypatch):
     result = await build_mode_primer("verse", {})
     assert result["type"] == "verse"
     assert result["data"]["reference"] == "GEN 1:1"
+    # Genesis has no NT book_context data, so only the interlinear artifact is offered
+    assert [a["type"] for a in result["artifacts"]] == ["interlinear"]
 
 
 @pytest.mark.asyncio

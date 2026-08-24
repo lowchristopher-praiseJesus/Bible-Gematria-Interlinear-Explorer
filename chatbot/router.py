@@ -254,6 +254,15 @@ _USFM_TO_BOOK = {
 }
 
 
+def _strongs_artifacts(result: Optional[Dict[str, Any]], limit: int = 5) -> List[Dict[str, Any]]:
+    """Build one `strongs` ArtifactLink per Strong's number in a fetch_strongs() result."""
+    words_dict = (result or {}).get("words", {})
+    return [
+        {"type": "strongs", "label": f"{num} ▸", "params": {"id": num}}
+        for num in list(words_dict.keys())[:limit]
+    ]
+
+
 def _generate_follow_ups(response_type: str, data: Optional[Dict], ref: str = "") -> List[str]:
     book = _USFM_TO_BOOK.get(ref.split(" ")[0].upper(), ref.split(" ")[0]) if ref else ""
 
@@ -388,6 +397,7 @@ async def route_deterministic(
                 "message": f"Here is the Strong's entry for **{prefix}{num}**.",
                 "data": result,
                 "route": "Deterministic → Strong's number match → fetch_strongs()",
+                "artifacts": _strongs_artifacts(result),
                 "follow_up_questions": _generate_follow_ups("strongs", result),
             }
 
@@ -408,6 +418,7 @@ async def route_deterministic(
                     "message": f"Here are Strong's entries matching the word **{word}**.",
                     "data": result,
                     "route": "Deterministic → Strong's word search → fetch_strongs()",
+                    "artifacts": _strongs_artifacts(result),
                     "follow_up_questions": _generate_follow_ups("strongs", result),
                 }
 
@@ -676,11 +687,20 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
                 "route": "Mode primer → verse → fetch failed",
             }
         usfm = ref.split(" ")[0].upper()
+        book_context = get_book_context(usfm)
+        artifacts = [{"type": "interlinear", "label": f"Read {ref} in the original ▸", "params": {"reference": ref}}]
+        if book_context:
+            artifacts.append({
+                "type": "book_context",
+                "label": f"{book_context['book_name']} — Book Context ▸",
+                "params": {"book": usfm},
+            })
         return {
             "type": "verse",
             "message": f"Here is **{ref}**.",
-            "data": {"reference": ref, "translations": result, "book_context": get_book_context(usfm)},
+            "data": {"reference": ref, "translations": result, "book_context": book_context},
             "route": "Mode primer → verse",
+            "artifacts": artifacts,
             "follow_up_questions": _generate_follow_ups("verse", None, ref),
         }
 
