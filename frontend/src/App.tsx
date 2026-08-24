@@ -7,6 +7,7 @@ import { SettingsPanel } from '@/components/shell/SettingsPanel'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useThemeStore } from '@/store/useThemeStore'
+import { useArtifactStore } from '@/store/useArtifactStore'
 
 function useSessionIdParam(): [string | null, (id: string | null) => void] {
   const [sessionId, setSessionIdState] = useState<string | null>(() =>
@@ -32,6 +33,14 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+
+  // Session switching (new session, select session, or a session created
+  // from the mode picker) must reset artifact state together with chat
+  // state — otherwise a stale artifact from the previous session lingers
+  // in the panel.
+  useEffect(() => {
+    useArtifactStore.getState().close()
+  }, [sessionId])
 
   const activeSession = sessionId ? sessions[sessionId] : undefined
 

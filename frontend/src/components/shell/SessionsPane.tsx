@@ -1,4 +1,5 @@
 import { useSessionsStore } from '@/store/useSessionsStore'
+import { useArtifactStore } from '@/store/useArtifactStore'
 
 interface Props {
   activeSessionId: string | null
@@ -36,6 +37,9 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
               onClick={(e) => {
                 e.stopPropagation()
                 deleteSession(session.id)
+                if (session.id === activeSessionId) {
+                  useArtifactStore.getState().close()
+                }
               }}
               className="text-[var(--color-text-secondary)] hover:text-red-600 shrink-0 ml-2"
             >
