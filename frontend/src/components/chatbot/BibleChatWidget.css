@@ -1,0 +1,468 @@
+:root {
+  --bc-bg: #ffffff;
+  --bc-fg: #1a1a1a;
+  --bc-border: #e5e7eb;
+  --bc-header-bg: #1e3a5f;
+  --bc-header-fg: #ffffff;
+  --bc-user-bg: #1e3a5f;
+  --bc-user-fg: #ffffff;
+  --bc-assistant-bg: #f3f4f6;
+  --bc-assistant-fg: #1a1a1a;
+  --bc-input-bg: #ffffff;
+  --bc-input-border: #d1d5db;
+  --bc-fab-bg: #1e3a5f;
+  --bc-fab-fg: #ffffff;
+  --bc-accent: #c9a227;
+  --bc-shadow: rgba(0, 0, 0, 0.15);
+  --bc-radius: 12px;
+}
+
+.bible-chat-dark {
+  --bc-bg: #1e1e2e;
+  --bc-fg: #e4e4e7;
+  --bc-border: #3f3f46;
+  --bc-header-bg: #111827;
+  --bc-header-fg: #e4e4e7;
+  --bc-user-bg: #3b82f6;
+  --bc-user-fg: #ffffff;
+  --bc-assistant-bg: #27272a;
+  --bc-assistant-fg: #e4e4e7;
+  --bc-input-bg: #27272a;
+  --bc-input-border: #3f3f46;
+  --bc-fab-bg: #3b82f6;
+  --bc-fab-fg: #ffffff;
+  --bc-accent: #fbbf24;
+  --bc-shadow: rgba(0, 0, 0, 0.4);
+}
+
+/* Floating action button */
+.bible-chat-fab {
+  position: fixed;
+  bottom: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bc-fab-bg);
+  color: var(--bc-fab-fg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px var(--bc-shadow);
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 9999;
+}
+
+.bible-chat-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px var(--bc-shadow);
+}
+
+.bible-chat-fab.bottom-right { right: 24px; }
+.bible-chat-fab.bottom-left { left: 24px; }
+
+/* Widget panel */
+.bible-chat-widget {
+  position: fixed;
+  bottom: 24px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  height: 560px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bc-bg);
+  color: var(--bc-fg);
+  border-radius: var(--bc-radius);
+  box-shadow: 0 8px 32px var(--bc-shadow);
+  overflow: hidden;
+  z-index: 9999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.bible-chat-widget.bible-chat-bottom-right { right: 24px; }
+.bible-chat-widget.bible-chat-bottom-left { left: 24px; }
+.bible-chat-widget.bible-chat-inline {
+  position: relative;
+  bottom: auto;
+  right: auto;
+  left: auto;
+  width: 100%;
+  height: 500px;
+  box-shadow: 0 2px 8px var(--bc-shadow);
+}
+
+/* Header */
+.bible-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--bc-header-bg);
+  color: var(--bc-header-fg);
+  flex-shrink: 0;
+}
+
+.bible-chat-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.bible-chat-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+/* Messages */
+.bible-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bible-chat-welcome {
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  padding: 20px 10px;
+}
+
+.bible-chat-message {
+  display: flex;
+}
+
+.bible-chat-message.user {
+  justify-content: flex-end;
+}
+
+.bible-chat-message.assistant {
+  justify-content: flex-start;
+}
+
+.bible-chat-bubble {
+  max-width: 90%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  word-wrap: break-word;
+}
+
+.bible-chat-message.user .bible-chat-bubble {
+  background: var(--bc-user-bg);
+  color: var(--bc-user-fg);
+  border-bottom-right-radius: 4px;
+}
+
+.bible-chat-message.assistant .bible-chat-bubble {
+  background: var(--bc-assistant-bg);
+  color: var(--bc-assistant-fg);
+  border-bottom-left-radius: 4px;
+}
+
+.bible-chat-text {
+  white-space: pre-wrap;
+}
+
+.bible-chat-cursor {
+  animation: blink 1s step-end infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* Loading dots */
+.bible-chat-loading {
+  display: flex;
+  gap: 4px;
+}
+
+.bible-chat-loading span {
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
+  opacity: 0.6;
+}
+
+.bible-chat-loading span:nth-child(1) { animation-delay: -0.32s; }
+.bible-chat-loading span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+/* Input */
+.bible-chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--bc-border);
+  background: var(--bc-input-bg);
+  flex-shrink: 0;
+}
+
+.bible-chat-input textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--bc-input-border);
+  border-radius: 20px;
+  padding: 8px 14px;
+  background: var(--bc-input-bg);
+  color: var(--bc-fg);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+  max-height: 120px;
+}
+
+.bible-chat-input textarea:focus {
+  border-color: var(--bc-accent);
+}
+
+.bible-chat-input button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bc-fab-bg);
+  color: var(--bc-fab-fg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.bible-chat-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Verse card */
+.bible-chat-verse-card {
+  padding: 4px 0;
+}
+
+.verse-ref {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--bc-accent);
+}
+
+.verse-text {
+  font-style: italic;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.verse-versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.verse-versions button {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--bc-border);
+  background: var(--bc-bg);
+  color: var(--bc-fg);
+  cursor: pointer;
+}
+
+.verse-versions button.active {
+  background: var(--bc-accent);
+  color: #1a1a1a;
+  border-color: var(--bc-accent);
+}
+
+/* Book context */
+.book-context {
+  margin-top: 10px;
+  border-top: 1px solid var(--bc-border);
+  padding-top: 8px;
+}
+
+.book-context-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--bc-accent);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.book-context-toggle:hover {
+  opacity: 0.8;
+}
+
+.book-context-sections {
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.book-context-row dt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bc-text-muted, #888);
+  margin-bottom: 1px;
+}
+
+.book-context-row dd {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--bc-text);
+  line-height: 1.5;
+}
+
+/* Study card */
+.bible-chat-study-card {
+  padding: 4px 0;
+}
+
+.study-verse {
+  margin-bottom: 6px;
+  border: 1px solid var(--bc-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.study-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bc-assistant-bg);
+  border: none;
+  color: var(--bc-fg);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.study-body {
+  padding: 10px 12px;
+  background: var(--bc-bg);
+}
+
+.study-body pre {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.study-empty {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+}
+
+/* Strong's card */
+.bible-chat-strongs-card {
+  padding: 4px 0;
+}
+
+.strongs-entry {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--bc-border);
+  border-radius: 8px;
+  background: var(--bc-assistant-bg);
+}
+
+.strongs-number {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--bc-accent);
+  margin-bottom: 2px;
+}
+
+.strongs-lemma {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.strongs-trans {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+.strongs-def {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Route label */
+.bible-chat-route {
+  margin-top: 10px;
+  padding-top: 7px;
+  border-top: 1px solid var(--bc-border);
+  font-size: 10px;
+  font-family: ui-monospace, 'SF Mono', Consolas, 'Liberation Mono', monospace;
+  color: #888;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.bible-chat-route-label {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bc-accent);
+  background: transparent;
+  border: 1px solid var(--bc-accent);
+  border-radius: 3px;
+  padding: 0px 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* Scrollbar */
+.bible-chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bible-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bible-chat-messages::-webkit-scrollbar-thumb {
+  background: var(--bc-border);
+  border-radius: 3px;
+}

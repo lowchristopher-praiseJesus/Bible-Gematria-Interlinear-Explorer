@@ -2,3 +2,26 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# SQLite database (deployed separately, not in repo per CLAUDE.md)
+Complete.db
+Complete.db-shm
+Complete.db-wal
+frontend/Complete.db
+frontend/Complete.db-shm
+frontend/Complete.db-wal
+
+# flask_caching filesystem cache
+CACHED_PAGES/
+frontend/CACHED_PAGES/
+.data/
+
+# playwright MCP scratch output
+.playwright-mcp/
+
+# manual-verification screenshots (session scratch, not project assets)
+/*.png
+
+# built embeddable chatbot-widget bundle (produced by `vite build` via vite.lib.config.ts)
+/static/chatbot-widget*
+/static/chatbot-widget/
