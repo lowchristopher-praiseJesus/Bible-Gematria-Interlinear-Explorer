@@ -58,4 +58,30 @@ describe('ModePickerScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /parable study/i }))
     expect(await screen.findByRole('button', { name: /the prodigal son/i })).toBeInTheDocument()
   })
+
+  it('shows an error message with a retry option when listParables rejects', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: () => Promise.resolve({}),
+    } as Response)
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /parable study/i }))
+    expect(await screen.findByText(/failed to load parables/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+  })
+
+  it('shows an error message with a retry option when listTopics rejects', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: () => Promise.resolve({}),
+    } as Response)
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /topical study/i }))
+    expect(await screen.findByText(/failed to load topics/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+  })
 })

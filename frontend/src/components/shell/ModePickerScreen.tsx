@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { postChat } from '@/lib/chatApi'
 import { listParables, listTopics, type ParableEntry, type TopicEntry } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -15,13 +15,53 @@ function genId(): string {
   return `msg-${Date.now()}-${++idCounter}`
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
 export function ModePickerScreen({ onSessionStarted }: Props) {
   const [screen, setScreen] = useState<Screen>('root')
   const [parables, setParables] = useState<ParableEntry[] | null>(null)
+  const [parablesError, setParablesError] = useState<string | null>(null)
   const [topics, setTopics] = useState<TopicEntry[] | null>(null)
+  const [topicsError, setTopicsError] = useState<string | null>(null)
   const [verseRef, setVerseRef] = useState('')
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
+
+  // Fetching directly in the render body (the previous approach) double-fires
+  // under StrictMode and has no way to surface a failed request other than
+  // leaving the screen stuck on "Loading…" forever. Drive both fetches from
+  // an effect instead, with explicit error state and a retry affordance.
+  useEffect(() => {
+    if (screen !== 'parable' || parables) return
+    let cancelled = false
+    listParables()
+      .then((result) => {
+        if (!cancelled) setParables(result)
+      })
+      .catch((err) => {
+        if (!cancelled) setParablesError(errorMessage(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [screen, parables])
+
+  useEffect(() => {
+    if (screen !== 'topic' || topics) return
+    let cancelled = false
+    listTopics()
+      .then((result) => {
+        if (!cancelled) setTopics(result)
+      })
+      .catch((err) => {
+        if (!cancelled) setTopicsError(errorMessage(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [screen, topics])
 
   async function startSession(mode: SessionMode, modeParams: ModeParams) {
     const session = createSession(mode, modeParams)
@@ -41,7 +81,7 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
       appendMessage(session.id, {
         id: genId(),
         role: 'assistant',
-        text: 'Sorry, something went wrong: ' + (err instanceof Error ? err.message : String(err)),
+        text: 'Sorry, something went wrong: ' + errorMessage(err),
       })
     }
     onSessionStarted(session.id)
@@ -68,8 +108,23 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   }
 
   if (screen === 'parable') {
+    if (parablesError) {
+      return (
+        <div className="flex flex-col gap-2 p-6">
+          <div className="text-sm text-red-600">Failed to load parables: {parablesError}</div>
+          <button
+            className="self-start text-xs px-3 py-1.5 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
+            onClick={() => {
+              setParablesError(null)
+              setParables(null)
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
     if (!parables) {
-      listParables().then(setParables)
       return <div className="p-6 text-[var(--color-text-secondary)]">Loading parables…</div>
     }
     return (
@@ -89,8 +144,23 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   }
 
   if (screen === 'topic') {
+    if (topicsError) {
+      return (
+        <div className="flex flex-col gap-2 p-6">
+          <div className="text-sm text-red-600">Failed to load topics: {topicsError}</div>
+          <button
+            className="self-start text-xs px-3 py-1.5 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
+            onClick={() => {
+              setTopicsError(null)
+              setTopics(null)
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
     if (!topics) {
-      listTopics().then(setTopics)
       return <div className="p-6 text-[var(--color-text-secondary)]">Loading topics…</div>
     }
     return (
