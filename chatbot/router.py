@@ -994,9 +994,14 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
 
         if not concept_slug:
             concepts = wiki_loader.list_concepts(series_id)
+            # The curated one-line summary registered with the series in
+            # chatbot/data/study_wikis.py — shown as its own paragraph so
+            # users get the series' gist before the concept list.
+            description = manifest.get("description")
             message = (
                 f"**Topical Study: {manifest['title']}** ({manifest['speaker']})\n\n"
-                "Here are the concepts covered in this series — which would you like to explore?"
+                + (f"{description}\n\n" if description else "")
+                + "Here are the concepts covered in this series — which would you like to explore?"
             )
             return {
                 "type": "chat",

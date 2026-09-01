@@ -108,6 +108,16 @@ async def test_topic_primer_series_only_lists_concepts():
 
 
 @pytest.mark.asyncio
+async def test_topic_primer_series_message_includes_description_above_concepts_line():
+    result = await build_mode_primer("topic", {"series_id": "present-day-ministry-of-jesus"})
+    description = result["message"]
+    # The curated one-line description from the registered manifest appears...
+    assert "10-part series on what Jesus is doing now" in description
+    # ...in its own paragraph, above the concepts prompt.
+    assert description.index("mostly from Hebrews") < description.index("Here are the concepts covered")
+
+
+@pytest.mark.asyncio
 async def test_topic_primer_unknown_series():
     result = await build_mode_primer("topic", {"series_id": "not-a-real-series"})
     assert result["type"] == "error"
