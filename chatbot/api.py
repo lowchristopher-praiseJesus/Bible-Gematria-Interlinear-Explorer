@@ -15,8 +15,9 @@ from chatbot.schemas import (
     ParablesResponse,
     StrongsResponse,
     StudyResponse,
-    TopicsResponse,
+    StudyWikisResponse,
     VerseResponse,
+    WikiPageResponse,
 )
 from chatbot.tools import (
     fetch_verse_translations,
@@ -26,7 +27,7 @@ from chatbot.tools import (
 )
 from chatbot.book_context import get_book_context
 from chatbot.data.parables import PARABLES
-from chatbot.data.topics import TOPICS
+from chatbot import wiki_loader
 from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups, _usfm_from_name
 from chatbot.streaming import sse_stream, sse_event
 
@@ -188,10 +189,29 @@ async def list_parables():
     return ParablesResponse(parables=PARABLES)
 
 
-@router.get("/topics", response_model=TopicsResponse)
-async def list_topics():
-    """List the curated topics available for Topical Study mode."""
-    return TopicsResponse(topics=TOPICS)
+@router.get("/study-wikis", response_model=StudyWikisResponse)
+async def list_study_wikis():
+    """List the registered study-wiki series available for Topical Study mode."""
+    return StudyWikisResponse(study_wikis=wiki_loader.list_series())
+
+
+@router.get("/study-wikis/{series_id}/pages/{slug}", response_model=WikiPageResponse)
+async def get_wiki_page(series_id: str, slug: str):
+    """Fetch one rendered concept/entity/source page from a registered study wiki."""
+    manifest = wiki_loader.get_manifest(series_id)
+    if not manifest:
+        raise HTTPException(status_code=404, detail="Unknown study wiki series")
+    page = wiki_loader.get_page(series_id, slug)
+    if not page:
+        raise HTTPException(status_code=404, detail="Unknown page")
+    return WikiPageResponse(
+        series_id=series_id,
+        slug=slug,
+        title=page["title"],
+        kind=page["kind"],
+        body_html=page["body_html"],
+        citation=f"{manifest['speaker']} — {manifest['title']}",
+    )
 
 
 # ---------------------------------------------------------------------------
