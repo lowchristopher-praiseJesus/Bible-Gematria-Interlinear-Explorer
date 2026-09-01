@@ -180,17 +180,16 @@ RESEARCH DATA FOR THIS QUERY:
 """
 
 
-async def chat_with_ollama(
+async def call_ollama_with_context(
     message: str,
+    research_data: str,
     conversation_history: Optional[List[Dict]] = None,
-    use_tools: bool = True,
     page_context: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Send a message to Ollama with mybibletoolbox-code research data.
-
-    Returns a dict with 'type', 'message', and 'data'.
-    """
-    # Check if using cloud API (requires key) or local Ollama
+    """Send `message` to Ollama with `research_data` as grounding context in
+    the system prompt. Shared by chat_with_ollama() (verse-reference-scanned
+    research data) and chatbot.wiki_qa.answer() (wiki-search research data)
+    so the HTTP call and its error handling exist in exactly one place."""
     is_cloud = "api.ollama.com" in OLLAMA_API_URL or OLLAMA_API_URL.startswith("https://")
     if is_cloud and not OLLAMA_API_KEY:
         return {
@@ -200,33 +199,21 @@ async def chat_with_ollama(
         }
 
     messages = []
-
-    # Fetch research data from mybibletoolbox-code
-    research_data = await _fetch_research_data(message, conversation_history, page_context)
-
-    # Build system prompt with research data
     system_prompt = _SYSTEM_PROMPT_BASE
     if page_context:
         system_prompt += f"\nThe user is currently viewing {page_context} in the Bible Explorer. Assume questions like \"this verse\" or \"explain this\" refer to it unless the message clearly names a different passage.\n"
     system_prompt += research_data + "\n---\n"
 
-    # Add system message
     messages.append({"role": "system", "content": system_prompt})
-
-    # Add conversation history
     if conversation_history:
         messages.extend(conversation_history)
-
-    # Add user message
     messages.append({"role": "user", "content": message})
 
-    # Build headers - local Ollama doesn't require auth
     headers = {"Content-Type": "application/json"}
     if OLLAMA_API_KEY:
         headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
 
     async with httpx.AsyncClient() as client:
-        # Request with research data included in system prompt
         payload = {
             "model": OLLAMA_MODEL,
             "messages": messages,
@@ -272,8 +259,27 @@ async def chat_with_ollama(
             "type": "chat",
             "message": content,
             "data": None,
-            "route": f"AI Fallback → Ollama ({OLLAMA_MODEL}) → chat_with_ollama()",
+            "route": f"AI Fallback → Ollama ({OLLAMA_MODEL}) → call_ollama_with_context()",
         }
+
+
+async def chat_with_ollama(
+    message: str,
+    conversation_history: Optional[List[Dict]] = None,
+    use_tools: bool = True,
+    page_context: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Send a message to Ollama with mybibletoolbox-code research data.
+
+    Returns a dict with 'type', 'message', and 'data'.
+    """
+    research_data = await _fetch_research_data(message, conversation_history, page_context)
+    return await call_ollama_with_context(
+        message,
+        research_data=research_data,
+        conversation_history=conversation_history,
+        page_context=page_context,
+    )
 
 
 async def stream_chat_with_ollama(
