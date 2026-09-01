@@ -77,14 +77,24 @@ class ParablesResponse(BaseModel):
     parables: List[ParableEntry] = Field(..., description="List of available parables")
 
 
-class TopicEntry(BaseModel):
-    id: str = Field(..., description="Unique identifier for the topic")
-    name: str = Field(..., description="Human-readable name")
-    seed_references: List[str] = Field(..., description="Key verse references for this topic")
+class StudyWikiEntry(BaseModel):
+    id: str = Field(..., description="Unique identifier for the registered study wiki series")
+    title: str = Field(..., description="Full series title")
+    speaker: str = Field(..., description="The series' speaker/author")
+    description: str = Field(..., description="One-line description of the series")
 
 
-class TopicsResponse(BaseModel):
-    topics: List[TopicEntry] = Field(..., description="List of available topics")
+class StudyWikisResponse(BaseModel):
+    study_wikis: List[StudyWikiEntry] = Field(..., description="List of registered study wiki series")
+
+
+class WikiPageResponse(BaseModel):
+    series_id: str = Field(..., description="The series this page belongs to")
+    slug: str = Field(..., description="Page slug")
+    title: str = Field(..., description="Page title")
+    kind: str = Field(..., description="concept | entity | source")
+    body_html: str = Field(..., description="Rendered HTML body, wikilinks and scripture refs already resolved to links")
+    citation: str = Field(..., description="Attribution line, e.g. 'Joseph Prince — The Present-Day Ministry of Jesus'")
 
 
 class SSEChunk(BaseModel):
