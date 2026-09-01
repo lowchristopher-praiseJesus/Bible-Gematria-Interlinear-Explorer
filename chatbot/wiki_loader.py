@@ -24,6 +24,20 @@ logger = logging.getLogger(__name__)
 _H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 _KIND_SUBDIRS = (("concept", "concepts"), ("entity", "entities"), ("source", "sources"))
 
+# A small, non-exhaustive stopword list — just enough that generic question
+# words ("what does this series say about...") don't themselves count as
+# topical overlap between a query and every page in a series.
+_STOPWORDS = {
+    "what", "does", "this", "series", "say", "about", "the", "a", "an",
+    "is", "are", "do", "did", "how", "why", "of", "in", "on", "to", "for",
+    "and", "or", "i", "you",
+}
+
+# Minimum stopword-filtered term overlap required for a page to count as a
+# match. Below this, `search()` returns no matches so wiki_qa's "I couldn't
+# find anything in this series about that" fallback can actually trigger.
+_MIN_MATCH_SCORE = 2
+
 
 def _parse_frontmatter_value(raw: str) -> Any:
     raw = raw.strip()
@@ -61,6 +75,20 @@ def _extract_title(frontmatter: Dict[str, Any], body: str, slug: str) -> str:
     return slug.replace("-", " ").title()
 
 
+def _strip_leading_h1(body: str) -> str:
+    """Removes the leading `# Title` line _extract_title() pulled the page
+    title from, so it isn't rendered twice — once by the API response's own
+    `title` field, and again as an `<h1>` at the top of `body_html`. Only
+    the first H1-shaped line at the very start of the body (ignoring
+    leading blank lines) is removed; any later H1-shaped text is left
+    alone."""
+    m = _H1_RE.match(body.lstrip("\n"))
+    if not m or m.start() != 0:
+        return body
+    stripped = body.lstrip("\n")
+    return stripped[m.end():].lstrip("\n")
+
+
 def _load_series(manifest: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     root = Path(manifest["path"]).expanduser()
     wiki_dir = root / "wiki"
@@ -92,8 +120,9 @@ def _load_series(manifest: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     titles_by_slug = {slug: page["title"] for slug, page in pages.items()}
     for page in pages.values():
-        rendered_markdown = render_wiki_body(page["body"], manifest["id"], titles_by_slug)
-        page["body_html"] = _markdown.markdown(rendered_markdown)
+        body_for_rendering = _strip_leading_h1(page["body"])
+        rendered_markdown = render_wiki_body(body_for_rendering, manifest["id"], titles_by_slug)
+        page["body_html"] = _markdown.markdown(rendered_markdown, extensions=["tables", "fenced_code"])
 
     return {"manifest": manifest, "pages": pages}
 
@@ -147,16 +176,21 @@ def search(series_id: str, query: str, top_n: int = 3) -> List[Dict[str, Any]]:
     series = _LIBRARY.get(series_id)
     if not series:
         return []
-    terms = set(re.findall(r"[a-z0-9']+", query.lower()))
+    terms = set(re.findall(r"[a-z0-9']+", query.lower())) - _STOPWORDS
     if not terms:
         return []
     scored = []
     for slug, page in series["pages"].items():
         haystack = f"{page['title']} {' '.join(page['tags'])} {page['body']}".lower()
-        haystack_terms = set(re.findall(r"[a-z0-9']+", haystack))
-        score = len(terms & haystack_terms)
-        if score:
-            scored.append((score, slug, page))
+        haystack_terms = set(re.findall(r"[a-z0-9']+", haystack)) - _STOPWORDS
+        raw_score = len(terms & haystack_terms)
+        if raw_score < _MIN_MATCH_SCORE:
+            continue
+        # Normalize by page length so a long, loosely-related page can't
+        # simply out-rank a short, precisely on-topic one by having more
+        # total (stopword-filtered) words to coincidentally overlap with.
+        normalized_score = raw_score / len(haystack_terms) if haystack_terms else 0
+        scored.append((normalized_score, slug, page))
     scored.sort(key=lambda t: t[0], reverse=True)
     return [
         {"slug": slug, "title": page["title"], "kind": page["kind"], "body": page["body"]}

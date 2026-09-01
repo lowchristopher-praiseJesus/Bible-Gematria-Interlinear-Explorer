@@ -59,6 +59,64 @@ def test_load_library_skips_unreadable_page_without_failing_whole_series(monkeyp
     assert "holiness" in pages  # the rest of the series still loads
 
 
+def test_load_library_renders_markdown_tables_to_html_tables(tmp_path):
+    wiki_dir = tmp_path / "wiki" / "concepts"
+    wiki_dir.mkdir(parents=True)
+    (wiki_dir / "offerings.md").write_text(
+        "---\ntype: concept\nstatus: established\ntags: []\n---\n\n"
+        "# Offerings\n\n"
+        "| Offering | Meaning |\n"
+        "| --- | --- |\n"
+        "| Burnt | Total surrender |\n",
+        encoding="utf-8",
+    )
+    manifest = [
+        {
+            "id": "tables",
+            "title": "Tables Series",
+            "speaker": "Test Speaker",
+            "description": "fixture",
+            "path": str(tmp_path),
+        }
+    ]
+    library = load_library(manifest)
+    html = library["tables"]["pages"]["offerings"]["body_html"]
+    assert "<table>" in html
+    assert "<th>Offering</th>" in html
+    assert "<td>Burnt</td>" in html
+    # A literal pipe-table row must not survive as plain text.
+    assert "| Burnt | Total surrender |" not in html
+
+
+def test_load_library_does_not_duplicate_title_as_leading_h1_in_body(tmp_path):
+    wiki_dir = tmp_path / "wiki" / "concepts"
+    wiki_dir.mkdir(parents=True)
+    (wiki_dir / "grace.md").write_text(
+        "---\ntype: concept\nstatus: established\ntags: []\n---\n\n"
+        "# Grace\n\nDefined as undeserved favor.\n\n## A later heading called Grace\n",
+        encoding="utf-8",
+    )
+    manifest = [
+        {
+            "id": "dedup",
+            "title": "Dedup Series",
+            "speaker": "Test Speaker",
+            "description": "fixture",
+            "path": str(tmp_path),
+        }
+    ]
+    library = load_library(manifest)
+    page = library["dedup"]["pages"]["grace"]
+    assert page["title"] == "Grace"
+    # The leading `# Grace` title line must not be re-rendered as an <h1>
+    # in the body — the title is already surfaced separately by the API.
+    assert "<h1>" not in page["body_html"]
+    assert "Defined as undeserved favor." in page["body_html"]
+    # A later, differently-shaped heading that happens to mention "Grace"
+    # must be left alone.
+    assert "A later heading called Grace" in page["body_html"]
+
+
 def test_search_ranks_by_keyword_overlap():
     from chatbot.wiki_loader import search as _search
 
@@ -87,6 +145,60 @@ def _search_against(library, series_id, query, top_n=3):
             scored.append((score, slug, page))
     scored.sort(key=lambda t: t[0], reverse=True)
     return [{"slug": s, "title": p["title"], "kind": p["kind"], "body": p["body"]} for _, s, p in scored[:top_n]]
+
+
+def test_search_returns_no_matches_for_genuinely_off_topic_query():
+    # Regression test for the missing relevance floor / stopword handling:
+    # before the fix these off-topic queries scored spurious matches
+    # (raw overlap >= 1 against incidental shared words) instead of
+    # tripping wiki_qa's no-match fallback.
+    from chatbot import wiki_loader
+
+    assert wiki_loader.search("present-day-ministry-of-jesus", "what is quantum computing?") == []
+    assert wiki_loader.search("present-day-ministry-of-jesus", "how do I bake sourdough bread?") == []
+
+
+def test_search_filters_stopwords_from_query_and_pages(monkeypatch):
+    from chatbot import wiki_loader
+
+    library = load_library(MANIFEST)
+    monkeypatch.setattr(wiki_loader, "_LIBRARY", library)
+    # A query built entirely of stopwords (plus the series name, which is
+    # itself in the stopword list) has no real content terms left, so it
+    # must not match anything.
+    assert wiki_loader.search("sample", "what does this series say about") == []
+
+
+def test_search_normalizes_score_by_page_length(monkeypatch):
+    # A short, precisely on-topic page should outrank a long page that
+    # shares the same raw overlap count but is mostly unrelated filler —
+    # regression test for the raw-count scoring that used to favor
+    # whichever page was simply longest.
+    from chatbot import wiki_loader
+
+    filler = " ".join(f"otherword{i}" for i in range(20))
+    library = {
+        "s": {
+            "manifest": {"id": "s"},
+            "pages": {
+                "long-page": {
+                    "kind": "concept",
+                    "title": "Long page",
+                    "tags": [],
+                    "body": f"grace mercy {filler}",
+                },
+                "short-page": {
+                    "kind": "concept",
+                    "title": "Short page",
+                    "tags": [],
+                    "body": "grace mercy defined simply.",
+                },
+            },
+        }
+    }
+    monkeypatch.setattr(wiki_loader, "_LIBRARY", library)
+    results = wiki_loader.search("s", "grace mercy")
+    assert [r["slug"] for r in results] == ["short-page", "long-page"]
 
 
 def test_module_level_wrappers_use_real_registered_library():
