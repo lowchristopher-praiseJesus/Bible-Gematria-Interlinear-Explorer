@@ -11,6 +11,7 @@ parsed by hand.
 
 import logging
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -184,19 +185,28 @@ def search(series_id: str, query: str, top_n: int = 3) -> List[Dict[str, Any]]:
     terms = set(re.findall(r"[a-z0-9']+", query.lower())) - _STOPWORDS
     if not terms:
         return []
+    # Never require more overlapping terms than the query itself has
+    # (after stopword-stripping) — a 1-term query like "grace" only needs
+    # 1 overlapping term to match; a 2+-term query still needs the full
+    # floor, which is what rejects genuinely off-topic multi-word queries.
+    floor = min(_MIN_MATCH_SCORE, len(terms))
     scored = []
     for slug, page in series["pages"].items():
         haystack = f"{page['title']} {' '.join(page['tags'])} {page['body']}".lower()
-        haystack_terms = set(re.findall(r"[a-z0-9']+", haystack)) - _STOPWORDS
-        raw_score = len(terms & haystack_terms)
-        # Never require more overlapping terms than the query itself has
-        # (after stopword-stripping) — a 1-term query like "grace" only
-        # needs 1 overlapping term to match; a 2+-term query still needs
-        # the full floor, which is what rejects genuinely off-topic
-        # multi-word queries.
-        if raw_score < min(_MIN_MATCH_SCORE, len(terms)):
+        term_counts = Counter(re.findall(r"[a-z0-9']+", haystack))
+        # The floor still checks DISTINCT term overlap, not frequency — a
+        # page has to actually be about at least `floor` of the query's
+        # topics, not just repeat one of them many times.
+        distinct_overlap = len(terms & set(term_counts.keys()))
+        if distinct_overlap < floor:
             continue
-        scored.append((raw_score, slug, page))
+        # But the RANKING score is total occurrence count of the matched
+        # query terms, not just distinct-term presence — a page that
+        # discusses "grace" repeatedly outranks one that mentions it once
+        # in passing, with no page-length normalization needed (and none
+        # of the length bias that introduced).
+        frequency_score = sum(term_counts.get(t, 0) for t in terms)
+        scored.append((frequency_score, slug, page))
     scored.sort(key=lambda t: t[0], reverse=True)
     return [
         {"slug": slug, "title": page["title"], "kind": page["kind"], "body": page["body"]}

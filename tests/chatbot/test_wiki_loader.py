@@ -193,43 +193,73 @@ def test_search_filters_stopwords_from_query_and_pages(monkeypatch):
     assert wiki_loader.search("sample", "what does this series say about") == []
 
 
-def test_search_ranks_by_raw_overlap_count_not_normalized_by_page_length(monkeypatch):
-    # search() ranks by raw keyword-overlap count, not by a score
-    # normalized against each page's total vocabulary size. A prior
-    # revision of this fix wave normalized by page length, which made a
-    # long, thorough, genuinely-on-topic page score *worse* than a short
-    # page that only mentions the query term in passing — backwards for
-    # the single most common kind of question this feature answers.
-    # That normalization was reverted; this pins raw-count ranking.
+def test_search_ranks_by_term_frequency_not_distinct_overlap_or_page_length(monkeypatch):
+    # search() ranks by total occurrence count of the matched query terms
+    # (a Counter-based frequency score), not by distinct-term
+    # presence/absence and not by anything divided by page length.
+    #
+    # Two earlier revisions of this fix wave got this wrong in opposite
+    # directions: binary distinct-overlap scoring ties every page that
+    # merely *contains* a query term at least once, regardless of how
+    # central the term is to the page — for a short query this produces
+    # dozens of ties broken only by arbitrary insertion order. Dividing
+    # that tied score by page length "fixed" the tie but then penalized
+    # long, thorough, genuinely on-topic pages for having a large
+    # vocabulary. Frequency scoring fixes both: a page that repeats the
+    # matched term(s) many times outranks one that mentions them only in
+    # passing, with no explicit length normalization needed in either
+    # direction — demonstrated here with a page that is much *longer*
+    # overall but still loses because it mentions "grace" only once.
     from chatbot import wiki_loader
 
-    filler = " ".join(f"otherword{i}" for i in range(20))
+    filler = " ".join(f"otherword{i}" for i in range(200))
     library = {
         "s": {
             "manifest": {"id": "s"},
             "pages": {
-                "long-page": {
+                "incidental-long-page": {
                     "kind": "concept",
-                    "title": "Long page",
+                    "title": "Incidental long page",
                     "tags": [],
-                    # Two overlapping terms, same as short-page, but with
-                    # a much larger total vocabulary.
-                    "body": f"grace mercy {filler}",
+                    # Mentions "grace" exactly once, buried in a much
+                    # larger vocabulary than the focused page below.
+                    "body": f"grace {filler}",
                 },
-                "short-page": {
+                "focused-short-page": {
                     "kind": "concept",
-                    "title": "Short page",
+                    "title": "Focused short page",
                     "tags": [],
-                    "body": "grace mercy defined simply.",
+                    # Mentions "grace" five times, in a much shorter body.
+                    "body": "grace grace grace grace grace, defined simply.",
                 },
             },
         }
     }
     monkeypatch.setattr(wiki_loader, "_LIBRARY", library)
-    results = wiki_loader.search("s", "grace mercy")
-    # Equal raw overlap (2 each) => tied score => both returned, page
-    # length plays no role in the ordering.
-    assert {r["slug"] for r in results} == {"short-page", "long-page"}
+    results = wiki_loader.search("s", "grace")
+    assert [r["slug"] for r in results] == ["focused-short-page", "incidental-long-page"]
+
+
+def test_search_ranks_the_real_grace_page_first_for_a_bare_grace_query():
+    # End-to-end regression test, against the real ~80-page registered
+    # library, for the whole chain of fixes in this fix wave: a bare
+    # "grace" query must rank the actual "grace" concept page first, not
+    # be lost in an 82-way tie (the binary distinct-overlap bug) and not
+    # be pushed down by a longer page's vocabulary size (the
+    # length-normalization bug) — frequency-of-occurrence scoring avoids
+    # both, since the real "grace" page discusses grace far more
+    # repeatedly than any page that only mentions it in passing.
+    from chatbot import wiki_loader
+
+    results = wiki_loader.search("present-day-ministry-of-jesus", "grace")
+    assert results
+    assert results[0]["slug"] == "grace"
+
+    # Same behavior for a natural full-sentence phrasing that
+    # stopword-strips down to the same single term.
+    results_sentence = wiki_loader.search("present-day-ministry-of-jesus", "what is grace?")
+    assert results_sentence
+    assert results_sentence[0]["slug"] == "grace"
 
 
 def test_module_level_wrappers_use_real_registered_library():
