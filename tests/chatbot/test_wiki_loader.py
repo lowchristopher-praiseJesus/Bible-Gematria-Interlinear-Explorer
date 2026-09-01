@@ -158,6 +158,30 @@ def test_search_returns_no_matches_for_genuinely_off_topic_query():
     assert wiki_loader.search("present-day-ministry-of-jesus", "how do I bake sourdough bread?") == []
 
 
+def test_search_matches_a_single_content_term_query(monkeypatch):
+    # Regression test for the score >= 2 floor being hardcoded rather than
+    # capped at the query's own term count: a single-content-word query
+    # (or a full sentence that stopword-strips down to one term) must
+    # still be able to match — it should only need its one term to
+    # overlap, not two.
+    from chatbot import wiki_loader
+
+    library = load_library(MANIFEST)
+    monkeypatch.setattr(wiki_loader, "_LIBRARY", library)
+
+    results = wiki_loader.search("sample", "grace")
+    assert {r["slug"] for r in results} == {"grace", "holiness"}
+
+    # A full-sentence phrasing that stopword-strips to the same single
+    # term ("what does this series say about grace?" -> just "grace")
+    # must behave identically.
+    results_sentence = wiki_loader.search("sample", "what does this series say about grace?")
+    assert {r["slug"] for r in results_sentence} == {"grace", "holiness"}
+
+    # A genuinely off-topic single-term query still matches nothing.
+    assert wiki_loader.search("sample", "quantum") == []
+
+
 def test_search_filters_stopwords_from_query_and_pages(monkeypatch):
     from chatbot import wiki_loader
 

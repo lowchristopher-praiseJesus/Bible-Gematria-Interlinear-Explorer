@@ -34,8 +34,13 @@ _STOPWORDS = {
 }
 
 # Minimum stopword-filtered term overlap required for a page to count as a
-# match. Below this, `search()` returns no matches so wiki_qa's "I couldn't
-# find anything in this series about that" fallback can actually trigger.
+# match — capped at the query's own (stopword-filtered) term count via
+# min(_MIN_MATCH_SCORE, len(terms)) in search(), so a genuine single-term
+# query (e.g. "grace") isn't structurally unmatchable: it only needs its
+# one term to overlap, while a 2+-term query still needs 2, which is what
+# rejects genuinely off-topic queries. Below this floor, `search()` returns
+# no matches so wiki_qa's "I couldn't find anything in this series about
+# that" fallback can actually trigger.
 _MIN_MATCH_SCORE = 2
 
 
@@ -184,7 +189,12 @@ def search(series_id: str, query: str, top_n: int = 3) -> List[Dict[str, Any]]:
         haystack = f"{page['title']} {' '.join(page['tags'])} {page['body']}".lower()
         haystack_terms = set(re.findall(r"[a-z0-9']+", haystack)) - _STOPWORDS
         raw_score = len(terms & haystack_terms)
-        if raw_score < _MIN_MATCH_SCORE:
+        # Never require more overlapping terms than the query itself has
+        # (after stopword-stripping) — a 1-term query like "grace" only
+        # needs 1 overlapping term to match; a 2+-term query still needs
+        # the full floor, which is what rejects genuinely off-topic
+        # multi-word queries.
+        if raw_score < min(_MIN_MATCH_SCORE, len(terms)):
             continue
         # Normalize by page length so a long, loosely-related page can't
         # simply out-rank a short, precisely on-topic one by having more
