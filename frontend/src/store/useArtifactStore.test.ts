@@ -117,4 +117,25 @@ describe('useArtifactStore', () => {
 
     expect(useArtifactStore.getState().history).toEqual([])
   })
+
+  it('openArtifact fetches a wiki_concept via fetchWikiConcept', async () => {
+    vi.spyOn(chatApi, 'fetchWikiConcept').mockResolvedValue({
+      series_id: 's1',
+      slug: 'grace',
+      title: 'Grace',
+      kind: 'concept',
+      body_html: '<p>Undeserved favor.</p>',
+      citation: 'Joseph Prince — The Present-Day Ministry of Jesus',
+    })
+
+    await useArtifactStore.getState().openArtifact({
+      type: 'wiki_concept',
+      label: 'Grace ▸',
+      params: { seriesId: 's1', slug: 'grace' },
+    })
+
+    expect(chatApi.fetchWikiConcept).toHaveBeenCalledWith('s1', 'grace')
+    expect(useArtifactStore.getState().status).toBe('ready')
+    expect((useArtifactStore.getState().data as { title: string }).title).toBe('Grace')
+  })
 })

@@ -6,6 +6,7 @@ import {
   fetchInterlinear,
   fetchInterlinearByVersenumber,
   fetchStrongsEntry,
+  fetchWikiConcept,
 } from '@/lib/chatApi'
 import type { ArtifactLink } from '@/types/session'
 
@@ -43,6 +44,8 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
       return fetchGematria(link.params.value as number)
     case 'english_search':
       return fetchEnglishSearch(link.params.query as string)
+    case 'wiki_concept':
+      return fetchWikiConcept(link.params.seriesId as string, link.params.slug as string)
     default:
       throw new Error(`Unknown artifact type: ${link.type}`)
   }
