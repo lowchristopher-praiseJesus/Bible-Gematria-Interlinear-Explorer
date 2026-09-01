@@ -47,11 +47,16 @@ def resolve_scripture_refs(body: str) -> str:
     into this app's own Explorer artifact. A token that isn't a
     recognized book abbreviation (e.g. a transcript citation like
     "md:71") is left as plain text."""
-    # Deferred import: chatbot.wiki_loader imports this module at module
-    # load time, and chatbot.router will in turn import chatbot.wiki_loader
-    # (Task 6) — importing chatbot.router here at module level would be
-    # circular. By the time this function actually runs (request time),
-    # both modules are fully loaded, so the import is safe.
+    # Deferred (function-local, not module-top-level) import: chatbot.router
+    # imports chatbot.wiki_loader (which imports this module) near the
+    # bottom of router.py, and wiki_loader builds its module-level library
+    # singleton at IMPORT time — so this function can run while
+    # chatbot.router is still completing its own module initialization.
+    # This works because _BOOK_ABBREVIATIONS is defined in router.py well
+    # before router.py's own import of wiki_loader, so Python's
+    # partially-initialized module object already has that attribute set
+    # by the time this deferred import runs. Keep _BOOK_ABBREVIATIONS
+    # defined above that import line in router.py, or this will break.
     from chatbot.router import _BOOK_ABBREVIATIONS
 
     def replace(m: Match) -> str:
