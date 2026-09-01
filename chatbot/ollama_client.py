@@ -273,6 +273,13 @@ async def chat_with_ollama(
 
     Returns a dict with 'type', 'message', and 'data'.
     """
+    is_cloud = "api.ollama.com" in OLLAMA_API_URL or OLLAMA_API_URL.startswith("https://")
+    if is_cloud and not OLLAMA_API_KEY:
+        return {
+            "type": "error",
+            "message": "OLLAMA_API_KEY required for Ollama Cloud. Please set your API key.",
+            "data": None,
+        }
     research_data = await _fetch_research_data(message, conversation_history, page_context)
     return await call_ollama_with_context(
         message,
