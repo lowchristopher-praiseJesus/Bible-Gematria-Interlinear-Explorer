@@ -38,7 +38,7 @@ describe('SessionsPane', () => {
   it('groups sessions of different modes under separate section headers, in mode-picker order', () => {
     useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().createSession('reading_plan', { plan: 'chronological', dayIndex: 0 })
-    useSessionsStore.getState().createSession('topic', { topicId: 'faith' })
+    useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
     render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
 
     const headers = screen.getAllByRole('button', { name: /Bible in a Year|Topical Study|Ask Anything/ })
@@ -76,7 +76,7 @@ describe('SessionsPane', () => {
 
   it('collapses sections independently of one another', async () => {
     const parableSession = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
-    const topicSession = useSessionsStore.getState().createSession('topic', { topicId: 'faith' })
+    const topicSession = useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
     render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
 
     await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))

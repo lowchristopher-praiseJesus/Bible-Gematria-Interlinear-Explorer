@@ -238,6 +238,34 @@ describe('ChatPane', () => {
     })
   })
 
+  it('resolving a series choice renders concept pills instead of a plain message', async () => {
+    const session = useSessionsStore.getState().createSession('topic', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'prompt-1',
+      role: 'assistant',
+      text: 'Which series?',
+      choicesStatus: 'ready',
+      choices: [{ label: 'The Present-Day Ministry of Jesus — Joseph Prince', modeParams: { seriesId: 'present-day-ministry-of-jesus' } }],
+    })
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+      type: 'chat',
+      message: 'Here are the concepts...',
+      data: {
+        series_id: 'present-day-ministry-of-jesus',
+        concepts: [
+          { slug: 'grace', title: 'Grace' },
+          { slug: 'holiness', title: 'Holiness' },
+        ],
+      },
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: /The Present-Day Ministry of Jesus/ }))
+
+    expect(await screen.findByRole('button', { name: 'Grace' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Holiness' })).toBeInTheDocument()
+  })
+
   it('retrying a failed choice prompt re-fetches parables', async () => {
     const session = useSessionsStore.getState().createSession('parable', {})
     useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '🌿 Parable Study' })
@@ -269,7 +297,7 @@ describe('ChatPane', () => {
         { versenumber: 30001, vnum: 16, ref: '1 Peter 1:16', translations: { 'eng-KJV': 'Because it is written, Be ye holy.' } },
       ],
     })
-    const session = useSessionsStore.getState().createSession('topic', { topicId: 'holiness' })
+    const session = useSessionsStore.getState().createSession('topic', { conceptSlug: 'holiness' })
     useSessionsStore.getState().appendMessage(session.id, {
       id: 'm1',
       role: 'assistant',

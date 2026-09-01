@@ -155,7 +155,7 @@ describe('chatApi', () => {
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => mockResponse }))
     const result = await fetchWikiConcept('s1', 'grace')
-    expect(global.fetch).toHaveBeenCalledWith('/api/bible-chat/study-wikis/s1/pages/grace')
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/bible-chat/study-wikis/s1/pages/grace')
     expect(result.title).toBe('Grace')
   })
 })

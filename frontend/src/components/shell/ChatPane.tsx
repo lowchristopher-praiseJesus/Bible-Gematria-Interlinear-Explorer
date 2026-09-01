@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { postChat } from '@/lib/chatApi'
-import { listParables, listTopics } from '@/lib/modeData'
+import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
@@ -185,15 +185,29 @@ export function ChatPane({ sessionId }: Props) {
       }
       try {
         const response = await postChat({ message: '', mode: session.mode, mode_params: nextModeParams })
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: response.message,
-          type: response.type,
-          data: response.data ?? undefined,
-          artifacts: response.artifacts,
-          followUpQuestions: response.follow_up_questions,
-        })
+        // Topical Study's series step responds with a list of concepts to
+        // pick from next, not a finished answer — render it as a new
+        // choices prompt (like the series list itself) instead of plain text.
+        const concepts = (response.data as { concepts?: { slug: string; title: string }[] } | undefined)?.concepts
+        if (session.mode === 'topic' && concepts) {
+          appendMessage(sessionId, {
+            id: genId(),
+            role: 'assistant',
+            text: response.message,
+            choicesStatus: 'ready',
+            choices: concepts.map((c) => ({ label: c.title, modeParams: { conceptSlug: c.slug } })),
+          })
+        } else {
+          appendMessage(sessionId, {
+            id: genId(),
+            role: 'assistant',
+            text: response.message,
+            type: response.type,
+            data: response.data ?? undefined,
+            artifacts: response.artifacts,
+            followUpQuestions: response.follow_up_questions,
+          })
+        }
       } catch (err) {
         appendMessage(sessionId, {
           id: genId(),
@@ -217,7 +231,7 @@ export function ChatPane({ sessionId }: Props) {
         const choices: MessageChoice[] =
           session.mode === 'parable'
             ? (await listParables()).map((p) => ({ label: `${p.name} (${p.reference})`, modeParams: { parableId: p.id } }))
-            : (await listTopics()).map((t) => ({ label: t.name, modeParams: { topicId: t.id } }))
+            : (await listStudyWikis()).map((s) => ({ label: `${s.title} — ${s.speaker}`, modeParams: { seriesId: s.id } }))
         updateMessage(sessionId, promptMessageId, { choicesStatus: 'ready', choices })
       } catch (err) {
         updateMessage(sessionId, promptMessageId, { choicesStatus: 'error', choicesError: errorMessage(err) })

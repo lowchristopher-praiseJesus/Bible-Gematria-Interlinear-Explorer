@@ -71,7 +71,7 @@ describe('App', () => {
 
     // A second session, created directly on the store, gives the list a
     // distinct entry to click that actually changes the active session id.
-    const otherSession = useSessionsStore.getState().createSession('topic', { topicId: 'grace' })
+    const otherSession = useSessionsStore.getState().createSession('topic', { conceptSlug: 'grace' })
 
     await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
     expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'true')
