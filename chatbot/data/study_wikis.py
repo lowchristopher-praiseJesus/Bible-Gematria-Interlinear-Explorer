@@ -23,6 +23,17 @@ STUDY_WIKI_LIBRARY: List[Dict[str, Any]] = [
         ),
         "path": "~/Documents/study-wikis/present-day-ministry-of-jesus",
     },
+    {
+        "id": "principles-for-interpreting-the-bible",
+        "title": "Principles For Interpreting The Bible",
+        "speaker": "Joseph Prince",
+        "description": (
+            "6-part series on how to read the Bible — context, letting scripture "
+            "interpret scripture, rightly dividing the covenants, typology, and "
+            "the Christ-centered test of any interpretation."
+        ),
+        "path": "~/Documents/study-wikis/principles-for-interpreting-the-bible",
+    },
 ]
 
 

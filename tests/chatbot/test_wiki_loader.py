@@ -280,3 +280,13 @@ def test_module_level_wrappers_use_real_registered_library():
     assert page["title"] == "Grace"
     assert wiki_loader.get_page("present-day-ministry-of-jesus", "not-a-real-slug") is None
     assert wiki_loader.get_manifest("present-day-ministry-of-jesus")["speaker"] == "Joseph Prince"
+
+    # Second registered series (hermeneutics): confirms N>1 series load
+    # correctly, not just one.
+    assert "principles-for-interpreting-the-bible" in ids
+    hermeneutics_concepts = wiki_loader.list_concepts("principles-for-interpreting-the-bible")
+    assert len(hermeneutics_concepts) == 14
+    hermeneutics_slugs = {c["slug"] for c in hermeneutics_concepts}
+    assert "christ-centered-hermeneutic" in hermeneutics_slugs
+    hermeneutics_page = wiki_loader.get_page("principles-for-interpreting-the-bible", "christ-centered-hermeneutic")
+    assert hermeneutics_page is not None
