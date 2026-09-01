@@ -13,3 +13,6 @@ python-multipart>=0.0.12
 
 # Optional: For AI responses via Ollama cloud
 # httpx is used for Ollama API calls
+
+# Study wiki dependencies
+markdown>=3.7
