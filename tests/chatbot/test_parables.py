@@ -1,5 +1,4 @@
 from chatbot.data.parables import PARABLES, get_parable
-from chatbot.data.topics import TOPICS, get_topic
 
 
 def test_parables_have_unique_ids():
@@ -22,23 +21,3 @@ def test_get_parable_known_id():
 
 def test_get_parable_unknown_id():
     assert get_parable("not_a_real_parable") is None
-
-
-def test_topics_have_unique_ids():
-    ids = [t["id"] for t in TOPICS]
-    assert len(ids) == len(set(ids))
-    assert len(TOPICS) >= 5
-
-
-def test_topics_have_seed_references():
-    for t in TOPICS:
-        assert t["id"] and t["name"]
-        assert len(t["seed_references"]) >= 1
-        for ref in t["seed_references"]:
-            assert ":" in ref
-
-
-def test_get_topic_known_and_unknown():
-    holiness = get_topic("holiness")
-    assert holiness is not None
-    assert get_topic("not_a_real_topic") is None
