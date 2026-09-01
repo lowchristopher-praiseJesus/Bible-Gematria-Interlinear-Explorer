@@ -27,7 +27,7 @@ from chatbot.tools import (
 )
 from chatbot.book_context import get_book_context
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader
+from chatbot import wiki_loader, wiki_qa
 from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups, _usfm_from_name
 from chatbot.streaming import sse_stream, sse_event
 
@@ -230,6 +230,17 @@ async def post_chat(request: ChatRequest):
             [{"role": m.role, "text": m.text} for m in request.history]
             if request.history else None
         )
+
+        # A free-text message inside a Topical Study session that has
+        # already resolved to a series is a question about that series,
+        # not a generic Bible question — answer it from the wiki instead
+        # of falling through to the deterministic/Ollama-fallback path
+        # every other mode uses.
+        series_id = (request.mode_params or {}).get("series_id") if request.mode == "topic" else None
+        if series_id:
+            result = await wiki_qa.answer(series_id, request.message, history)
+            return ChatResponse(**result)
+
         result = await route_deterministic(
             request.message, history=history, page_context=request.page_context
         )
