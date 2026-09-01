@@ -6,6 +6,7 @@ import type {
   ExplorerResponse,
   GematriaResponse,
   StrongsResponse,
+  WikiPageResponse,
 } from '@/types/api'
 import type { ArtifactLink, ModeParams } from '@/types/session'
 
@@ -23,7 +24,7 @@ interface ChatPayload {
  * Translate the camelCase ModeParams session model into the snake_case
  * keys the FastAPI backend expects on the wire
  * (dayIndex -> day_index, completedDays -> completed_days,
- *  parableId -> parable_id, topicId -> topic_id).
+ *  parableId -> parable_id, seriesId -> series_id, conceptSlug -> concept_slug).
  * Unknown keys pass through unchanged so the mapper stays forward-compatible.
  */
 export function toWireModeParams(params: ModeParams): Record<string, unknown> {
@@ -40,8 +41,11 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
       case 'parableId':
         out.parable_id = value
         break
-      case 'topicId':
-        out.topic_id = value
+      case 'seriesId':
+        out.series_id = value
+        break
+      case 'conceptSlug':
+        out.concept_slug = value
         break
       default:
         out[key] = value
@@ -142,4 +146,9 @@ export async function fetchGematria(value: number): Promise<GematriaResponse> {
 export async function fetchEnglishSearch(query: string): Promise<EnglishResponse> {
   const res = await fetch(`/api/english?words=${encodeURIComponent(query)}`)
   return parseJsonResponse<EnglishResponse>(res)
+}
+
+export async function fetchWikiConcept(seriesId: string, slug: string): Promise<WikiPageResponse> {
+  const res = await fetch(`${CHAT_API}/study-wikis/${encodeURIComponent(seriesId)}/pages/${encodeURIComponent(slug)}`)
+  return parseJsonResponse<WikiPageResponse>(res)
 }

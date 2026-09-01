@@ -6,7 +6,9 @@ import {
   fetchGematria,
   fetchInterlinear,
   fetchStrongsEntry,
+  fetchWikiConcept,
   postChat,
+  toWireModeParams,
 } from './chatApi'
 
 afterEach(() => {
@@ -133,5 +135,27 @@ describe('chatApi', () => {
       })
     )
     await expect(postChat({ message: 'hi' })).rejects.toThrow(/500/)
+  })
+
+  it('toWireModeParams maps seriesId and conceptSlug to snake_case', () => {
+    expect(toWireModeParams({ seriesId: 'present-day-ministry-of-jesus', conceptSlug: 'grace' })).toEqual({
+      series_id: 'present-day-ministry-of-jesus',
+      concept_slug: 'grace',
+    })
+  })
+
+  it('fetchWikiConcept requests the study-wiki page endpoint', async () => {
+    const mockResponse = {
+      series_id: 's1',
+      slug: 'grace',
+      title: 'Grace',
+      kind: 'concept',
+      body_html: '<p>Undeserved favor.</p>',
+      citation: 'Joseph Prince — The Present-Day Ministry of Jesus',
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => mockResponse }))
+    const result = await fetchWikiConcept('s1', 'grace')
+    expect(global.fetch).toHaveBeenCalledWith('/api/bible-chat/study-wikis/s1/pages/grace')
+    expect(result.title).toBe('Grace')
   })
 })

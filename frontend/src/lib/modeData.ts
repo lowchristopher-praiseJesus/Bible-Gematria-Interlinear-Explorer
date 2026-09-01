@@ -6,10 +6,11 @@ export interface ParableEntry {
   reference: string
 }
 
-export interface TopicEntry {
+export interface StudyWikiEntry {
   id: string
-  name: string
-  seed_references: string[]
+  title: string
+  speaker: string
+  description: string
 }
 
 export async function listParables(): Promise<ParableEntry[]> {
@@ -18,8 +19,8 @@ export async function listParables(): Promise<ParableEntry[]> {
   return body.parables
 }
 
-export async function listTopics(): Promise<TopicEntry[]> {
-  const res = await fetch('/api/bible-chat/topics')
-  const body = await parseJsonResponse<{ topics: TopicEntry[] }>(res)
-  return body.topics
+export async function listStudyWikis(): Promise<StudyWikiEntry[]> {
+  const res = await fetch('/api/bible-chat/study-wikis')
+  const body = await parseJsonResponse<{ study_wikis: StudyWikiEntry[] }>(res)
+  return body.study_wikis
 }
