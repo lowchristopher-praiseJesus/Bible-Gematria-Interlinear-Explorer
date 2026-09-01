@@ -7,12 +7,13 @@ export interface ModeParams {
   dayIndex?: number
   completedDays?: number[]
   parableId?: string
-  topicId?: string
+  seriesId?: string
+  conceptSlug?: string
   reference?: string
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'wiki_concept'
   label: string
   params: Record<string, unknown>
 }
