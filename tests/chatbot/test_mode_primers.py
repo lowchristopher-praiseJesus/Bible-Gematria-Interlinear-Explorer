@@ -77,6 +77,26 @@ async def test_topic_primer_no_series_registered(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_topic_primer_no_series_id_auto_resolves_when_exactly_one_registered(monkeypatch):
+    import chatbot.router as router_module
+
+    # Use the real registered series's manifest so get_manifest/list_concepts
+    # (left un-mocked) resolve it consistently — only list_series is faked,
+    # to simulate "exactly one series registered" regardless of how many are
+    # really registered.
+    real_manifest = router_module.wiki_loader.get_manifest("present-day-ministry-of-jesus")
+    monkeypatch.setattr(router_module.wiki_loader, "list_series", lambda: [real_manifest])
+
+    result = await router_module.build_mode_primer("topic", {})
+    assert result["type"] == "chat"
+    assert result["data"]["series_id"] == "present-day-ministry-of-jesus"
+    concepts = result["data"]["concepts"]
+    assert len(concepts) > 50
+    slugs = {c["slug"] for c in concepts}
+    assert "grace" in slugs
+
+
+@pytest.mark.asyncio
 async def test_topic_primer_series_only_lists_concepts():
     result = await build_mode_primer("topic", {"series_id": "present-day-ministry-of-jesus"})
     assert result["type"] == "chat"
