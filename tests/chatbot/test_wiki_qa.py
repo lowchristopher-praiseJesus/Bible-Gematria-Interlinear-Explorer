@@ -46,5 +46,6 @@ async def test_answer_grounds_ollama_call_with_matched_pages(monkeypatch):
     assert captured["message"] == "what is grace?"
     assert "Grace is undeserved favor." in captured["research_data"]
     assert "Joseph Prince" in captured["research_data"]
+    assert "Answer only from the material below" in captured["research_data"]
     assert result["message"] == "Grace is undeserved favor."
     assert result["data"] == {"series_id": "present-day-ministry-of-jesus", "best_match_slug": "grace"}
