@@ -26,6 +26,7 @@ app.mount("/api/bible-chat", create_chatbot_app())
 
 - `ANTHROPIC_API_KEY` — Required for Claude API fallback on complex theological questions.
 - `MYBIBLE_DATA_DIR` — Path to mybibletoolbox-data repo (auto-detected if not set).
+- `~/Documents/study-wikis/` — External library directory (not part of this repo) holding registered study-wiki series for Topical Study mode; see `chatbot/data/study_wikis.py` for the registry and the three-layer schema (`raw/`, `wiki/`, `AGENTS.md`) each entry's `path` must follow. A machine without this directory simply gets an empty study-wiki library (entries whose `path` doesn't resolve are skipped and logged), not a crash — but Topical Study mode and its tests that expect real series data need it present.
 
 ## API Endpoints
 
@@ -38,7 +39,8 @@ app.mount("/api/bible-chat", create_chatbot_app())
 | POST | `/chat/stream` | Same, with SSE streaming |
 | GET | `/book_context/{book}` | Fetch book-level context (historical setting, themes, etc.) for a NT book |
 | GET | `/parables` | List curated parables for Parable Study mode |
-| GET | `/topics` | List curated topics for Topical Study mode |
+| GET | `/study-wikis` | List registered study-wiki series for Topical Study mode |
+| GET | `/study-wikis/{series_id}/pages/{slug}` | Fetch one rendered concept/entity/source page from a registered study wiki |
 
 ## Example Requests
 
