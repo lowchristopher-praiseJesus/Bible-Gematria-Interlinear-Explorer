@@ -10,7 +10,7 @@ class HistoryMessage(BaseModel):
 
 
 class ArtifactLink(BaseModel):
-    type: str = Field(..., description="interlinear | strongs | book_context | gematria | english_search")
+    type: str = Field(..., description="interlinear | chapter | strongs | book_context | gematria | english_search")
     label: str = Field(..., description="Human-readable link text shown in the chat bubble")
     params: Dict[str, Any] = Field(default_factory=dict, description="Fetch parameters for the artifact panel")
 
@@ -36,6 +36,20 @@ class ChatResponse(BaseModel):
 class VerseResponse(BaseModel):
     reference: str = Field(..., description="Verse reference (e.g., JHN.3.16)")
     translations: Dict[str, str] = Field(..., description="Mapping of translation codes to text")
+
+
+class PassageVerse(BaseModel):
+    versenumber: int = Field(..., description="Global sequential verse number (1-31102)")
+    vnum: int = Field(..., description="Verse number within the chapter")
+    ref: str = Field(..., description="Verse reference (e.g., 'Job 1:1')")
+    translations: Dict[str, str] = Field(..., description="Mapping of translation codes to text")
+
+
+class PassageResponse(BaseModel):
+    book: str = Field(..., description="Full book name")
+    chapter: int = Field(..., description="Chapter number")
+    verseCount: int = Field(..., description="Number of verses returned")
+    verses: List[PassageVerse] = Field(..., description="Verses in the requested chapter or verse range")
 
 
 class StudyResponse(BaseModel):

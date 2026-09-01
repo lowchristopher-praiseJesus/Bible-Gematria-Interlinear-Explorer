@@ -40,6 +40,14 @@ describe('useSessionsStore', () => {
     expect(useSessionsStore.getState().activeSessionId).toBeNull()
   })
 
+  it('clearAllSessions wipes every session and the active id', () => {
+    useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+    useSessionsStore.getState().clearAllSessions()
+    expect(useSessionsStore.getState().sessions).toEqual({})
+    expect(useSessionsStore.getState().activeSessionId).toBeNull()
+  })
+
   it('listSessions returns sessions newest-updated first', () => {
     const a = useSessionsStore.getState().createSession('freeform', {})
     const b = useSessionsStore.getState().createSession('freeform', {})

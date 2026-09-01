@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { postChat } from '@/lib/chatApi'
-import { listParables, listTopics, type ParableEntry, type TopicEntry } from '@/lib/modeData'
+import { listParables, listTopics } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
-import type { ModeParams, SessionMessage, SessionMode } from '@/types/session'
+import { useReadingPlanStore } from '@/store/useReadingPlanStore'
+import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
 
 interface Props {
   onSessionStarted: (sessionId: string) => void
 }
-
-type Screen = 'root' | 'reading_plan' | 'parable' | 'topic' | 'verse'
 
 let idCounter = 0
 function genId(): string {
@@ -19,52 +18,22 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+const STARTER_BUBBLE =
+  'flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-full border border-[var(--color-theme-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-theme-accent)] transition-colors'
+
 export function ModePickerScreen({ onSessionStarted }: Props) {
-  const [screen, setScreen] = useState<Screen>('root')
-  const [parables, setParables] = useState<ParableEntry[] | null>(null)
-  const [parablesError, setParablesError] = useState<string | null>(null)
-  const [topics, setTopics] = useState<TopicEntry[] | null>(null)
-  const [topicsError, setTopicsError] = useState<string | null>(null)
-  const [verseRef, setVerseRef] = useState('')
+  const [askInput, setAskInput] = useState('')
+  const [asking, setAsking] = useState(false)
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
+  const updateMessage = useSessionsStore((s) => s.updateMessage)
+  const readingPlanProgress = useReadingPlanStore((s) => s.progress)
 
-  // Fetching directly in the render body (the previous approach) double-fires
-  // under StrictMode and has no way to surface a failed request other than
-  // leaving the screen stuck on "Loading…" forever. Drive both fetches from
-  // an effect instead, with explicit error state and a retry affordance.
-  useEffect(() => {
-    if (screen !== 'parable' || parables) return
-    let cancelled = false
-    listParables()
-      .then((result) => {
-        if (!cancelled) setParables(result)
-      })
-      .catch((err) => {
-        if (!cancelled) setParablesError(errorMessage(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [screen, parables])
-
-  useEffect(() => {
-    if (screen !== 'topic' || topics) return
-    let cancelled = false
-    listTopics()
-      .then((result) => {
-        if (!cancelled) setTopics(result)
-      })
-      .catch((err) => {
-        if (!cancelled) setTopicsError(errorMessage(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [screen, topics])
-
-  async function startSession(mode: SessionMode, modeParams: ModeParams) {
+  // A starter that already knows what it needs (no sub-choice) starts the
+  // session and fetches its first real response immediately.
+  async function startSession(mode: SessionMode, userLabel: string, modeParams: ModeParams) {
     const session = createSession(mode, modeParams)
+    appendMessage(session.id, { id: genId(), role: 'user', text: userLabel })
     try {
       const response = await postChat({ message: '', mode, mode_params: { ...modeParams } })
       const message: SessionMessage = {
@@ -87,162 +56,177 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     onSessionStarted(session.id)
   }
 
-  if (screen === 'reading_plan') {
-    return (
-      <div className="flex flex-col gap-3 p-6">
-        <h2 className="text-lg font-semibold">Bible in a Year</h2>
-        <button
-          className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-          onClick={() => startSession('reading_plan', { plan: 'chronological', dayIndex: 0, completedDays: [] })}
-        >
-          Chronological
-        </button>
-        <button
-          className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-          onClick={() => startSession('reading_plan', { plan: 'canonical', dayIndex: 0, completedDays: [] })}
-        >
-          Canonical (book order)
-        </button>
-      </div>
-    )
+  // A starter whose sub-choice is fixed and known up front (Bible in a
+  // Year, Verse of the Day) — posts the choices as clickable pills inside
+  // the assistant's reply instead of a separate picker screen.
+  function startWithChoices(mode: SessionMode, userLabel: string, promptText: string, choices: MessageChoice[]) {
+    const session = createSession(mode, {})
+    appendMessage(session.id, { id: genId(), role: 'user', text: userLabel })
+    appendMessage(session.id, { id: genId(), role: 'assistant', text: promptText, choicesStatus: 'ready', choices })
+    onSessionStarted(session.id)
   }
 
-  if (screen === 'parable') {
-    if (parablesError) {
-      return (
-        <div className="flex flex-col gap-2 p-6">
-          <div className="text-sm text-red-600">Failed to load parables: {parablesError}</div>
-          <button
-            className="self-start text-xs px-3 py-1.5 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-            onClick={() => {
-              setParablesError(null)
-              setParables(null)
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      )
+  // A starter whose choices have to be fetched (Parable Study, Topical
+  // Study) — posts a loading prompt immediately, then fills the pills in
+  // once the list arrives (or shows a retryable error).
+  async function startWithFetchedChoices(
+    mode: SessionMode,
+    userLabel: string,
+    promptText: string,
+    fetchChoices: () => Promise<MessageChoice[]>
+  ) {
+    const session = createSession(mode, {})
+    appendMessage(session.id, { id: genId(), role: 'user', text: userLabel })
+    const promptId = genId()
+    appendMessage(session.id, { id: promptId, role: 'assistant', text: promptText, choicesStatus: 'loading' })
+    onSessionStarted(session.id)
+    try {
+      const choices = await fetchChoices()
+      updateMessage(session.id, promptId, { choicesStatus: 'ready', choices })
+    } catch (err) {
+      updateMessage(session.id, promptId, { choicesStatus: 'error', choicesError: errorMessage(err) })
     }
-    if (!parables) {
-      return <div className="p-6 text-[var(--color-text-secondary)]">Loading parables…</div>
-    }
-    return (
-      <div className="flex flex-col gap-2 p-6 max-h-[70vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-2">Parable Study</h2>
-        {parables.map((p) => (
-          <button
-            key={p.id}
-            className="text-left px-4 py-2 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-            onClick={() => startSession('parable', { parableId: p.id })}
-          >
-            {p.name} <span className="text-[var(--color-text-secondary)] text-sm">({p.reference})</span>
-          </button>
-        ))}
-      </div>
-    )
   }
 
-  if (screen === 'topic') {
-    if (topicsError) {
-      return (
-        <div className="flex flex-col gap-2 p-6">
-          <div className="text-sm text-red-600">Failed to load topics: {topicsError}</div>
-          <button
-            className="self-start text-xs px-3 py-1.5 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-            onClick={() => {
-              setTopicsError(null)
-              setTopics(null)
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      )
+  async function askDirectly(text: string) {
+    const trimmed = text.trim()
+    if (!trimmed || asking) return
+    setAsking(true)
+    const session = createSession('freeform', {})
+    appendMessage(session.id, { id: genId(), role: 'user', text: trimmed })
+    try {
+      const response = await postChat({ message: trimmed, mode: 'freeform', mode_params: {} })
+      appendMessage(session.id, {
+        id: genId(),
+        role: 'assistant',
+        text: response.message,
+        type: response.type,
+        data: response.data ?? undefined,
+        artifacts: response.artifacts,
+        followUpQuestions: response.follow_up_questions,
+      })
+    } catch (err) {
+      appendMessage(session.id, {
+        id: genId(),
+        role: 'assistant',
+        text: 'Sorry, something went wrong: ' + errorMessage(err),
+      })
+    } finally {
+      setAsking(false)
     }
-    if (!topics) {
-      return <div className="p-6 text-[var(--color-text-secondary)]">Loading topics…</div>
-    }
-    return (
-      <div className="flex flex-col gap-2 p-6 max-h-[70vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-2">Topical Study</h2>
-        {topics.map((t) => (
-          <button
-            key={t.id}
-            className="text-left px-4 py-2 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-            onClick={() => startSession('topic', { topicId: t.id })}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  if (screen === 'verse') {
-    return (
-      <div className="flex flex-col gap-3 p-6">
-        <h2 className="text-lg font-semibold">Verse of the Day</h2>
-        <button
-          className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-          onClick={() => startSession('verse', {})}
-        >
-          Surprise me
-        </button>
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (verseRef.trim()) startSession('verse', { reference: verseRef.trim() })
-          }}
-        >
-          <input
-            value={verseRef}
-            onChange={(e) => setVerseRef(e.target.value)}
-            placeholder="e.g. John 3:16"
-            className="flex-1 border border-[var(--color-theme-border)] rounded px-3 py-2"
-          />
-          <button type="submit" className="px-4 py-2 rounded bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]">
-            Go
-          </button>
-        </form>
-      </div>
-    )
+    setAskInput('')
+    onSessionStarted(session.id)
   }
 
   return (
-    <div className="flex flex-col gap-3 p-6">
-      <h2 className="text-lg font-semibold">Start a new session</h2>
-      <button
-        className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-        onClick={() => setScreen('reading_plan')}
-      >
-        Bible in a Year
-      </button>
-      <button
-        className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-        onClick={() => setScreen('parable')}
-      >
-        Parable Study
-      </button>
-      <button
-        className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-        onClick={() => setScreen('verse')}
-      >
-        Verse of the Day
-      </button>
-      <button
-        className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-        onClick={() => setScreen('topic')}
-      >
-        Topical Study
-      </button>
-      <button
-        className="text-left px-4 py-3 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
-        onClick={() => startSession('freeform', {})}
-      >
-        Ask Anything
-      </button>
+    <div className="h-full flex flex-col items-center justify-center px-6 py-10 overflow-y-auto">
+      <div className="w-full max-w-lg flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <span className="text-4xl" aria-hidden="true">
+            📖
+          </span>
+          <h1 className="text-xl font-semibold">Bible Explorer</h1>
+          <p className="text-sm text-[var(--color-text-secondary)] max-w-sm">
+            Ask about a verse, a word, or a theme — or start a guided study below.
+          </p>
+        </div>
+
+        <form
+          className="w-full flex items-center gap-2 rounded-2xl border border-[var(--color-theme-border)] bg-[var(--color-surface-alt)] px-4 py-3 shadow-sm focus-within:border-[var(--color-theme-accent)] transition-colors"
+          onSubmit={(e) => {
+            e.preventDefault()
+            askDirectly(askInput)
+          }}
+        >
+          <input
+            value={askInput}
+            onChange={(e) => setAskInput(e.target.value)}
+            placeholder="Ask about a verse, word, or theme…"
+            className="flex-1 bg-transparent outline-none text-sm"
+          />
+          <button
+            type="submit"
+            aria-label="Ask"
+            disabled={asking || !askInput.trim()}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] disabled:opacity-40"
+          >
+            {asking ? '…' : '➤'}
+          </button>
+        </form>
+
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              // Once the user has picked a plan (and possibly made
+              // progress through it) before, skip straight back into it —
+              // same plan, next unread day — instead of asking again and
+              // restarting at day 1 every time.
+              readingPlanProgress
+                ? startSession('reading_plan', '📅 Bible in a Year', { ...readingPlanProgress })
+                : startWithChoices(
+                    'reading_plan',
+                    '📅 Bible in a Year',
+                    'Would you like to read chronologically (the order events happened) or in canonical order (book order)?',
+                    [
+                      { label: 'Chronological', modeParams: { plan: 'chronological', dayIndex: 0, completedDays: [] } },
+                      { label: 'Canonical (book order)', modeParams: { plan: 'canonical', dayIndex: 0, completedDays: [] } },
+                    ]
+                  )
+            }
+          >
+            <span aria-hidden="true">📅</span> Bible in a Year
+          </button>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithFetchedChoices(
+                'parable',
+                '🌿 Parable Study',
+                'Here are some parables to explore — which would you like to read?',
+                async () => {
+                  const parables = await listParables()
+                  return parables.map((p) => ({ label: `${p.name} (${p.reference})`, modeParams: { parableId: p.id } }))
+                }
+              )
+            }
+          >
+            <span aria-hidden="true">🌿</span> Parable Study
+          </button>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithChoices(
+                'verse',
+                '✨ Verse of the Day',
+                'Want a random verse? Or type a reference below — e.g. John 3:16 or 1 Th 4:16.',
+                [{ label: 'Surprise me', modeParams: {} }]
+              )
+            }
+          >
+            <span aria-hidden="true">✨</span> Verse of the Day
+          </button>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithFetchedChoices(
+                'topic',
+                '🔎 Topical Study',
+                'Here are some topics to explore — which would you like to dig into?',
+                async () => {
+                  const topics = await listTopics()
+                  return topics.map((t) => ({ label: t.name, modeParams: { topicId: t.id } }))
+                }
+              )
+            }
+          >
+            <span aria-hidden="true">🔎</span> Topical Study
+          </button>
+          <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
+            <span aria-hidden="true">💬</span> Ask Anything
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

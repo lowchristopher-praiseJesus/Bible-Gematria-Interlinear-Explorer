@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchBookContext,
+  fetchChapter,
   fetchEnglishSearch,
   fetchGematria,
   fetchInterlinear,
@@ -83,6 +84,18 @@ describe('chatApi', () => {
     mockFetchOnce({ verse: { ref: 'Matthew 6' } })
     await fetchInterlinear('MAT 6')
     expect(fetch).toHaveBeenCalledWith('/api/explorer?reference=Matthew%206')
+  })
+
+  it('fetchChapter calls /passage without a fast flag by default', async () => {
+    mockFetchOnce({ book: 'Job', chapter: 1, verseCount: 1, verses: [] })
+    await fetchChapter('JOB 1')
+    expect(fetch).toHaveBeenCalledWith('/api/bible-chat/passage?reference=Job+1')
+  })
+
+  it('fetchChapter passes fast=true through to /passage when requested', async () => {
+    mockFetchOnce({ book: 'Job', chapter: 1, verseCount: 1, verses: [] })
+    await fetchChapter('JOB 1', { fast: true })
+    expect(fetch).toHaveBeenCalledWith('/api/bible-chat/passage?reference=Job+1&fast=true')
   })
 
   it('fetchStrongsEntry calls /api/strongs', async () => {

@@ -97,9 +97,11 @@ export default function App() {
           </ErrorBoundary>
         </div>
 
-        <div className={`w-full lg:w-96 shrink-0 ${activePane === 'artifact' ? 'block' : 'hidden'} lg:block`}>
+        <div
+          className={`w-full lg:w-96 shrink-0 ${activePane === 'artifact' ? 'block' : 'hidden'} ${activeArtifact ? 'lg:block' : 'lg:hidden'}`}
+        >
           <ErrorBoundary>
-            <ArtifactPane />
+            <ArtifactPane onClose={() => setActivePane('chat')} />
           </ErrorBoundary>
         </div>
       </div>

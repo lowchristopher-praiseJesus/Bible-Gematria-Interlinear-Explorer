@@ -9,11 +9,33 @@ interface Props {
 export function InterlinearArtifact({ data }: Props) {
   const [tab, setTab] = useState<'text' | 'manuscript'>('text')
   const openArtifact = useArtifactStore((s) => s.openArtifact)
-  const { verse, kjvWords, originalWords } = data
+  const { verse, kjvWords, originalWords, navigation } = data
+
+  function goToVerse(versenumber: number, label: string) {
+    openArtifact({ type: 'interlinear', label, params: { versenumber } })
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="text-sm font-semibold">{verse.ref}</div>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => goToVerse(navigation.previous, 'Previous verse ▸')}
+          aria-label="Previous verse"
+          className="text-xs px-2 py-1 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
+        >
+          ‹ Prev
+        </button>
+        <div className="text-sm font-semibold">{verse.ref}</div>
+        <button
+          type="button"
+          onClick={() => goToVerse(navigation.next, 'Next verse ▸')}
+          aria-label="Next verse"
+          className="text-xs px-2 py-1 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
+        >
+          Next ›
+        </button>
+      </div>
       <div className="flex gap-1 border-b border-[var(--color-theme-border)]">
         <button
           onClick={() => setTab('text')}

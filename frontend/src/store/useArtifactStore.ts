@@ -4,25 +4,37 @@ import {
   fetchEnglishSearch,
   fetchGematria,
   fetchInterlinear,
+  fetchInterlinearByVersenumber,
   fetchStrongsEntry,
 } from '@/lib/chatApi'
 import type { ArtifactLink } from '@/types/session'
 
 type ArtifactStatus = 'idle' | 'loading' | 'ready' | 'error'
 
+function sameArtifact(a: ArtifactLink | null, b: ArtifactLink): boolean {
+  return !!a && a.type === b.type && JSON.stringify(a.params) === JSON.stringify(b.params)
+}
+
 interface ArtifactState {
   activeArtifact: ArtifactLink | null
+  /** Every artifact navigated away from, most-recent last — e.g. the verse
+   * a user was reading before clicking a Strong's number. `goBack` pops
+   * this to return there instead of just closing the panel. */
+  history: ArtifactLink[]
   status: ArtifactStatus
   data: unknown
   error: string | null
   openArtifact: (link: ArtifactLink) => Promise<void>
+  goBack: () => Promise<void>
   close: () => void
 }
 
 async function fetchForLink(link: ArtifactLink): Promise<unknown> {
   switch (link.type) {
     case 'interlinear':
-      return fetchInterlinear(link.params.reference as string)
+      return link.params.versenumber !== undefined
+        ? fetchInterlinearByVersenumber(link.params.versenumber as number)
+        : fetchInterlinear(link.params.reference as string)
     case 'strongs':
       return fetchStrongsEntry(link.params.id as string)
     case 'book_context':
@@ -36,14 +48,20 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
   }
 }
 
-export const useArtifactStore = create<ArtifactState>((set) => ({
+export const useArtifactStore = create<ArtifactState>((set, get) => ({
   activeArtifact: null,
+  history: [],
   status: 'idle',
   data: null,
   error: null,
 
   openArtifact: async (link) => {
-    set({ activeArtifact: link, status: 'loading', data: null, error: null })
+    const current = get().activeArtifact
+    // Not opening the same thing that's already showing — stack it onto
+    // history so `goBack` can return to it (a Strong's lookup from a
+    // verse, one verse to the next, etc.).
+    const history = current && !sameArtifact(current, link) ? [...get().history, current] : get().history
+    set({ activeArtifact: link, history, status: 'loading', data: null, error: null })
     try {
       const data = await fetchForLink(link)
       set({ status: 'ready', data })
@@ -52,5 +70,18 @@ export const useArtifactStore = create<ArtifactState>((set) => ({
     }
   },
 
-  close: () => set({ activeArtifact: null, status: 'idle', data: null, error: null }),
+  goBack: async () => {
+    const history = get().history
+    if (history.length === 0) return
+    const previous = history[history.length - 1]
+    set({ activeArtifact: previous, history: history.slice(0, -1), status: 'loading', data: null, error: null })
+    try {
+      const data = await fetchForLink(previous)
+      set({ status: 'ready', data })
+    } catch (err) {
+      set({ status: 'error', error: err instanceof Error ? err.message : String(err) })
+    }
+  },
+
+  close: () => set({ activeArtifact: null, history: [], status: 'idle', data: null, error: null }),
 }))

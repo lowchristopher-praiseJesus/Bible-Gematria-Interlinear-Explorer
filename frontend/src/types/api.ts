@@ -72,6 +72,20 @@ export interface ExplorerResponse {
   strongsDefinitions: Record<string, StrongsDefinition>
 }
 
+export interface ChapterVerse {
+  versenumber: number
+  vnum: number
+  ref: string
+  translations: Record<string, string>
+}
+
+export interface ChapterResponse {
+  book: string
+  chapter: number
+  verseCount: number
+  verses: ChapterVerse[]
+}
+
 export interface ApocResponse {
   isApocrypha: true
   reference: string

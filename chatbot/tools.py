@@ -115,7 +115,12 @@ async def fetch_strongs(
 # deterministic routing; the frontend artifact panel calls Flask's existing
 # /api/gematria and /api/english directly instead of duplicating a route here.
 # ---------------------------------------------------------------------------
-from chatbot.bible_search import random_verse_sync, search_english_sync, search_gematria_sync
+from chatbot.bible_search import (
+    list_passage_verses_sync,
+    random_verse_sync,
+    search_english_sync,
+    search_gematria_sync,
+)
 
 
 async def search_gematria(value: int) -> Dict[str, Any]:
@@ -128,3 +133,12 @@ async def search_english(query: str) -> Dict[str, Any]:
 
 async def random_verse() -> tuple:
     return await _run_in_thread(random_verse_sync)
+
+
+async def list_passage_verses(
+    book_name: str,
+    chapter: int,
+    start_verse: Optional[int] = None,
+    end_verse: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    return await _run_in_thread(list_passage_verses_sync, book_name, chapter, start_verse, end_verse)

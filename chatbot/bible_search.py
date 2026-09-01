@@ -9,7 +9,7 @@ the mybibletoolbox-code dependency the rest of chatbot/ relies on.
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import dataset
 
@@ -147,3 +147,31 @@ def random_verse_sync() -> tuple:
     verse_id = random.randint(1, 31102)
     row = db["Complete"].find_one(id=verse_id)
     return row["book"], row["cnum"], row["vnum"]
+
+
+def list_passage_verses_sync(
+    book_name: str,
+    chapter: int,
+    start_verse: Optional[int] = None,
+    end_verse: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """List a chapter's (or verse-range's) verses as bare structural refs —
+    versenumber/vnum/ref only, no translation text. Callers hydrate the text
+    themselves (e.g. via fetch_verse_translations), so this stays a fast,
+    local-only lookup independent of any external fetch."""
+    db = dataset.connect(DB_PATH)
+    rows = db["Complete"].find(book=book_name, cnum=chapter, order_by="vnum")
+    verses = []
+    for row in rows:
+        if start_verse is not None and row["vnum"] < start_verse:
+            continue
+        if end_verse is not None and row["vnum"] > end_verse:
+            continue
+        # The row already carries the 1769 KJV text (it's the same row
+        # english_search_sync reads for full-text search) — surfacing it
+        # here costs nothing extra and lets callers show a chapter's KJV
+        # instantly from the local DB, without waiting on the external
+        # multi-translation fetch fetch_verse_translations() does.
+        kjv = _remove_tags(row["text_1769"]) if row["text_1769"] else None
+        verses.append({"versenumber": row["id"], "vnum": row["vnum"], "ref": row["ref"], "kjv": kjv})
+    return verses

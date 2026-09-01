@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ArtifactPane } from './ArtifactPane'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import * as chatApi from '@/lib/chatApi'
 import type { ExplorerResponse, StrongsResponse } from '@/types/api'
 
 const explorerFixture: ExplorerResponse = {
@@ -29,7 +31,11 @@ const strongsFixture: StrongsResponse = {
 
 describe('ArtifactPane', () => {
   beforeEach(() => {
-    useArtifactStore.setState({ activeArtifact: null, status: 'idle', data: null, error: null })
+    useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('shows an empty state when nothing is active', () => {
@@ -60,5 +66,45 @@ describe('ArtifactPane', () => {
     render(<ArtifactPane />)
     expect(screen.getByText('G26')).toBeInTheDocument()
     expect(screen.getByText('love')).toBeInTheDocument()
+  })
+
+  it('clears the active artifact and notifies the caller when closed', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    useArtifactStore.setState({ activeArtifact: { type: 'strongs', label: 'G26', params: {} }, status: 'ready', data: strongsFixture })
+    render(<ArtifactPane onClose={onClose} />)
+
+    await user.click(screen.getByRole('button', { name: /close artifact/i }))
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(useArtifactStore.getState().activeArtifact).toBeNull()
+    expect(useArtifactStore.getState().status).toBe('idle')
+  })
+
+  it('has no back button when there is nothing to go back to', () => {
+    useArtifactStore.setState({ activeArtifact: { type: 'strongs', label: 'G26', params: {} }, status: 'ready', data: strongsFixture })
+    render(<ArtifactPane />)
+    expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+  })
+
+  it('shows a back button after navigating from a verse to its Strong\'s definition, and it returns there', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(chatApi, 'fetchInterlinearByVersenumber').mockResolvedValue(explorerFixture)
+    const verseLink = { type: 'interlinear' as const, label: 'Genesis 1:1 ▸', params: { versenumber: 1 } }
+    useArtifactStore.setState({
+      activeArtifact: { type: 'strongs', label: 'G26', params: { id: 'G26' } },
+      history: [verseLink],
+      status: 'ready',
+      data: strongsFixture,
+    })
+    render(<ArtifactPane />)
+    expect(screen.getByText('love')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /back/i }))
+
+    // goBack re-fetches the previous artifact; the store is exercised
+    // directly here (its own fetching is covered in useArtifactStore.test.ts) —
+    // what matters for the pane is that it asked to go back to the verse.
+    expect(useArtifactStore.getState().activeArtifact).toEqual(verseLink)
   })
 })

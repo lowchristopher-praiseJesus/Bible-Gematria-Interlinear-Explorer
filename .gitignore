@@ -26,3 +26,4 @@ frontend/CACHED_PAGES/
 /static/chatbot-widget*
 /static/chatbot-widget/
 .worktrees/
+.DS_Store

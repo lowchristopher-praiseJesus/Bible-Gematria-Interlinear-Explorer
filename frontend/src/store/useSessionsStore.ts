@@ -8,12 +8,19 @@ interface SessionsState {
   createSession: (mode: SessionMode, modeParams: ModeParams) => Session
   setActiveSessionId: (id: string | null) => void
   appendMessage: (sessionId: string, message: SessionMessage) => void
+  updateMessage: (sessionId: string, messageId: string, patch: Partial<SessionMessage>) => void
   updateModeParams: (sessionId: string, patch: Partial<ModeParams>) => void
   deleteSession: (sessionId: string) => void
+  /** Wipes every chat, across every mode — the "clear all history" action
+   * in Settings. Unlike `deleteSession`, there's no single id to target. */
+  clearAllSessions: () => void
   listSessions: () => Session[]
+  /** Drops the message at `fromMessageId` and everything after it — used to
+   * discard a response before regenerating it. */
+  truncateMessagesFrom: (sessionId: string, fromMessageId: string) => void
 }
 
-const MODE_LABELS: Record<SessionMode, string> = {
+export const MODE_LABELS: Record<SessionMode, string> = {
   reading_plan: 'Bible in a Year',
   parable: 'Parable Study',
   verse: 'Verse of the Day',
@@ -117,6 +124,22 @@ export const useSessionsStore = create<SessionsState>()(
           }
         }),
 
+      updateMessage: (sessionId, messageId, patch) =>
+        set((state) => {
+          const existing = state.sessions[sessionId]
+          if (!existing) return state
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: {
+                ...existing,
+                messages: existing.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m)),
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        }),
+
       updateModeParams: (sessionId, patch) =>
         set((state) => {
           const existing = state.sessions[sessionId]
@@ -142,7 +165,23 @@ export const useSessionsStore = create<SessionsState>()(
           }
         }),
 
+      clearAllSessions: () => set({ sessions: {}, activeSessionId: null }),
+
       listSessions: () => Object.values(get().sessions).sort((a, b) => b.updatedAt - a.updatedAt),
+
+      truncateMessagesFrom: (sessionId, fromMessageId) =>
+        set((state) => {
+          const existing = state.sessions[sessionId]
+          if (!existing) return state
+          const idx = existing.messages.findIndex((m) => m.id === fromMessageId)
+          if (idx === -1) return state
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: { ...existing, messages: existing.messages.slice(0, idx) },
+            },
+          }
+        }),
     }),
     {
       name: 'bible-explorer-sessions',

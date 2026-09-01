@@ -1,6 +1,7 @@
 import { usfmToFullRef } from './usfm'
 import type {
   BookContextResponse,
+  ChapterResponse,
   EnglishResponse,
   ExplorerResponse,
   GematriaResponse,
@@ -102,6 +103,25 @@ export async function fetchInterlinear(reference: string): Promise<ExplorerRespo
     `/api/explorer?reference=${encodeURIComponent(usfmToFullRef(stripVerseRange(reference)))}`
   )
   return parseJsonResponse<ExplorerResponse>(res)
+}
+
+export async function fetchInterlinearByVersenumber(versenumber: number): Promise<ExplorerResponse> {
+  const res = await fetch(`/api/explorer?versenumber=${versenumber}`)
+  return parseJsonResponse<ExplorerResponse>(res)
+}
+
+/**
+ * `fast: true` skips the backend's external multi-translation fetch and
+ * returns only the KJV text already sitting in Complete.db — near-instant,
+ * no network calls on the server side. Callers use it to paint something
+ * readable immediately, then follow up with a plain (non-fast) call to
+ * fill in the rest of the translations in the background.
+ */
+export async function fetchChapter(reference: string, opts?: { fast?: boolean }): Promise<ChapterResponse> {
+  const params = new URLSearchParams({ reference: usfmToFullRef(reference) })
+  if (opts?.fast) params.set('fast', 'true')
+  const res = await fetch(`${CHAT_API}/passage?${params.toString()}`)
+  return parseJsonResponse<ChapterResponse>(res)
 }
 
 export async function fetchStrongsEntry(id: string): Promise<StrongsResponse> {

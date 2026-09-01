@@ -1,6 +1,7 @@
 """FastAPI routes for the Bible chatbot."""
 
-from typing import AsyncIterator, Optional
+import asyncio
+from typing import AsyncIterator, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -9,6 +10,8 @@ from chatbot.schemas import (
     BookContextResponse,
     ChatRequest,
     ChatResponse,
+    PassageResponse,
+    PassageVerse,
     ParablesResponse,
     StrongsResponse,
     StudyResponse,
@@ -19,11 +22,12 @@ from chatbot.tools import (
     fetch_verse_translations,
     fetch_scripture_study,
     fetch_strongs,
+    list_passage_verses,
 )
 from chatbot.book_context import get_book_context
 from chatbot.data.parables import PARABLES
 from chatbot.data.topics import TOPICS
-from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups
+from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups, _usfm_from_name
 from chatbot.streaming import sse_stream, sse_event
 
 router = APIRouter()
@@ -44,6 +48,100 @@ async def get_verse(
     if not translations:
         raise HTTPException(status_code=404, detail="Verse not found")
     return VerseResponse(reference=reference, translations=translations)
+
+
+def _parse_passage_reference(reference: str) -> Tuple[str, int, Optional[int], Optional[int]]:
+    """Parse a full-book-name passage reference into (book, chapter, start_verse, end_verse).
+
+    Accepts a bare chapter ("Job 1"), a single verse ("Matthew 13:44"), or a
+    verse range ("Luke 15:11-32"). Raises ValueError on anything else.
+    """
+    reference = reference.strip()
+    verse_part = None
+    if ":" in reference:
+        reference, verse_part = reference.split(":", 1)
+        reference = reference.strip()
+        verse_part = verse_part.strip()
+
+    if " " not in reference:
+        raise ValueError(f"Invalid reference: {reference!r}")
+    book, chapter_str = reference.rsplit(" ", 1)
+    if not chapter_str.isdigit():
+        raise ValueError(f"Invalid reference: {reference!r}")
+    chapter = int(chapter_str)
+
+    start_verse = end_verse = None
+    if verse_part:
+        if "-" in verse_part:
+            start_str, end_str = verse_part.split("-", 1)
+        else:
+            start_str = end_str = verse_part
+        if not start_str.isdigit() or not end_str.isdigit():
+            raise ValueError(f"Invalid reference: {reference!r}")
+        start_verse, end_verse = int(start_str), int(end_str)
+
+    return book.strip(), chapter, start_verse, end_verse
+
+
+@router.get("/passage", response_model=PassageResponse)
+async def get_passage(
+    reference: str,
+    fast: bool = Query(
+        False,
+        description=(
+            "Skip the external multi-translation fetch and return only the "
+            "KJV text already sitting in Complete.db — near-instant, no "
+            "network calls. Meant for an initial paint the caller follows "
+            "up with a non-fast request to fill in the rest of the "
+            "translations in the background."
+        ),
+    ),
+):
+    """Fetch every verse in a chapter or verse range, each hydrated with
+    multiple translations. The verse list itself comes from a fast local
+    Complete.db lookup; translation text for each verse is then fetched
+    concurrently via fetch_verse_translations (the same multi-version
+    source Verse of the Day uses), so a Parable Study or Bible in a Year
+    reading offers the same translation choice as a single verse lookup.
+
+    That external fetch is what's slow — each verse is its own web request.
+    `fast=true` skips it entirely and returns just the local KJV text
+    (Complete.db already has it, no network needed), so a caller can paint
+    something readable immediately and fetch the rest of the translations
+    afterward without blocking on it."""
+    try:
+        book, chapter, start_verse, end_verse = _parse_passage_reference(reference)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid reference")
+
+    verse_list = await list_passage_verses(book, chapter, start_verse, end_verse)
+    if not verse_list:
+        raise HTTPException(status_code=404, detail="Passage not found")
+
+    if fast:
+        verses = [
+            PassageVerse(
+                versenumber=v["versenumber"],
+                vnum=v["vnum"],
+                ref=v["ref"],
+                translations={"eng-KJV": v["kjv"]} if v.get("kjv") else {},
+            )
+            for v in verse_list
+        ]
+        return PassageResponse(book=book, chapter=chapter, verseCount=len(verses), verses=verses)
+
+    usfm = _usfm_from_name(book)
+
+    async def hydrate(v: dict) -> PassageVerse:
+        ref = f"{usfm} {chapter}:{v['vnum']}"
+        try:
+            translations = await fetch_verse_translations(ref, languages=["eng"])
+        except Exception:
+            translations = {}
+        return PassageVerse(versenumber=v["versenumber"], vnum=v["vnum"], ref=v["ref"], translations=translations)
+
+    verses = await asyncio.gather(*(hydrate(v) for v in verse_list))
+    return PassageResponse(book=book, chapter=chapter, verseCount=len(verses), verses=list(verses))
 
 
 @router.get("/study/{reference}", response_model=StudyResponse)

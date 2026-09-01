@@ -40,4 +40,28 @@ describe('InterlinearArtifact', () => {
       params: { id: 'G0025' },
     })
   })
+
+  it('clicking Next requests the next verse by versenumber', async () => {
+    vi.spyOn(chatApi, 'fetchInterlinearByVersenumber').mockResolvedValue(fixture)
+    render(<InterlinearArtifact data={fixture} />)
+    await userEvent.click(screen.getByRole('button', { name: /next verse/i }))
+    expect(useArtifactStore.getState().activeArtifact).toEqual({
+      type: 'interlinear',
+      label: 'Next verse ▸',
+      params: { versenumber: 2 },
+    })
+    expect(chatApi.fetchInterlinearByVersenumber).toHaveBeenCalledWith(2)
+  })
+
+  it('clicking Prev requests the previous verse by versenumber', async () => {
+    vi.spyOn(chatApi, 'fetchInterlinearByVersenumber').mockResolvedValue(fixture)
+    render(<InterlinearArtifact data={fixture} />)
+    await userEvent.click(screen.getByRole('button', { name: /previous verse/i }))
+    expect(useArtifactStore.getState().activeArtifact).toEqual({
+      type: 'interlinear',
+      label: 'Previous verse ▸',
+      params: { versenumber: 1 },
+    })
+    expect(chatApi.fetchInterlinearByVersenumber).toHaveBeenCalledWith(1)
+  })
 })

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { describeSession } from '@/lib/sessionDescription'
 import * as chatApi from '@/lib/chatApi'
 
 describe('App', () => {
@@ -75,7 +76,7 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
     expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'true')
 
-    await userEvent.click(screen.getByText(otherSession.title))
+    await userEvent.click(screen.getByText(describeSession(otherSession)))
 
     expect(screen.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-current', 'true')
   })
