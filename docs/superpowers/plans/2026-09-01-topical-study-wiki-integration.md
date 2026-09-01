@@ -2094,46 +2094,32 @@ git commit -m "feat: render wiki concept pages as an Artifact"
 
 **Interfaces:**
 - Consumes: `listStudyWikis` (Task 12).
-- Produces: the Topical Study starter button now fetches series and either auto-starts (1 series) or shows a series-choice prompt (>1 series) — same `startSession`/`startWithChoices` primitives the file already has, no new helper needed for the multi-series case.
+- Produces: the Topical Study starter button fetches series and shows a series-choice prompt — the same `startWithFetchedChoices` primitive Parable Study already uses, unchanged shape, just fed by `listStudyWikis` instead of `listTopics`.
 
-- [ ] **Step 1: Write the failing tests**
+> **Pre-flight ruling (recorded in the SDD ledger):** the plan originally specified an "auto-skip straight into the sole series" path for when exactly one series is registered. That path bypasses the concept-pill-rendering branch that only exists in `resolveChoice` (Task 17) — a session started via plain `startSession` would receive `response.data.concepts` but nothing would ever turn it into clickable pills, since `startSession` always renders a plain chat message. Rather than duplicate `resolveChoice`'s concept-rendering branch into ModePickerScreen (or extract a new shared helper for a single call site), Topical Study always shows the series-choice prompt via `startWithFetchedChoices` — identical in shape to today's Topical Study and to Parable Study, even when there's currently only one series to pick from. This is a one-click cost when the library is small, in exchange for a single source of truth for concept-pill rendering (`resolveChoice` alone) and zero new files.
 
-Update `frontend/src/components/shell/ModePickerScreen.test.tsx` — find the existing test(s) that mock `listTopics` and cover clicking "Topical Study" (read the file first to match its existing mocking setup for `listParables`), then replace/add:
+- [ ] **Step 1: Write the failing test**
+
+Update `frontend/src/components/shell/ModePickerScreen.test.tsx` — find the existing test that mocks `listTopics` and covers clicking "Topical Study" (read the file first to match its existing mocking setup for `listParables`, which uses this exact `startWithFetchedChoices` shape already), then replace it with:
 
 ```tsx
-it('auto-starts the sole registered study-wiki series without asking', async () => {
+it('fetches the registered study-wiki series and shows them as a choice prompt', async () => {
   vi.mocked(listStudyWikis).mockResolvedValue([
     { id: 'present-day-ministry-of-jesus', title: 'The Present-Day Ministry of Jesus', speaker: 'Joseph Prince', description: 'desc' },
-  ])
-  vi.mocked(postChat).mockResolvedValue({ type: 'chat', message: 'Concepts...', data: { series_id: 'present-day-ministry-of-jesus', concepts: [] } })
-
-  render(<ModePickerScreen onSessionStarted={vi.fn()} />)
-  await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
-
-  await waitFor(() => {
-    expect(postChat).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'topic', mode_params: { series_id: 'present-day-ministry-of-jesus' } })
-    )
-  })
-})
-
-it('shows a series-choice prompt when more than one series is registered', async () => {
-  vi.mocked(listStudyWikis).mockResolvedValue([
-    { id: 'series-a', title: 'Series A', speaker: 'Speaker A', description: 'a' },
     { id: 'series-b', title: 'Series B', speaker: 'Speaker B', description: 'b' },
   ])
 
   render(<ModePickerScreen onSessionStarted={vi.fn()} />)
   await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
 
-  expect(await screen.findByRole('button', { name: /Series A/ })).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: /The Present-Day Ministry of Jesus/ })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /Series B/ })).toBeInTheDocument()
 })
 ```
 
 Update the file's mock declarations (`vi.mock('@/lib/modeData', ...)`) to export `listStudyWikis` instead of `listTopics`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/shell/ModePickerScreen.test.tsx`
 Expected: FAIL — `ModePickerScreen.tsx` still imports `listTopics`, which no longer exists (Task 12 removed it)
@@ -2149,36 +2135,7 @@ with:
 import { listParables, listStudyWikis } from '@/lib/modeData'
 ```
 
-Add a dedicated handler near the other starter functions (after `startWithFetchedChoices`, before `askDirectly`):
-```tsx
-  // Topical Study fetches the registered series first (a fast, local,
-  // in-memory lookup — no perceptible delay), then either starts the
-  // session directly on the sole series (skipping a pointless one-option
-  // question, same "don't ask what's already known" principle as Bible in
-  // a Year's remembered plan) or offers a choice when there's more than one.
-  async function startTopicalStudy() {
-    let series: Awaited<ReturnType<typeof listStudyWikis>>
-    try {
-      series = await listStudyWikis()
-    } catch {
-      series = []
-    }
-    if (series.length === 1) {
-      startSession('topic', '🔎 Topical Study', { seriesId: series[0].id })
-    } else if (series.length === 0) {
-      startSession('topic', '🔎 Topical Study', {})
-    } else {
-      startWithChoices(
-        'topic',
-        '🔎 Topical Study',
-        'Which series would you like to study?',
-        series.map((s) => ({ label: `${s.title} — ${s.speaker}`, modeParams: { seriesId: s.id } }))
-      )
-    }
-  }
-```
-
-Replace the Topical Study button's `onClick`:
+Replace the Topical Study button's `onClick` — replace:
 ```tsx
           <button
             className={STARTER_BUBBLE}
@@ -2199,12 +2156,25 @@ Replace the Topical Study button's `onClick`:
 ```
 with:
 ```tsx
-          <button className={STARTER_BUBBLE} onClick={() => startTopicalStudy()}>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithFetchedChoices(
+                'topic',
+                '🔎 Topical Study',
+                'Which series would you like to study?',
+                async () => {
+                  const series = await listStudyWikis()
+                  return series.map((s) => ({ label: `${s.title} — ${s.speaker}`, modeParams: { seriesId: s.id } }))
+                }
+              )
+            }
+          >
             <span aria-hidden="true">🔎</span> Topical Study
           </button>
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/shell/ModePickerScreen.test.tsx`
 Expected: PASS
@@ -2386,7 +2356,7 @@ Expected: `Uvicorn running on http://0.0.0.0:8020`, no traceback (a startup trac
 - [ ] **Step 4: Live browser pass**
 
 With Flask (`:5000`), the chatbot service (`:8020`), and the Vite dev server (`:5173`) all running, open `http://localhost:5173/` and:
-1. Click **Topical Study**. Since exactly one series is registered, it should go straight to the concept-pill list (no "which series?" prompt) — confirms Task 16's auto-skip.
+1. Click **Topical Study**. It should show a series-choice prompt (currently just the one registered series as its only pill, per the Task 16 pre-flight ruling — no auto-skip). Click that pill.
 2. Click the **Grace** pill. Confirms a short chat reply plus a `Grace ▸` artifact link.
 3. Click the artifact link. The side panel should show the full Grace page with a citation line at the bottom.
 4. Click a scripture reference inside the page body (e.g. "Rom 6:14"). It should open that verse in the Explorer artifact, replacing the panel content, with a working back button (‹) to return to Grace.
