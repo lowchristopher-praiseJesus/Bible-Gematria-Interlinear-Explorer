@@ -38,6 +38,13 @@ PARABLES: List[Dict[str, Any]] = [
     {"id": "minas", "name": "The Ten Minas", "reference": "Luke 19:11-27"},
     {"id": "two_debtors", "name": "The Two Debtors", "reference": "Luke 7:41-43"},
     {"id": "faithful_wise_servant", "name": "The Faithful and Wise Servant", "reference": "Matthew 24:45-51"},
+    {"id": "strong_man", "name": "The Strong Man", "reference": "Matthew 12:29"},
+    {"id": "empty_house", "name": "The Empty House", "reference": "Matthew 12:43-45"},
+    {"id": "fig_tree_sign", "name": "The Fig Tree as a Sign", "reference": "Matthew 24:32-35"},
+    {"id": "thief_in_the_night", "name": "The Thief in the Night", "reference": "Matthew 24:42-44"},
+    {"id": "watchful_servants", "name": "The Watchful Servants", "reference": "Luke 12:35-40"},
+    {"id": "lowest_seat", "name": "The Lowest Seat at the Feast", "reference": "Luke 14:7-14"},
+    {"id": "master_unworthy_servants", "name": "The Master and Unworthy Servants", "reference": "Luke 17:7-10"},
 ]
 
 
