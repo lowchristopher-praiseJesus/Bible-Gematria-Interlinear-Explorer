@@ -67,20 +67,52 @@ async def test_parable_primer_unknown():
 
 
 @pytest.mark.asyncio
-async def test_topic_primer_known():
-    result = await build_mode_primer("topic", {"topic_id": "holiness"})
-    assert "Holiness" in result["message"]
-    # "Leviticus 19:2" is a single verse; "1 Peter 1:15-16" is a range and
-    # should read as a full multi-verse passage instead of being truncated
-    # to just 1 Peter 1:15. Each reference with curated book context also
-    # gets a "book_context" artifact right alongside it (Leviticus has
-    # none, so it gets no extra artifact).
-    by_ref = {a["params"]["reference"]: a["type"] for a in result["artifacts"] if a["type"] != "book_context"}
-    assert by_ref["Leviticus 19:2"] == "interlinear"
-    assert by_ref["1 Peter 1:15-16"] == "chapter"
-    assert by_ref["Hebrews 12:14"] == "interlinear"
-    book_context_books = {a["params"]["book"] for a in result["artifacts"] if a["type"] == "book_context"}
-    assert book_context_books == {"1PE", "HEB"}
+async def test_topic_primer_no_series_registered(monkeypatch):
+    import chatbot.router as router_module
+
+    monkeypatch.setattr(router_module.wiki_loader, "list_series", lambda: [])
+    result = await router_module.build_mode_primer("topic", {})
+    assert result["type"] == "chat"
+    assert "no study series available" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_topic_primer_series_only_lists_concepts():
+    result = await build_mode_primer("topic", {"series_id": "present-day-ministry-of-jesus"})
+    assert result["type"] == "chat"
+    assert result["data"]["series_id"] == "present-day-ministry-of-jesus"
+    concepts = result["data"]["concepts"]
+    assert len(concepts) > 50
+    slugs = {c["slug"] for c in concepts}
+    assert "grace" in slugs
+
+
+@pytest.mark.asyncio
+async def test_topic_primer_unknown_series():
+    result = await build_mode_primer("topic", {"series_id": "not-a-real-series"})
+    assert result["type"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_topic_primer_concept_page():
+    result = await build_mode_primer(
+        "topic", {"series_id": "present-day-ministry-of-jesus", "concept_slug": "grace"}
+    )
+    assert result["type"] == "chat"
+    assert "Grace" in result["message"]
+    assert result["artifacts"][0] == {
+        "type": "wiki_concept",
+        "label": "Grace ▸",
+        "params": {"seriesId": "present-day-ministry-of-jesus", "slug": "grace"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_topic_primer_unknown_concept():
+    result = await build_mode_primer(
+        "topic", {"series_id": "present-day-ministry-of-jesus", "concept_slug": "not-a-real-slug"}
+    )
+    assert result["type"] == "error"
 
 
 @pytest.mark.asyncio

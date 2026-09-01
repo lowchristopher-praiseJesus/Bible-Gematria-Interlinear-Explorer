@@ -906,7 +906,7 @@ async def route_claude(
 
 from chatbot.data.parables import get_parable
 from chatbot.data.reading_plans import get_day_reading
-from chatbot.data.topics import get_topic
+from chatbot import wiki_loader
 from chatbot.tools import random_verse
 
 _FULL_NAME_TO_USFM = {full: usfm for usfm, full in _USFM_TO_BOOK.items()}
@@ -968,27 +968,64 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
         }
 
     if mode == "topic":
-        topic = get_topic(mode_params.get("topic_id", ""))
-        if not topic:
+        series_id = mode_params.get("series_id")
+        concept_slug = mode_params.get("concept_slug")
+
+        if not series_id:
+            registered = wiki_loader.list_series()
+            if not registered:
+                return {
+                    "type": "chat",
+                    "message": "No study series available yet.",
+                    "data": None,
+                    "route": "Mode primer → topic → no series registered",
+                }
+            # >1 series is handled by the frontend's series-picker fetch
+            # (it lists them before ever calling this primer); exactly 1
+            # auto-resolves here rather than asking a pointless question.
+            series_id = registered[0]["id"]
+
+        manifest = wiki_loader.get_manifest(series_id)
+        if not manifest:
             return {
-                "type": "error", "message": "Unknown topic.", "data": None,
-                "route": "Mode primer → topic → not found",
+                "type": "error", "message": "Unknown study series.", "data": None,
+                "route": "Mode primer → topic → series not found",
+            }
+
+        if not concept_slug:
+            concepts = wiki_loader.list_concepts(series_id)
+            message = (
+                f"**Topical Study: {manifest['title']}** ({manifest['speaker']})\n\n"
+                "Here are the concepts covered in this series — which would you like to explore?"
+            )
+            return {
+                "type": "chat",
+                "message": message,
+                "data": {"series_id": series_id, "concepts": concepts},
+                "route": "Mode primer → topic → series",
+            }
+
+        page = wiki_loader.get_page(series_id, concept_slug)
+        if not page:
+            return {
+                "type": "error", "message": "Unknown concept.", "data": None,
+                "route": "Mode primer → topic → concept not found",
             }
         message = (
-            f"**Topical Study: {topic['name']}**\n\n"
-            f"Here are some passages to start with: {', '.join(topic['seed_references'])}. "
-            "What would you like to explore?"
+            f"**{page['title']}** — from *{manifest['title']}* ({manifest['speaker']}).\n\n"
+            "Open the panel to read the full page, or ask me a follow-up question about it."
         )
-        seen_books: set = set()
         return {
             "type": "chat",
             "message": message,
-            "data": {"topic": topic},
-            "route": "Mode primer → topic",
-            "artifacts": [
-                a for ref in topic["seed_references"] for a in _reading_artifacts(ref, seen_books=seen_books)
-            ],
-            "follow_up_questions": [f"Show me more verses about {topic['name']}"],
+            "data": {"series_id": series_id, "concept_slug": concept_slug},
+            "route": "Mode primer → topic → concept",
+            "artifacts": [{
+                "type": "wiki_concept",
+                "label": f"{page['title']} ▸",
+                "params": {"seriesId": series_id, "slug": concept_slug},
+            }],
+            "follow_up_questions": [f"What else does this series say about {page['title']}?"],
         }
 
     if mode == "verse":
