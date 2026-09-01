@@ -49,3 +49,32 @@ async def test_answer_grounds_ollama_call_with_matched_pages(monkeypatch):
     assert "Answer only from the material below" in captured["research_data"]
     assert result["message"] == "Grace is undeserved favor."
     assert result["data"] == {"series_id": "present-day-ministry-of-jesus", "best_match_slug": "grace"}
+
+
+@pytest.mark.asyncio
+async def test_answer_trims_long_matched_page_bodies_in_research_data(monkeypatch):
+    # Some real wiki pages run 20KB+; the grounding text sent to the LLM
+    # must not include a matched page's body untrimmed.
+    captured = {}
+    long_body = "x" * 5000
+
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        captured["research_data"] = research_data
+        return {"type": "chat", "message": "ok", "data": None}
+
+    monkeypatch.setattr(
+        wiki_qa.wiki_loader,
+        "search",
+        lambda series_id, message, top_n=3: [
+            {"slug": "grace", "title": "Grace", "kind": "concept", "body": long_body}
+        ],
+    )
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+
+    await wiki_qa.answer("present-day-ministry-of-jesus", "what is grace?")
+
+    # The full 5000-char body must not appear verbatim in the grounding
+    # text — only a bounded prefix of it should.
+    assert long_body not in captured["research_data"]
+    assert "x" * wiki_qa._MAX_PAGE_CHARS_IN_GROUNDING in captured["research_data"]
+    assert "x" * (wiki_qa._MAX_PAGE_CHARS_IN_GROUNDING + 1) not in captured["research_data"]

@@ -7,6 +7,11 @@ from typing import Any, Dict, List, Optional
 from chatbot import wiki_loader
 from chatbot.ollama_client import call_ollama_with_context
 
+# Some real wiki pages run 20KB+; capping each matched page's body keeps the
+# grounding text sent to the LLM to a reasonable size regardless of how long
+# the underlying page is.
+_MAX_PAGE_CHARS_IN_GROUNDING = 2000
+
 
 async def answer(
     series_id: str,
@@ -37,7 +42,9 @@ async def answer(
         }
 
     citation = f"{manifest['speaker']} — {manifest['title']}"
-    matched_text = "\n\n".join(f"=== {m['title']} ===\n{m['body']}" for m in matches)
+    matched_text = "\n\n".join(
+        f"=== {m['title']} ===\n{m['body'][:_MAX_PAGE_CHARS_IN_GROUNDING]}" for m in matches
+    )
     research_data = (
         f"Answer only from the material below, drawn from the study series "
         f"\"{manifest['title']}\" by {manifest['speaker']}. If the material "
