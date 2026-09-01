@@ -45,8 +45,18 @@ describe('describeSession', () => {
   })
 
   it('describes a chosen topic by its formatted name', () => {
-    const session = makeSession({ mode: 'topic', modeParams: { topicId: 'faith_and_doubt' } })
+    const session = makeSession({ mode: 'topic', modeParams: { seriesId: 'some-series', conceptSlug: 'faith_and_doubt' } })
     expect(describeSession(session)).toBe('Faith and doubt')
+  })
+
+  it('describes a topic session with a resolved concept by its slug', () => {
+    const session = makeSession({ mode: 'topic', modeParams: { seriesId: 'present-day-ministry-of-jesus', conceptSlug: 'grace' } })
+    expect(describeSession(session)).toBe('Grace')
+  })
+
+  it('describes a topic session with only a series chosen as "Choosing a topic"', () => {
+    const session = makeSession({ mode: 'topic', modeParams: { seriesId: 'present-day-ministry-of-jesus' } })
+    expect(describeSession(session)).toBe('Choosing a topic')
   })
 
   it('describes a verse session by its explicit reference param', () => {

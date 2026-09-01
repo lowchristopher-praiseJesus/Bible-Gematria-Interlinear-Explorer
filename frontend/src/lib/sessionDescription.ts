@@ -5,7 +5,7 @@ function capitalize(text: string): string {
 }
 
 function formatSlug(id: string): string {
-  return capitalize(id.replace(/_/g, ' '))
+  return capitalize(id.replace(/[_-]/g, ' '))
 }
 
 function truncate(text: string, max: number): string {
@@ -34,7 +34,7 @@ export function describeSession(session: Session): string {
     case 'parable':
       return modeParams.parableId ? formatSlug(modeParams.parableId) : 'Choosing a parable'
     case 'topic':
-      return modeParams.topicId ? formatSlug(modeParams.topicId) : 'Choosing a topic'
+      return modeParams.conceptSlug ? formatSlug(modeParams.conceptSlug) : 'Choosing a topic'
     case 'verse': {
       // The first assistant message is often just the "which verse?"
       // choice prompt (no data yet) — the resolved reference lands on a

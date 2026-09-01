@@ -31,7 +31,7 @@ export const MODE_LABELS: Record<SessionMode, string> = {
 function deriveTitle(mode: SessionMode, modeParams: ModeParams): string {
   if (mode === 'reading_plan') return `Bible in a Year — ${modeParams.plan === 'canonical' ? 'Canonical' : 'Chronological'}`
   if (mode === 'parable' && modeParams.parableId) return `Parable Study — ${modeParams.parableId.replace(/_/g, ' ')}`
-  if (mode === 'topic' && modeParams.topicId) return `Topical Study — ${modeParams.topicId.replace(/_/g, ' ')}`
+  if (mode === 'topic' && modeParams.conceptSlug) return `Topical Study — ${modeParams.conceptSlug.replace(/-/g, ' ')}`
   return MODE_LABELS[mode]
 }
 

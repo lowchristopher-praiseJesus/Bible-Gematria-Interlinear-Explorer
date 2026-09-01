@@ -16,6 +16,14 @@ describe('useSessionsStore', () => {
     expect(useSessionsStore.getState().sessions[session.id]).toEqual(session)
   })
 
+  it('derives a topic session title from conceptSlug, hyphens included', () => {
+    const session = useSessionsStore.getState().createSession('topic', {
+      seriesId: 'present-day-ministry-of-jesus',
+      conceptSlug: 'the-life-of-rest',
+    })
+    expect(session.title).toBe('Topical Study — the life of rest')
+  })
+
   it('appendMessage adds a message and bumps updatedAt', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     const before = useSessionsStore.getState().sessions[session.id].updatedAt
