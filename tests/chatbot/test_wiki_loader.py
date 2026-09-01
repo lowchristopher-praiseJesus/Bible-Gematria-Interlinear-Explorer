@@ -193,11 +193,14 @@ def test_search_filters_stopwords_from_query_and_pages(monkeypatch):
     assert wiki_loader.search("sample", "what does this series say about") == []
 
 
-def test_search_normalizes_score_by_page_length(monkeypatch):
-    # A short, precisely on-topic page should outrank a long page that
-    # shares the same raw overlap count but is mostly unrelated filler —
-    # regression test for the raw-count scoring that used to favor
-    # whichever page was simply longest.
+def test_search_ranks_by_raw_overlap_count_not_normalized_by_page_length(monkeypatch):
+    # search() ranks by raw keyword-overlap count, not by a score
+    # normalized against each page's total vocabulary size. A prior
+    # revision of this fix wave normalized by page length, which made a
+    # long, thorough, genuinely-on-topic page score *worse* than a short
+    # page that only mentions the query term in passing — backwards for
+    # the single most common kind of question this feature answers.
+    # That normalization was reverted; this pins raw-count ranking.
     from chatbot import wiki_loader
 
     filler = " ".join(f"otherword{i}" for i in range(20))
@@ -209,6 +212,8 @@ def test_search_normalizes_score_by_page_length(monkeypatch):
                     "kind": "concept",
                     "title": "Long page",
                     "tags": [],
+                    # Two overlapping terms, same as short-page, but with
+                    # a much larger total vocabulary.
                     "body": f"grace mercy {filler}",
                 },
                 "short-page": {
@@ -222,7 +227,9 @@ def test_search_normalizes_score_by_page_length(monkeypatch):
     }
     monkeypatch.setattr(wiki_loader, "_LIBRARY", library)
     results = wiki_loader.search("s", "grace mercy")
-    assert [r["slug"] for r in results] == ["short-page", "long-page"]
+    # Equal raw overlap (2 each) => tied score => both returned, page
+    # length plays no role in the ordering.
+    assert {r["slug"] for r in results} == {"short-page", "long-page"}
 
 
 def test_module_level_wrappers_use_real_registered_library():

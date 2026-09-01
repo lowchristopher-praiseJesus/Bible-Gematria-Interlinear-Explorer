@@ -196,11 +196,7 @@ def search(series_id: str, query: str, top_n: int = 3) -> List[Dict[str, Any]]:
         # multi-word queries.
         if raw_score < min(_MIN_MATCH_SCORE, len(terms)):
             continue
-        # Normalize by page length so a long, loosely-related page can't
-        # simply out-rank a short, precisely on-topic one by having more
-        # total (stopword-filtered) words to coincidentally overlap with.
-        normalized_score = raw_score / len(haystack_terms) if haystack_terms else 0
-        scored.append((normalized_score, slug, page))
+        scored.append((raw_score, slug, page))
     scored.sort(key=lambda t: t[0], reverse=True)
     return [
         {"slug": slug, "title": page["title"], "kind": page["kind"], "body": page["body"]}
