@@ -1012,19 +1012,24 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
                 "route": "Mode primer → topic → concept not found",
             }
         message = (
-            f"**{page['title']}** — from *{manifest['title']}* ({manifest['speaker']}).\n\n"
-            "Open the panel to read the full page, or ask me a follow-up question about it."
+            f"Here's the study page on **{page['title']}** — from \"{manifest['title']}\" "
+            f"({manifest['speaker']}). Scripture links open the original languages; "
+            "ask me a follow-up question about it."
         )
         return {
-            "type": "chat",
+            # The page renders inline in the chat window (WikiPageBubble);
+            # only its scripture links open the artifact panel.
+            "type": "wiki_page",
             "message": message,
-            "data": {"series_id": series_id, "concept_slug": concept_slug},
+            "data": {
+                "series_id": series_id,
+                "slug": concept_slug,
+                "title": page["title"],
+                "kind": page["kind"],
+                "body_html": page["body_html"],
+                "citation": f"{manifest['speaker']} — {manifest['title']}",
+            },
             "route": "Mode primer → topic → concept",
-            "artifacts": [{
-                "type": "wiki_concept",
-                "label": f"{page['title']} ▸",
-                "params": {"seriesId": series_id, "slug": concept_slug},
-            }],
             "follow_up_questions": [f"What else does this series say about {page['title']}?"],
         }
 

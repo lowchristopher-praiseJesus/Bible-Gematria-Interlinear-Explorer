@@ -4,14 +4,12 @@ import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtif
 import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
 import { StrongsArtifact } from '@/components/artifacts/StrongsArtifact'
-import { WikiConceptArtifact } from '@/components/artifacts/WikiConceptArtifact'
 import type {
   BookContextResponse,
   EnglishResponse,
   ExplorerResponse,
   GematriaResponse,
   StrongsResponse,
-  WikiPageResponse,
 } from '@/types/api'
 
 interface Props {
@@ -64,7 +62,6 @@ export function ArtifactPane({ onClose }: Props) {
             {activeArtifact.type === 'book_context' && <BookContextArtifact data={data as BookContextResponse} />}
             {activeArtifact.type === 'gematria' && <GematriaArtifact data={data as GematriaResponse} />}
             {activeArtifact.type === 'english_search' && <EnglishSearchArtifact data={data as EnglishResponse} />}
-            {activeArtifact.type === 'wiki_concept' && <WikiConceptArtifact data={data as WikiPageResponse} />}
           </>
         )}
       </div>

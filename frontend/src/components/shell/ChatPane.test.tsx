@@ -55,6 +55,28 @@ describe('ChatPane', () => {
     expect(screen.getByText('A second paragraph.')).toBeInTheDocument()
   })
 
+  it('clicking a verse reference linked in chat text opens the interlinear artifact', async () => {
+    const session = useSessionsStore.getState().createSession('topic', {
+      seriesId: 'present-day-ministry-of-jesus',
+      conceptSlug: 'grace',
+    })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'm1',
+      role: 'assistant',
+      text: 'Grow in grace (see [2 Pet 3:18](/explorer?reference=2PE%203%3A18)).',
+    })
+    vi.spyOn(chatApi, 'fetchInterlinear').mockResolvedValue({} as never)
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('link', { name: '2 Pet 3:18' }))
+
+    expect(useArtifactStore.getState().activeArtifact).toEqual({
+      type: 'interlinear',
+      label: '2 Pet 3:18 ▸',
+      params: { reference: '2PE 3:18' },
+    })
+  })
+
   it('clicking an artifact link opens it in the artifact store', async () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {

@@ -238,7 +238,8 @@ async def post_chat(request: ChatRequest):
         # every other mode uses.
         series_id = (request.mode_params or {}).get("series_id") if request.mode == "topic" else None
         if series_id:
-            result = await wiki_qa.answer(series_id, request.message, history)
+            concept_slug = (request.mode_params or {}).get("concept_slug")
+            result = await wiki_qa.answer(series_id, request.message, history, concept_slug=concept_slug)
             return ChatResponse(**result)
 
         result = await route_deterministic(

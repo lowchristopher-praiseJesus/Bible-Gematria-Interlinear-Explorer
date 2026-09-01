@@ -6,7 +6,11 @@ fallback used everywhere else."""
 def test_chat_in_topic_mode_routes_to_wiki_qa(client, monkeypatch):
     import chatbot.api as api_module
 
-    async def fake_wiki_qa_answer(series_id, message, conversation_history=None):
+    captured = {}
+
+    async def fake_wiki_qa_answer(series_id, message, conversation_history=None, concept_slug=None):
+        captured["series_id"] = series_id
+        captured["concept_slug"] = concept_slug
         return {
             "type": "chat",
             "message": f"[wiki_qa answered for {series_id}]",
@@ -21,11 +25,14 @@ def test_chat_in_topic_mode_routes_to_wiki_qa(client, monkeypatch):
         json={
             "message": "what does this series say about pride?",
             "mode": "topic",
-            "mode_params": {"series_id": "present-day-ministry-of-jesus"},
+            "mode_params": {"series_id": "present-day-ministry-of-jesus", "concept_slug": "grace"},
         },
     )
     assert res.status_code == 200
     assert res.json()["message"] == "[wiki_qa answered for present-day-ministry-of-jesus]"
+    # The open concept travels with the question — it's the grounding for
+    # follow-ups like "summarize this concept".
+    assert captured["concept_slug"] == "grace"
 
 
 def test_chat_in_topic_mode_without_series_id_falls_through_to_deterministic(client):

@@ -13,7 +13,7 @@ export interface ModeParams {
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'wiki_concept'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search'
   label: string
   params: Record<string, unknown>
 }

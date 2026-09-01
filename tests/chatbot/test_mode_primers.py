@@ -118,13 +118,19 @@ async def test_topic_primer_concept_page():
     result = await build_mode_primer(
         "topic", {"series_id": "present-day-ministry-of-jesus", "concept_slug": "grace"}
     )
-    assert result["type"] == "chat"
-    assert "Grace" in result["message"]
-    assert result["artifacts"][0] == {
-        "type": "wiki_concept",
-        "label": "Grace ▸",
-        "params": {"seriesId": "present-day-ministry-of-jesus", "slug": "grace"},
-    }
+    # The page renders inline in the chat window, so the primer returns the
+    # full rendered page as data (same shape the page endpoint serves) —
+    # not an artifact link pointing at the side panel.
+    assert result["type"] == "wiki_page"
+    data = result["data"]
+    assert data["series_id"] == "present-day-ministry-of-jesus"
+    assert data["slug"] == "grace"
+    assert data["title"] == "Grace"
+    assert "<" in data["body_html"]  # rendered HTML, not raw markdown
+    assert data["citation"] == "Joseph Prince — The Present-Day Ministry of Jesus and How It Empowers You"
+    # Scripture refs stay clickable into the Explorer, but the page itself
+    # is not an artifact-panel link.
+    assert not any(a["type"] == "wiki_concept" for a in result.get("artifacts") or [])
 
 
 @pytest.mark.asyncio

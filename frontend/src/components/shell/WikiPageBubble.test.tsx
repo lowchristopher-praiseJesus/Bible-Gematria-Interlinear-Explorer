@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { WikiConceptArtifact } from './WikiConceptArtifact'
+import { WikiPageBubble } from './WikiPageBubble'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import type { WikiPageResponse } from '@/types/api'
 
@@ -17,30 +17,27 @@ const pageFixture: WikiPageResponse = {
   citation: 'Joseph Prince — The Present-Day Ministry of Jesus and How It Empowers You',
 }
 
-describe('WikiConceptArtifact', () => {
-  afterEach(() => {
-    useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
-  })
-
+describe('WikiPageBubble', () => {
   it('renders the page title, body, and citation', () => {
-    render(<WikiConceptArtifact data={pageFixture} />)
+    render(<WikiPageBubble data={pageFixture} onOpenConcept={vi.fn()} />)
     expect(screen.getByText('Grace')).toBeInTheDocument()
     expect(screen.getByText(/undeserved favor/)).toBeInTheDocument()
     expect(screen.getByText(pageFixture.citation)).toBeInTheDocument()
   })
 
-  it('opens a wikilink as a nested wiki_concept artifact', async () => {
-    render(<WikiConceptArtifact data={pageFixture} />)
+  it('opens a wikilink as a new chat message via onOpenConcept', async () => {
+    const onOpenConcept = vi.fn()
+    render(<WikiPageBubble data={pageFixture} onOpenConcept={onOpenConcept} />)
     await userEvent.click(screen.getByRole('link', { name: 'Holiness' }))
-    expect(useArtifactStore.getState().activeArtifact).toEqual({
-      type: 'wiki_concept',
-      label: 'Holiness ▸',
-      params: { seriesId: 'present-day-ministry-of-jesus', slug: 'holiness' },
-    })
+    expect(onOpenConcept).toHaveBeenCalledWith(
+      'present-day-ministry-of-jesus',
+      'holiness',
+      'Holiness',
+    )
   })
 
   it('opens a scripture reference as an interlinear artifact', async () => {
-    render(<WikiConceptArtifact data={pageFixture} />)
+    render(<WikiPageBubble data={pageFixture} onOpenConcept={vi.fn()} />)
     await userEvent.click(screen.getByRole('link', { name: 'Rom 6:14' }))
     expect(useArtifactStore.getState().activeArtifact).toEqual({
       type: 'interlinear',
@@ -50,7 +47,7 @@ describe('WikiConceptArtifact', () => {
   })
 
   it('does not navigate the browser for an intercepted link', async () => {
-    render(<WikiConceptArtifact data={pageFixture} />)
+    render(<WikiPageBubble data={pageFixture} onOpenConcept={vi.fn()} />)
     const link = screen.getByRole('link', { name: 'Rom 6:14' })
     const event = new MouseEvent('click', { bubbles: true, cancelable: true })
     link.dispatchEvent(event)

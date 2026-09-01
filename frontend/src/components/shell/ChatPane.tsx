@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { postChat } from '@/lib/chatApi'
+import { fetchWikiConcept, postChat } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -8,6 +8,8 @@ import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { VerseBubble, type VerseBubbleData } from './VerseBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
+import { WikiPageBubble } from './WikiPageBubble'
+import type { WikiPageResponse } from '@/types/api'
 import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
 
 interface Props {
@@ -240,6 +242,38 @@ export function ChatPane({ sessionId }: Props) {
     [session, sessionId, updateMessage]
   )
 
+  // A [[wikilink]] clicked inside an inline wiki page opens the linked
+  // concept as a NEW assistant message, so the conversation keeps a
+  // scrollable trail of every page the user has read. (Scripture links
+  // inside the page go to the artifact panel instead — handled by the
+  // bubble itself.)
+  const openWikiConcept = useCallback(
+    async (seriesId: string, slug: string, label: string) => {
+      appendMessage(sessionId, {
+        id: genId(),
+        role: 'user',
+        text: label || slug,
+      })
+      try {
+        const page = await fetchWikiConcept(seriesId, slug)
+        appendMessage(sessionId, {
+          id: genId(),
+          role: 'assistant',
+          text: `Here's the linked study page on **${page.title}**.`,
+          type: 'wiki_page',
+          data: page as unknown as Record<string, unknown>,
+        })
+      } catch (err) {
+        appendMessage(sessionId, {
+          id: genId(),
+          role: 'assistant',
+          text: 'Sorry, something went wrong: ' + errorMessage(err),
+        })
+      }
+    },
+    [sessionId, appendMessage]
+  )
+
   async function copyMessage(id: string, text: string) {
     try {
       await navigator.clipboard.writeText(text)
@@ -290,6 +324,24 @@ export function ChatPane({ sessionId }: Props) {
     }
   }, [session, sessionId, updateModeParams, appendMessage, setReadingPlanProgress])
 
+  // Verse references linked into chat text (wiki_qa runs
+  // resolve_scripture_refs over LLM answers, producing /explorer?reference=
+  // anchors) open the original-language interlinear view — the same
+  // interception WikiPageBubble applies inside wiki pages, applied here to
+  // every assistant message's rendered text.
+  function handleVerseLinkClick(e: React.MouseEvent<HTMLDivElement>) {
+    const anchor = (e.target as HTMLElement).closest('a')
+    const href = anchor?.getAttribute('href')
+    if (!href?.startsWith('/explorer?reference=')) return
+    e.preventDefault()
+    const reference = decodeURIComponent(href.slice('/explorer?reference='.length))
+    openArtifact({
+      type: 'interlinear',
+      label: `${anchor?.textContent ?? reference} ▸`,
+      params: { reference },
+    })
+  }
+
   if (!session) return null
 
   const lastMessage = session.messages[session.messages.length - 1]
@@ -316,7 +368,10 @@ export function ChatPane({ sessionId }: Props) {
               </div>
             ) : (
               <div className="max-w-[85%] flex flex-col gap-1.5">
-                <div className="text-sm whitespace-pre-wrap text-[var(--color-text-primary)]">
+                <div
+                  className="text-sm whitespace-pre-wrap text-[var(--color-text-primary)]"
+                  onClick={handleVerseLinkClick}
+                >
                   {renderMarkdown(msg.text)}
                   {msg.type === 'verse' && msg.data && <VerseBubble data={msg.data} />}
                   {msg.type === 'verses' && Array.isArray(msg.data?.verses) && (
@@ -327,6 +382,12 @@ export function ChatPane({ sessionId }: Props) {
                     </div>
                   )}
                   {msg.type === 'strongs' && msg.data && <StrongsBubble data={msg.data} />}
+                  {msg.type === 'wiki_page' && msg.data && (
+                    <WikiPageBubble
+                      data={msg.data as unknown as WikiPageResponse}
+                      onOpenConcept={openWikiConcept}
+                    />
+                  )}
                   {msg.artifacts && msg.artifacts.length > 0 && (
                     <div className="mt-2 flex flex-col gap-1.5">
                       {groupArtifacts(msg.artifacts).map((group, i) =>
