@@ -5,6 +5,12 @@ import { ModePickerScreen } from './ModePickerScreen'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import * as chatApi from '@/lib/chatApi'
+import { listStudyWikis } from '@/lib/modeData'
+
+vi.mock('@/lib/modeData', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/modeData')>()
+  return { ...actual, listStudyWikis: vi.fn() }
+})
 
 describe('ModePickerScreen', () => {
   beforeEach(() => {
@@ -125,18 +131,20 @@ describe('ModePickerScreen', () => {
     expect(firstSession().messages[1].choicesError).toBeTruthy()
   })
 
-  it('surfaces a retryable error on the choice prompt when listTopics rejects', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      json: () => Promise.resolve({}),
-    } as Response)
-    render(<ModePickerScreen onSessionStarted={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: /topical study/i }))
+  it('fetches the registered study-wiki series and shows them as a choice prompt', async () => {
+    vi.mocked(listStudyWikis).mockResolvedValue([
+      { id: 'present-day-ministry-of-jesus', title: 'The Present-Day Ministry of Jesus', speaker: 'Joseph Prince', description: 'desc' },
+      { id: 'series-b', title: 'Series B', speaker: 'Speaker B', description: 'b' },
+    ])
 
-    await waitFor(() => expect(firstSession().messages[1].choicesStatus).toBe('error'))
-    expect(firstSession().messages[1].choicesError).toBeTruthy()
+    render(<ModePickerScreen onSessionStarted={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
+
+    await waitFor(() => expect(firstSession().messages[1].choicesStatus).toBe('ready'))
+    expect(firstSession().messages[1].choices).toEqual([
+      { label: 'The Present-Day Ministry of Jesus — Joseph Prince', modeParams: { seriesId: 'present-day-ministry-of-jesus' } },
+      { label: 'Series B — Speaker B', modeParams: { seriesId: 'series-b' } },
+    ])
   })
 
   it('typing directly into the landing input starts a freeform session with that message', async () => {

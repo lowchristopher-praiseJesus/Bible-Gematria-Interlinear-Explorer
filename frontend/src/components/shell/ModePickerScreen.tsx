@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { postChat } from '@/lib/chatApi'
-import { listParables, listTopics } from '@/lib/modeData'
+import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
@@ -212,10 +212,10 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
               startWithFetchedChoices(
                 'topic',
                 '🔎 Topical Study',
-                'Here are some topics to explore — which would you like to dig into?',
+                'Which series would you like to study?',
                 async () => {
-                  const topics = await listTopics()
-                  return topics.map((t) => ({ label: t.name, modeParams: { topicId: t.id } }))
+                  const series = await listStudyWikis()
+                  return series.map((s) => ({ label: `${s.title} — ${s.speaker}`, modeParams: { seriesId: s.id } }))
                 }
               )
             }
