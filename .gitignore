@@ -25,3 +25,4 @@ frontend/CACHED_PAGES/
 # built embeddable chatbot-widget bundle (produced by `vite build` via vite.lib.config.ts)
 /static/chatbot-widget*
 /static/chatbot-widget/
+.worktrees/
