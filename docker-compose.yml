@@ -54,6 +54,16 @@ services:
       # ----------------------------------------------------------------------
     expose:
       - "8020"
+    # /parables is an in-memory list (no DB, no LLM, no corpus) — a true
+    # liveness probe. python:3.13-slim has no curl/wget, so use the stdlib.
+    # start_period covers study-wiki parsing + the mybibletoolbox-code import
+    # at boot; until it elapses a failing probe doesn't count against retries.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/parables', timeout=5)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
     networks:
       - bible-net
     restart: unless-stopped
@@ -78,8 +88,18 @@ services:
       - ./CACHED_PAGES:/app/CACHED_PAGES
     expose:
       - "5000"
+    # /api/books returns in-memory constants only — no DB hit, no proxy hop.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/books', timeout=5)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
-      - chatbot
+      # Gate startup on the chatbot being ready, not just started, so the
+      # first /api/bible-chat/* proxy call can't race a half-booted chatbot.
+      chatbot:
+        condition: service_healthy
     networks:
       - bible-net
     restart: unless-stopped
@@ -104,8 +124,17 @@ services:
       # Logs on the host for easy tailing while debugging.
       - ./nginx/logs:/var/log/nginx
       # - ./nginx/certs:/etc/letsencrypt:ro   # TLS later
+    # /healthz is a static 200 defined in default.conf — checks nginx itself,
+    # not the upstream. nginx:alpine ships busybox wget.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
-      - flask-api
+      flask-api:
+        condition: service_healthy
     networks:
       - bible-net
     restart: unless-stopped

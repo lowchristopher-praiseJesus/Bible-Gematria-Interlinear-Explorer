@@ -48,7 +48,7 @@ chatbot container directly — every chatbot call goes through Flask's existing
 | `docker-compose.yml` | the three services + network + mounts |
 | `Dockerfile.flask` | Flask image (gunicorn) |
 | `Dockerfile.chatbot` | FastAPI image (uvicorn) + vendored `mybibletoolbox-code` |
-| `nginx/conf.d/default.conf` | routing, SSE-safe streaming, gzip, image caching |
+| `nginx/conf.d/default.conf` | routing, SSE-safe streaming, gzip, image caching, `/healthz`, per-request upstream DNS |
 | `.dockerignore` | keeps the 2.7 GB `LC_/` and 178 MB DB out of the build context |
 | `.env.example` | every env var referenced; copy to `.env` (git-ignored) |
 | `scripts/vendor-mybibletoolbox.sh` | stages the external package into `vendor/` |
@@ -255,12 +255,19 @@ are the common path.)
 ```bash
 docker compose build          # native arm64, first build ~2–4 min
 docker compose up -d
-docker compose ps             # all three services should be "running"/"Up"
+docker compose ps             # all three services should be "Up (healthy)"
 ```
 
-`nginx` resolves the `flask-api` upstream at startup, so if `flask-api` is not up yet
-nginx may exit once — `depends_on` + `restart: unless-stopped` let it recover on its
-own. If it stays down, check `flask-api` first.
+Startup is ordered by health, not just container start: `chatbot` must pass its
+healthcheck (`GET /parables`) before `flask-api` starts, and `flask-api` must pass
+its own (`GET /api/books`) before `nginx` starts. First `up` therefore takes
+~30–60 s to reach all-healthy — `chatbot`'s `start_period` is 45 s to cover
+study-wiki parsing and the `mybibletoolbox-code` import. `nginx` no longer resolves
+`flask-api` at startup (it uses Docker's DNS per request via `resolver`), so it will
+not exit-loop while the others come up. `restart: unless-stopped` still covers a
+later crash. If a service is stuck `unhealthy`, check its logs first
+(`docker compose logs <svc>`); `docker inspect --format '{{json .State.Health}}' <container>`
+shows the last probe output.
 
 ---
 
@@ -269,10 +276,13 @@ own. If it stays down, check `flask-api` first.
 This separates an **app** problem from a **firewall/network** problem.
 
 ```bash
-docker compose ps
+docker compose ps                         # want "Up (healthy)" on all three
 docker compose logs --tail=40 chatbot     # no "Bible Data Directory Not Found",
                                           # no ImportError, "Uvicorn running on ... 8020"
 docker compose logs --tail=40 flask-api   # "Listening at: http://0.0.0.0:5000"
+
+# nginx liveness (the compose healthcheck target)
+curl -s localhost/healthz                 # -> ok
 
 # JSON API (Flask, no LLM)
 curl -s localhost/api/books | head -c 200 ; echo
@@ -308,7 +318,9 @@ Only once those pass, browse to `http://<public-ip>/` from your machine.
 | Symptom | Likely cause |
 |---|---|
 | Site unreachable from outside, but `curl localhost/` works on the VM | Firewall — one of the two layers in §4 is still closed. |
-| `502 Bad Gateway` on `/api/*` or `/explorer` | `flask-api` is down or crash-looping — `docker compose logs flask-api`. |
+| `flask-api` / `nginx` never leave `Created`, only `chatbot` is `Up` | `depends_on: condition: service_healthy` — the dependency isn't healthy yet. `docker inspect --format '{{json .State.Health}}' bible-explorer-chatbot-1` shows why the probe fails; `docker compose logs chatbot`. |
+| A service shows `Up (unhealthy)` but seems to work | The probe URL is failing even though the port is open — check `.State.Health` output. `chatbot` needs its `data/{commentary,strongs}` stub dirs to have finished importing (give it the 45 s `start_period`). |
+| `502 Bad Gateway` on `/api/*` or `/explorer` | `flask-api` is down or crash-looping — `docker compose logs flask-api`. `502` with `flask-api` healthy: DNS — `docker compose exec nginx nslookup flask-api` (the `resolver` line in `default.conf` must point at `127.0.0.11`). |
 | Chat returns `{"error":"Chatbot service unavailable..."}` (503) | `chatbot` container down, or failed to import — `docker compose logs chatbot`. Common: missing `vendor/mybibletoolbox-code/data/{commentary,strongs}` stub dirs. |
 | Chatbot log shows `Bible Data Directory Not Found!` then exits | Same as above — the empty `data/` stub dirs are missing from the image. Rebuild after `scripts/vendor-mybibletoolbox.sh`. |
 | `flask-api` log: `attempt to write a readonly database` on every DB route | The `Complete.db` mount is `:ro`. It must be read-write — `dataset` runs `PRAGMA journal_mode=WAL` on connect. See §3a; remove `:ro` from both mounts in `docker-compose.yml`. |
