@@ -17,6 +17,11 @@ networks:
   bible-net:
     driver: bridge
 
+volumes:
+  # Persistent store for user-submitted chat feedback (feedback.db), mounted
+  # into `flask-api` at /app/feedback-db. Survives container recreation.
+  feedback-db:
+
 services:
   # --------------------------------------------------------------------------
   # (2) FastAPI chatbot — ASGI/uvicorn, SSE on /chat/stream.
@@ -77,15 +82,25 @@ services:
       context: .
       dockerfile: Dockerfile.flask
     image: bible-explorer/flask-api:latest
+    env_file:
+      # Shared config (also read by `chatbot`). .env is git-ignored; copy
+      # .env.example to .env and fill it in.
+      - .env
     environment:
       # The one wiring change: point the internal proxy at the chatbot service.
       CHATBOT_BASE_URL: http://chatbot:8020
+      # Writable troubleshooting-feedback DB — set here so it stays visible in
+      # `docker compose config` even though .env carries a local-dev default.
+      # Directory-scoped: the named volume mounts a directory, not a file.
+      FEEDBACK_DB_URL: sqlite:////app/feedback-db/feedback.db
     volumes:
       # Read-write for the same reason as the chatbot service (dataset forces
       # PRAGMA journal_mode=WAL on connect). SELECT-only workload otherwise.
       - ./Complete.db:/app/Complete.db
       # flask-caching's filesystem cache — the genuinely writable mount.
       - ./CACHED_PAGES:/app/CACHED_PAGES
+      # Writable troubleshooting-feedback DB — survives container recreation.
+      - feedback-db:/app/feedback-db
     expose:
       - "5000"
     # /api/books returns in-memory constants only — no DB hit, no proxy hop.

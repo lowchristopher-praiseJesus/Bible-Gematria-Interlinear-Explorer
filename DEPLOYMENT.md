@@ -203,9 +203,29 @@ cp .env.example .env
 # OLLAMA_API_URL / OLLAMA_MODEL.
 ```
 
-`.env` is git-ignored and is read only by the `chatbot` service. Whichever
-provider you pick, the VM needs outbound HTTPS egress to reach it — inference
-runs off-box, so no GPU on the VM.
+`.env` is git-ignored and is read by the `chatbot` and `flask-api` services
+(both declare `env_file: - .env`). Whichever provider you pick, the VM needs
+outbound HTTPS egress to reach it — inference runs off-box, so no GPU on the VM.
+
+### 3g. Troubleshooting feedback (`/admin`)
+
+Users can file a chat report from any session ("Report an issue"). Reports —
+conversation + per-turn trace — are written to a **separate SQLite DB**
+(`feedback.db`), not `Complete.db`. In Docker it lives on the named
+`feedback-db` volume mounted into `flask-api` at `/app/feedback-db/`; set
+`FEEDBACK_DB_URL` to relocate it.
+
+The admin trajectory viewer is the SPA route **`/admin`** and the
+`GET/PATCH /api/admin/feedback*` API. Both require HTTP Basic auth from
+`ADMIN_USER` / `ADMIN_PASSWORD`. If either is unset the admin API returns
+`503` and the `/admin` page shows "admin access is not configured".
+
+Pass `VITE_APP_VERSION` when building the frontend (`VITE_APP_VERSION=$(git
+describe --tags --always) npm run build`) so reports record which build they
+came from; it defaults to `dev`.
+
+No nginx change is needed — `/api/feedback`, `/api/admin/*`, and the `/admin`
+SPA route all resolve under existing `location` blocks.
 
 ---
 
