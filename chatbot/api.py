@@ -276,20 +276,14 @@ async def _stream_chat_response(message: str, page_context: Optional[str] = None
         yield await sse_event("deterministic", result)
         return
 
-    # Streaming fallback via Ollama
-    from chatbot.ollama_client import OLLAMA_API_URL, OLLAMA_API_KEY, OLLAMA_MODEL, stream_chat_with_ollama
+    # Streaming fallback via the configured LLM provider (Ollama or NVIDIA NIM)
+    from chatbot.ollama_client import llm_unconfigured_error, active_model_label, stream_chat_with_ollama
 
-    # Check if Ollama is available (local doesn't require key)
-    is_cloud = "api.ollama.com" in OLLAMA_API_URL or OLLAMA_API_URL.startswith("https://")
-    if is_cloud and not OLLAMA_API_KEY:
+    llm_error = llm_unconfigured_error()
+    if llm_error:
         yield await sse_event(
             "error",
-            {
-                "message": (
-                    "No matching pattern found and Ollama Cloud API is not configured. "
-                    "Please set OLLAMA_API_KEY environment variable or ensure local Ollama is running."
-                )
-            },
+            {"message": f"No matching pattern found and the LLM is not configured. {llm_error}"},
         )
         return
 
@@ -300,7 +294,7 @@ async def _stream_chat_response(message: str, page_context: Optional[str] = None
             text_buffer += chunk
             yield await sse_event("stream", {"chunk": chunk, "text": text_buffer})
         elif event.get("type") == "done":
-            yield await sse_event("done", {"message": text_buffer, "route": f"AI Fallback → Ollama ({OLLAMA_MODEL}) → stream_chat_with_ollama()"})
+            yield await sse_event("done", {"message": text_buffer, "route": f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()"})
         elif event.get("type") == "error":
             yield await sse_event("error", {"message": event.get("message", "Unknown error")})
 

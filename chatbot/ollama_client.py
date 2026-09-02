@@ -1,6 +1,11 @@
-"""Ollama cloud client for AI-powered chat responses with tool use.
+"""LLM client for AI-powered chat responses with tool use.
 
-Uses deepseek-v4-pro:cloud model for biblical research assistance.
+Talks to one of two providers, selected by the LLM_PROVIDER env var:
+  - "ollama" (default): Ollama native API      -> POST {url}/api/chat
+  - "nvidia": NVIDIA NIM, OpenAI-compatible API -> POST {url}/v1/chat/completions
+
+The public functions (call_ollama_with_context, chat_with_ollama,
+stream_chat_with_ollama) keep their names regardless of provider.
 """
 
 import json
@@ -154,11 +159,146 @@ async def _fetch_research_data(
         return "\n".join(data_parts)
     return "No specific verse data retrieved."
 
-# Ollama configuration
-# Default to local Ollama instance; set OLLAMA_API_URL to use cloud
+# ---------------------------------------------------------------------------
+# LLM provider configuration
+#
+# LLM_PROVIDER selects the wire protocol:
+#   "ollama" (default) -> Ollama native API: POST {url}/api/chat, sampling
+#                         params nested under "options", newline-delimited
+#                         JSON stream ({"message": {...}, "done": bool}).
+#   "nvidia"           -> NVIDIA NIM, OpenAI-compatible: POST
+#                         {url}/chat/completions, top-level sampling params,
+#                         SSE stream ("data: {...}" / "data: [DONE]").
+#
+# The OLLAMA_* vars keep their meaning. The NVIDIA_* vars mirror them for the
+# hosted build.nvidia.com endpoint. Callers that never set LLM_PROVIDER get
+# the unchanged Ollama behaviour.
+# ---------------------------------------------------------------------------
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").strip().lower()
+
+# --- Ollama (native /api/chat) ---
+# Default to a local Ollama instance; set OLLAMA_API_URL to use cloud.
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "deepseek-v4-pro:cloud")
 OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY")  # Optional for local Ollama
+
+# --- NVIDIA NIM (OpenAI-compatible /v1/chat/completions) ---
+NVIDIA_API_URL = os.environ.get("NVIDIA_API_URL", "https://integrate.api.nvidia.com/v1")
+NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
+NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
+
+
+def _llm_config():
+    """(provider, base_url, model, api_key) for the active LLM provider."""
+    if LLM_PROVIDER == "nvidia":
+        return ("nvidia", NVIDIA_API_URL.rstrip("/"), NVIDIA_MODEL, NVIDIA_API_KEY)
+    return ("ollama", OLLAMA_API_URL.rstrip("/"), OLLAMA_MODEL, OLLAMA_API_KEY)
+
+
+def llm_unconfigured_error():
+    """None if the active provider can serve requests, else a user-facing string."""
+    provider, base_url, _model, api_key = _llm_config()
+    if provider == "nvidia":
+        if not api_key:
+            return "NVIDIA_API_KEY required for NVIDIA NIM. Please set your API key."
+        return None
+    # ollama: a local daemon needs no key; a remote/HTTPS endpoint does.
+    is_cloud = "api.ollama.com" in base_url or base_url.startswith("https://")
+    if is_cloud and not api_key:
+        return "OLLAMA_API_KEY required for Ollama Cloud. Please set your API key."
+    return None
+
+
+def active_model_label():
+    """Short 'Provider (model)' label for the response 'route' strings."""
+    provider, _base_url, model, _api_key = _llm_config()
+    return f"{'NVIDIA' if provider == 'nvidia' else 'Ollama'} ({model})"
+
+
+def _build_request(messages, *, stream):
+    """(provider, url, headers, payload) for a chat call to the active provider."""
+    provider, base_url, model, api_key = _llm_config()
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if provider == "nvidia":
+        # base_url already ends with /v1 (OpenAI-compatible surface).
+        url = f"{base_url}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": stream,
+            "temperature": 0.7,
+            "max_tokens": 2048,
+        }
+    else:
+        url = f"{base_url}/api/chat"
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": stream,
+            "options": {
+                "temperature": 0.7,
+                "max_tokens": 2048,
+            },
+        }
+    return provider, url, headers, payload
+
+
+def _extract_content(provider, result):
+    """(content, error) from a non-streaming chat response body."""
+    if provider == "nvidia":
+        choices = result.get("choices") or []
+        content = ""
+        if choices:
+            content = (choices[0].get("message") or {}).get("content", "") or ""
+        error = result.get("detail") or result.get("error")
+        if not error and not content:
+            error = result.get("message")
+        return content, error
+    content = result.get("message", {}).get("content", "") or ""
+    return content, result.get("error")
+
+
+def _stream_delta(provider, line):
+    """Parse one raw stream line.
+
+    Returns ("chunk", text) | ("done", None) | None, where None means the line
+    carries no content (blank line, SSE keep-alive comment, unparseable)."""
+    line = line.strip()
+    if not line:
+        return None
+
+    if provider == "nvidia":
+        if not line.startswith("data:"):
+            return None  # SSE ": comment" keep-alives, "event:" lines, etc.
+        data = line[len("data:"):].strip()
+        if data == "[DONE]":
+            return ("done", None)
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            return None
+        choices = obj.get("choices") or []
+        if not choices:
+            return None
+        choice = choices[0]
+        text = (choice.get("delta") or {}).get("content", "") or ""
+        if text:
+            return ("chunk", text)
+        if choice.get("finish_reason"):
+            return ("done", None)
+        return ("chunk", "")
+
+    # ollama: every non-empty line is a standalone JSON object
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if obj.get("done"):
+        return ("done", None)
+    return ("chunk", obj.get("message", {}).get("content", "") or "")
 
 _SYSTEM_PROMPT_BASE = """You are a biblical research assistant for the Bible Gematria Explorer project.
 
@@ -190,13 +330,9 @@ async def call_ollama_with_context(
     the system prompt. Shared by chat_with_ollama() (verse-reference-scanned
     research data) and chatbot.wiki_qa.answer() (wiki-search research data)
     so the HTTP call and its error handling exist in exactly one place."""
-    is_cloud = "api.ollama.com" in OLLAMA_API_URL or OLLAMA_API_URL.startswith("https://")
-    if is_cloud and not OLLAMA_API_KEY:
-        return {
-            "type": "error",
-            "message": "OLLAMA_API_KEY required for Ollama Cloud. Please set your API key.",
-            "data": None,
-        }
+    err = llm_unconfigured_error()
+    if err:
+        return {"type": "error", "message": err, "data": None}
 
     messages = []
     system_prompt = _SYSTEM_PROMPT_BASE
@@ -209,24 +345,12 @@ async def call_ollama_with_context(
         messages.extend(conversation_history)
     messages.append({"role": "user", "content": message})
 
-    headers = {"Content-Type": "application/json"}
-    if OLLAMA_API_KEY:
-        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    provider, url, headers, payload = _build_request(messages, stream=False)
 
     async with httpx.AsyncClient() as client:
-        payload = {
-            "model": OLLAMA_MODEL,
-            "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": 0.7,
-                "max_tokens": 2048,
-            },
-        }
-
         try:
             response = await client.post(
-                f"{OLLAMA_API_URL}/api/chat",
+                url,
                 headers=headers,
                 json=payload,
                 timeout=180.0,
@@ -237,21 +361,21 @@ async def call_ollama_with_context(
             detail = str(e) or type(e).__name__
             return {
                 "type": "error",
-                "message": f"Ollama API error: {detail}",
+                "message": f"LLM API error: {detail}",
                 "data": None,
             }
         except Exception as e:
             return {
                 "type": "error",
-                "message": f"Ollama error: {type(e).__name__}: {e}",
+                "message": f"LLM error: {type(e).__name__}: {e}",
                 "data": None,
             }
 
-        content = result.get("message", {}).get("content", "")
-        if not content and result.get("error"):
+        content, error = _extract_content(provider, result)
+        if not content and error:
             return {
                 "type": "error",
-                "message": f"Ollama error: {result['error']}",
+                "message": f"LLM error: {error}",
                 "data": None,
             }
 
@@ -259,7 +383,7 @@ async def call_ollama_with_context(
             "type": "chat",
             "message": content,
             "data": None,
-            "route": f"AI Fallback → Ollama ({OLLAMA_MODEL}) → call_ollama_with_context()",
+            "route": f"AI Fallback → {active_model_label()} → call_ollama_with_context()",
         }
 
 
@@ -273,13 +397,9 @@ async def chat_with_ollama(
 
     Returns a dict with 'type', 'message', and 'data'.
     """
-    is_cloud = "api.ollama.com" in OLLAMA_API_URL or OLLAMA_API_URL.startswith("https://")
-    if is_cloud and not OLLAMA_API_KEY:
-        return {
-            "type": "error",
-            "message": "OLLAMA_API_KEY required for Ollama Cloud. Please set your API key.",
-            "data": None,
-        }
+    err = llm_unconfigured_error()
+    if err:
+        return {"type": "error", "message": err, "data": None}
     research_data = await _fetch_research_data(message, conversation_history, page_context)
     return await call_ollama_with_context(
         message,
@@ -298,10 +418,9 @@ async def stream_chat_with_ollama(
 
     Yields dicts with 'type' and content (chunk, done, or error).
     """
-    # Check if using cloud API (requires key) or local Ollama
-    is_cloud = "api.ollama.com" in OLLAMA_API_URL or OLLAMA_API_URL.startswith("https://")
-    if is_cloud and not OLLAMA_API_KEY:
-        yield {"type": "error", "message": "OLLAMA_API_KEY required for Ollama Cloud"}
+    err = llm_unconfigured_error()
+    if err:
+        yield {"type": "error", "message": err}
         return
 
     # Fetch research data from mybibletoolbox-code
@@ -320,51 +439,39 @@ async def stream_chat_with_ollama(
 
     messages.append({"role": "user", "content": message})
 
-    # Build headers - local Ollama doesn't require auth
-    headers = {"Content-Type": "application/json"}
-    if OLLAMA_API_KEY:
-        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    provider, url, headers, payload = _build_request(messages, stream=True)
 
     async with httpx.AsyncClient() as client:
-        payload = {
-            "model": OLLAMA_MODEL,
-            "messages": messages,
-            "stream": True,
-            "options": {
-                "temperature": 0.7,
-                "max_tokens": 2048,
-            },
-        }
-
         try:
             async with client.stream(
                 "POST",
-                f"{OLLAMA_API_URL}/api/chat",
+                url,
                 headers=headers,
                 json=payload,
                 timeout=180.0,
             ) as response:
                 response.raise_for_status()
 
+                done_sent = False
                 async for line in response.aiter_lines():
-                    if not line.strip():
+                    parsed = _stream_delta(provider, line)
+                    if parsed is None:
                         continue
+                    kind, text = parsed
+                    if kind == "done":
+                        done_sent = True
+                        yield {"type": "done", "message": ""}
+                        break
+                    if text:
+                        yield {"type": "stream", "chunk": text}
 
-                    try:
-                        data = json.loads(line)
-                        message_data = data.get("message", {})
-                        content = message_data.get("content", "")
-                        done = data.get("done", False)
-
-                        if done:
-                            yield {"type": "done", "message": content}
-                        else:
-                            yield {"type": "stream", "chunk": content}
-                    except json.JSONDecodeError:
-                        continue
+                if not done_sent:
+                    # Stream ended without an explicit terminator (some NIM
+                    # builds omit "data: [DONE]"); close it out anyway.
+                    yield {"type": "done", "message": ""}
 
         except httpx.HTTPError as e:
             detail = str(e) or type(e).__name__
-            yield {"type": "error", "message": f"Ollama API error: {detail}"}
+            yield {"type": "error", "message": f"LLM API error: {detail}"}
         except Exception as e:
-            yield {"type": "error", "message": f"Ollama error: {type(e).__name__}: {e}"}
+            yield {"type": "error", "message": f"LLM error: {type(e).__name__}: {e}"}

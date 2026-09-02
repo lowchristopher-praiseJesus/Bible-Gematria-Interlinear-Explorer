@@ -2,9 +2,23 @@
 
 ## Overview
 
-The chatbot integrates with **Ollama** using the `deepseek-v4-pro:cloud` model.
+The chatbot talks to one LLM provider, chosen by the `LLM_PROVIDER` env var:
+**`nvidia`** (NVIDIA NIM, OpenAI-compatible) or **`ollama`** (Ollama native API,
+the default when unset). The Docker deployment defaults to `nvidia`.
 
 ## Configuration Modes
+
+### Option 0: NVIDIA NIM (hosted build.nvidia.com)
+
+OpenAI-compatible endpoint. API key required (`nvapi-...` from
+<https://build.nvidia.com>). No GPU needed locally — inference is off-box.
+
+```bash
+export LLM_PROVIDER="nvidia"
+export NVIDIA_API_URL="https://integrate.api.nvidia.com/v1"
+export NVIDIA_MODEL="meta/llama-3.3-70b-instruct"
+export NVIDIA_API_KEY="nvapi-your-key-here"
+```
 
 ### Option 1: Local Ollama (Recommended)
 
@@ -132,7 +146,8 @@ If the chatbot only returns verse lookups but no AI answers:
 
 ## Model Information
 
-- **Model**: deepseek-v4-pro:cloud
-- **Provider**: Ollama Cloud
-- **Temperature**: 0.7 (configurable in ollama_client.py)
+- **Provider**: selected by `LLM_PROVIDER` (`nvidia` | `ollama`)
+- **Model**: `NVIDIA_MODEL` (default `meta/llama-3.3-70b-instruct`) or
+  `OLLAMA_MODEL` (default `deepseek-v4-pro:cloud`)
+- **Temperature**: 0.7 (hard-coded in `chatbot/ollama_client.py`)
 - **Max Tokens**: 2048
