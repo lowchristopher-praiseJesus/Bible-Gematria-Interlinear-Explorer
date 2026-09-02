@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import './BibleChatWidget.css'
 import type { BibleChatWidgetProps, ChatMessage } from './types'
+import { submitReport } from '@/lib/feedbackApi'
+import type { Session } from '@/types/session'
 
 let idCounter = 0
 function genId() {
@@ -14,15 +16,16 @@ export function BibleChatWidget({
   title = 'Bible Study Chat',
   welcomeMessage = 'Ask me about any Bible verse, commentary, or Strong\'s word.',
 }: BibleChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(position === 'inline')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [reportNote, setReportNote] = useState<'idle' | 'sent' | 'error'>('idle')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' })
   }
 
   useEffect(() => {
@@ -82,6 +85,12 @@ export function BibleChatWidget({
                         : m
                     )
                   )
+                } else if (event.type === 'trace') {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantId ? { ...m, trace: event.trace } : m
+                    )
+                  )
                 } else if (event.type === 'deterministic') {
                   setMessages((prev) =>
                     prev.map((m) =>
@@ -133,6 +142,7 @@ export function BibleChatWidget({
           type: data.type,
           data: data.data,
           route: data.route,
+          trace: data.trace,
         }
         setMessages((prev) => [...prev, assistantMsg])
       } catch (e) {
@@ -150,6 +160,30 @@ export function BibleChatWidget({
     },
     [apiUrl]
   )
+
+  const reportIssue = useCallback(async () => {
+    const description = (
+      typeof prompt === 'function' ? prompt('Describe the problem with this chat:') : ''
+    )?.trim()
+    if (!description) return
+    const now = Date.now()
+    const syntheticSession: Session = {
+      id: 'widget',
+      createdAt: now,
+      updatedAt: now,
+      mode: 'freeform',
+      modeParams: {},
+      title,
+      messages: messages as Session['messages'],
+    }
+    try {
+      await submitReport(syntheticSession, { category: 'other', description })
+      setReportNote('sent')
+    } catch {
+      setReportNote('error')
+    }
+    setTimeout(() => setReportNote('idle'), 2000)
+  }, [messages, title])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -183,6 +217,18 @@ export function BibleChatWidget({
     <div className={widgetClass}>
       <div className="bible-chat-header">
         <span className="bible-chat-title">{title}</span>
+        <button
+          type="button"
+          onClick={reportIssue}
+          aria-label="Report an issue"
+          className="bcw-report"
+        >
+          {reportNote === 'sent'
+            ? 'Sent ✓'
+            : reportNote === 'error'
+              ? 'Failed'
+              : 'Report an issue'}
+        </button>
         <button
           className="bible-chat-close"
           onClick={() => setIsOpen(false)}
