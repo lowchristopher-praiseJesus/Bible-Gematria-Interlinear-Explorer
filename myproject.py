@@ -8,6 +8,9 @@ import requests
 import os
 import time
 import json as _json
+import hmac
+import base64
+from functools import wraps
 import feedback_store
 
 app = Flask(__name__)
@@ -2138,6 +2141,76 @@ def submit_feedback():
 		return jsonify({'error': 'store_unavailable'}), 500
 
 	return jsonify({'id': rid}), 201
+
+
+def require_admin(fn):
+	@wraps(fn)
+	def wrapper(*args, **kwargs):
+		user = os.environ.get('ADMIN_USER') or ''
+		pw = os.environ.get('ADMIN_PASSWORD') or ''
+		if not user or not pw:
+			return jsonify({'error': 'admin_not_configured'}), 503
+
+		header = request.headers.get('Authorization', '')
+		ok = False
+		if header.startswith('Basic '):
+			try:
+				decoded = base64.b64decode(header[6:]).decode('utf-8', 'replace')
+				got_user, _, got_pw = decoded.partition(':')
+				ok = hmac.compare_digest(got_user, user) and hmac.compare_digest(got_pw, pw)
+			except Exception:                    # noqa: BLE001
+				ok = False
+		if not ok:
+			resp = jsonify({'error': 'unauthorized'})
+			resp.status_code = 401
+			resp.headers['WWW-Authenticate'] = 'Basic realm="admin"'
+			return resp
+		return fn(*args, **kwargs)
+	return wrapper
+
+
+@app.route('/api/admin/feedback', methods=['GET'])
+@require_admin
+def admin_list_feedback():
+	def _int(name, default):
+		try:
+			return int(request.args.get(name, default))
+		except (TypeError, ValueError):
+			return default
+
+	result = feedback_store.list_reports(
+		_get_feedback_db(),
+		status=request.args.get('status') or None,
+		category=request.args.get('category') or None,
+		limit=_int('limit', 50),
+		offset=_int('offset', 0),
+	)
+	return jsonify(result)
+
+
+@app.route('/api/admin/feedback/<rid>', methods=['GET'])
+@require_admin
+def admin_get_feedback(rid):
+	row = feedback_store.get_report(_get_feedback_db(), rid)
+	if row is None:
+		return jsonify({'error': 'not_found'}), 404
+	return jsonify(row)
+
+
+@app.route('/api/admin/feedback/<rid>', methods=['PATCH'])
+@require_admin
+def admin_patch_feedback(rid):
+	payload = request.get_json(silent=True) or {}
+	status = payload.get('status')
+	if status is not None and status not in feedback_store.STATUSES:
+		return jsonify({'error': 'bad_status'}), 400
+	notes = payload.get('admin_notes')
+	if notes is not None:
+		notes = str(notes)[:16384]
+	row = feedback_store.update_report(_get_feedback_db(), rid, status=status, admin_notes=notes)
+	if row is None:
+		return jsonify({'error': 'not_found'}), 404
+	return jsonify(row)
 
 
 if __name__ == '__main__':
