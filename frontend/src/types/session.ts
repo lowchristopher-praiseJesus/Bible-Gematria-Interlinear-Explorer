@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@/components/chatbot/types'
+import type { Trace } from '@/types/trace'
 
 export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform'
 
@@ -28,6 +29,7 @@ export interface MessageChoice {
 
 export interface SessionMessage extends ChatMessage {
   artifacts?: ArtifactLink[]
+  trace?: Trace
   /** Present on an assistant message that's asking the user to pick a
    * sub-option before the session can proceed (e.g. which reading plan). */
   choicesStatus?: 'loading' | 'ready' | 'error'

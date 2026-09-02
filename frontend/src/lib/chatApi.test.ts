@@ -159,3 +159,15 @@ describe('chatApi', () => {
     expect(result.title).toBe('Grace')
   })
 })
+
+describe('postChat trace passthrough', () => {
+  it('returns the trace field from the response body', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ type: 'chat', message: 'hi', trace: { turnId: 'x', steps: [] } }),
+    }))
+    const res = await postChat({ message: 'hi' })
+    expect(res.trace).toEqual({ turnId: 'x', steps: [] })
+    vi.unstubAllGlobals()
+  })
+})
