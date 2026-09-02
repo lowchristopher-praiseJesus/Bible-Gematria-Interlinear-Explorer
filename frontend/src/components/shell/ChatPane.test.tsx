@@ -390,4 +390,23 @@ describe('ChatPane', () => {
 
     expect(scrollIntoView).toHaveBeenCalled()
   })
+
+  it('shows a "thinking" indicator while a response is pending, then removes it', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    let resolvePost!: (value: Awaited<ReturnType<typeof chatApi.postChat>>) => void
+    vi.spyOn(chatApi, 'postChat').mockImplementation(
+      () => new Promise((resolve) => { resolvePost = resolve })
+    )
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'What is grace?')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(screen.getByRole('status', { name: /thinking/i })).toBeInTheDocument()
+
+    resolvePost({ type: 'chat', message: 'Grace is unmerited favor.' })
+
+    expect(await screen.findByText('Grace is unmerited favor.')).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: /thinking/i })).not.toBeInTheDocument()
+  })
 })

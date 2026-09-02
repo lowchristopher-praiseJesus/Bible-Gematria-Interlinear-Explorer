@@ -79,14 +79,21 @@ export function ChatPane({ sessionId }: Props) {
   const [feedback, setFeedback] = useState<Partial<Record<string, Feedback>>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  // Any in-flight backend round-trip that leaves the message area idle —
+  // a new question, a regenerate, a choice being resolved, or a day being
+  // marked complete. Drives the "thinking" indicator.
+  const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete
+
   // Keep the latest message in view as the conversation grows — a new
   // message, a choice prompt resolving, or its options finishing a fetch
   // all change the messages array and should pull the view down to it.
+  // `isBusy` is included so the view also follows the thinking indicator
+  // as it appears and disappears.
   useEffect(() => {
     if (typeof bottomRef.current?.scrollIntoView === 'function') {
       bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
-  }, [session?.messages])
+  }, [session?.messages, isBusy])
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -501,6 +508,22 @@ export function ChatPane({ sessionId }: Props) {
             )}
           </div>
         ))}
+        {isBusy && (
+          <div
+            className="flex justify-start"
+            role="status"
+            aria-live="polite"
+            aria-label="Assistant is thinking"
+          >
+            <div className="max-w-[85%] px-3.5 py-3 rounded-2xl rounded-bl-sm bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]">
+              <div className="chat-typing" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+        )}
         {showMarkComplete && (
           <button
             onClick={markDayComplete}

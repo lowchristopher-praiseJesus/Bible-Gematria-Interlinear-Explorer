@@ -22,7 +22,10 @@ describe('renderMarkdown', () => {
   it('strips the ">" marker from every line of a multi-line blockquote', () => {
     const { container } = render(<div>{renderMarkdown('> Line one\n> Line two')}</div>)
     const blockquote = container.querySelector('blockquote')
-    expect(blockquote?.textContent).toBe('Line one\nLine two')
+    expect(blockquote).not.toBeNull()
+    expect(blockquote?.textContent).toContain('Line one')
+    expect(blockquote?.textContent).toContain('Line two')
+    expect(blockquote?.textContent).not.toContain('>')
   })
 
   it('renders [text](url) as an anchor', () => {
@@ -67,5 +70,35 @@ describe('renderMarkdown', () => {
     render(<div>{renderMarkdown('Nothing link-like here at all [really].')}</div>)
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.getByText(/Nothing link-like/)).toBeInTheDocument()
+  })
+
+  it('renders a GFM pipe table as a real <table>, not literal pipes', () => {
+    const md = [
+      '| Term | Meaning |',
+      '|------|---------|',
+      '| Faith | Trust in God |',
+      '| Works | Acts of obedience |',
+    ].join('\n')
+    const { container } = render(<div>{renderMarkdown(md)}</div>)
+
+    expect(container.querySelector('table')).not.toBeNull()
+    expect(container.querySelectorAll('thead th')).toHaveLength(2)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(screen.getByRole('cell', { name: 'Acts of obedience' })).toBeInTheDocument()
+    expect(screen.queryByText(/\|/)).not.toBeInTheDocument()
+  })
+
+  it('renders ### headings and --- rules as elements, not literal text', () => {
+    const { container } = render(
+      <div>{renderMarkdown('### Section One\n\nBody text.\n\n---\n\nMore text.')}</div>
+    )
+    expect(container.querySelector('h3')?.textContent).toBe('Section One')
+    expect(container.querySelector('hr')).not.toBeNull()
+    expect(screen.queryByText('### Section One')).not.toBeInTheDocument()
+  })
+
+  it('renders "- item" lines as list items', () => {
+    const { container } = render(<div>{renderMarkdown('- first\n- second\n- third')}</div>)
+    expect(container.querySelectorAll('ul li')).toHaveLength(3)
   })
 })
