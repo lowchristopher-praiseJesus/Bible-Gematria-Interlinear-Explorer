@@ -19,12 +19,15 @@ export function AdminReportView({ id, onBack }: AdminReportViewProps) {
 
   useEffect(() => {
     let cancelled = false
+    setError(null)
+    setReport(null)
     getReport(id)
       .then((r) => {
         if (cancelled) return
         setReport(r)
         setStatus(r.status)
         setNotes(r.admin_notes ?? '')
+        setError(null)
       })
       .catch((e: Error) => !cancelled && setError(e.message))
     return () => {

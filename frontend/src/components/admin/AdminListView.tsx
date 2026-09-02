@@ -66,6 +66,8 @@ export function AdminListView({ onOpen }: AdminListViewProps) {
         <span className="text-[var(--color-text-secondary)]">{total} report(s)</span>
       </div>
 
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+
       {loading ? (
         <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>
       ) : (

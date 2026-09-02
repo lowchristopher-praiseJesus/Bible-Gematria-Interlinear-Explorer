@@ -32,8 +32,8 @@ it('renders the transcript and a trajectory per traced turn', async () => {
   render(<AdminReportView id="r1" onBack={() => {}} />)
   expect(await screen.findByText('the answer was wrong')).toBeInTheDocument()
   // rendered twice: once in the transcript, once as TrajectoryView's USER step
-  expect(screen.getAllByText('what is grace').length).toBeGreaterThan(0)
-  expect(screen.getAllByText('USER').length).toBeGreaterThan(0)   // transcript label + TrajectoryView step
+  expect(screen.getAllByText('what is grace')).toHaveLength(2)
+  expect(screen.getAllByText('USER')).toHaveLength(2)   // transcript label + TrajectoryView step
 })
 
 it('saves a status change', async () => {
