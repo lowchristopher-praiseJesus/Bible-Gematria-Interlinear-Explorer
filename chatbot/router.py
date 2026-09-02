@@ -109,6 +109,51 @@ _BOOK_NAME_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Words that show up in a bare verse-lookup request but carry no topical
+# content of their own. What survives after stripping the reference and the
+# lookup keywords is treated as the user's actual question.
+_LOOKUP_FILLER_WORDS = {
+    "a", "an", "the", "this", "that", "these", "those", "it", "its",
+    "of", "in", "on", "for", "to", "do", "does", "did", "is", "are",
+    "was", "were", "can", "could", "would", "will", "please", "me", "my",
+    "us", "you", "your", "tell", "give", "show", "read", "quote",
+    "verse", "verses", "passage", "text", "mean", "means", "meaning",
+    "say", "says", "said", "about", "another", "one", "more", "next",
+    "some", "and", "or", "kjv", "esv", "niv", "translation", "translations",
+    "english", "word", "words", "here", "whole", "entire", "full",
+}
+
+# Every phrase that routes a bare "look this verse up" message — stripped
+# out before checking whether anything question-shaped is left over.
+_ALL_LOOKUP_KEYWORDS = [*QUOTE_KEYWORDS, *STUDY_KEYWORDS, *BOOK_LEVEL_KEYWORDS]
+
+
+def _has_question_beyond_refs(
+    message: str, refs: List[Tuple[str, str, str, str, Optional[str]]]
+) -> bool:
+    """True when the message is more than a bare verse lookup — a genuine
+    question that merely names a verse ("how does John 3:16 relate to
+    election?", "what does Romans 8:28 mean for someone grieving?").
+
+    Strips the matched reference span(s) and every quote/study/book-level
+    lookup keyword, then checks whether any non-filler word survives. A
+    bare lookup ("what does John 3:16 mean", "explain John 3:16",
+    "John 3:16") strips to nothing and stays on the fast deterministic
+    path; anything left over is the user's actual question and belongs to
+    the AI fallback (which still re-attaches the boxed verse afterward via
+    _enhance_with_cited_verse()).
+    """
+    remainder = message.lower()
+    for full, *_rest in refs:
+        remainder = remainder.replace(full.lower(), " ")
+    for kw in _ALL_LOOKUP_KEYWORDS:
+        if ".*" in kw:  # STUDY_KEYWORDS carries one regex-ish entry
+            remainder = re.sub(kw, " ", remainder)
+        else:
+            remainder = remainder.replace(kw, " ")
+    leftover = [w for w in re.findall(r"[a-z]+", remainder) if w not in _LOOKUP_FILLER_WORDS]
+    return bool(leftover)
+
 _SECTION_LABELS = {
     "historical_setting":    "Historical Setting",
     "cultural_background":   "Cultural Background",
@@ -734,6 +779,16 @@ async def route_deterministic(
                 )
                 if resp:
                     return resp
+        return None
+
+    # A verse reference embedded in a larger question ("how does John 3:16
+    # relate to election?", "explain the significance of Eph 1:4 for
+    # predestination") is a request for an answer, not a lookup. The
+    # quote/study/default paths below would just hand back the verse — or a
+    # canned commentary card — and silently drop the actual question. Defer
+    # to the AI fallback instead; it re-attaches the boxed verse via
+    # _enhance_with_cited_verse(). Bare lookups keep their fast card.
+    if _has_question_beyond_refs(message, refs):
         return None
 
     # Quote / verse fetch patterns

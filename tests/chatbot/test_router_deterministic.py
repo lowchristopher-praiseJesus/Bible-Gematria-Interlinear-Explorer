@@ -1,6 +1,68 @@
 import pytest
 
-from chatbot.router import route_deterministic, _find_flexible_verse_refs
+from chatbot.router import (
+    route_deterministic,
+    _find_flexible_verse_refs,
+    _has_question_beyond_refs,
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "How does John 3:16 relate to the doctrine of election?",
+        "Explain the significance of Ephesians 1:4 for predestination",
+        "What does Romans 8:28 mean for someone going through grief?",
+        "Compare John 1:1 with Genesis 1:1",
+        "Is the love in 1 Corinthians 13:4 the same as the love in John 3:16?",
+    ],
+)
+async def test_embedded_verse_in_a_larger_question_defers_to_the_ai(monkeypatch, message):
+    # "Ask Anything": a genuine question that merely names a verse must fall
+    # through to the AI fallback (route_deterministic returns None) instead
+    # of being answered with just the verse / a canned commentary card.
+    async def boom(*args, **kwargs):
+        raise AssertionError(f"deterministic path should not fire for: {message!r}")
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", boom)
+    monkeypatch.setattr("chatbot.router.fetch_scripture_study", boom)
+
+    assert await route_deterministic(message) is None
+
+
+@pytest.mark.asyncio
+async def test_bare_verse_lookups_still_answered_deterministically(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": "..."}
+
+    async def fake_study(reference, depth="medium"):
+        return {"reference": reference}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr("chatbot.router.fetch_scripture_study", fake_study)
+
+    assert (await route_deterministic("John 3:16"))["data"]["reference"] == "JHN 3:16"
+    assert (await route_deterministic("what does John 3:16 mean"))["type"] == "verse"
+    assert (await route_deterministic("show me John 3:16"))["type"] == "verse"
+    assert (await route_deterministic("explain John 3:16"))["type"] == "study"
+    assert (await route_deterministic("quote 1 Thessalonians 4:13-18"))["type"] == "chat"
+
+
+def test_has_question_beyond_refs_ignores_bare_lookups():
+    for msg in ["John 3:16", "what does John 3:16 mean", "explain John 3:16",
+                "show me John 3:16", "quote 1 Th 4:16", "give me another verse, John 3:16"]:
+        refs = _find_flexible_verse_refs(msg)
+        assert refs, msg
+        assert _has_question_beyond_refs(msg, refs) is False, msg
+
+
+def test_has_question_beyond_refs_flags_real_questions():
+    for msg in ["How does John 3:16 relate to election?",
+                "What does Romans 8:28 mean for grief?"]:
+        refs = _find_flexible_verse_refs(msg)
+        assert refs, msg
+        assert _has_question_beyond_refs(msg, refs) is True, msg
 
 
 @pytest.mark.asyncio
