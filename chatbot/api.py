@@ -287,41 +287,70 @@ async def post_chat(request: ChatRequest):
 # Chat endpoint (SSE streaming)
 # ---------------------------------------------------------------------------
 
-async def _stream_chat_response(message: str, page_context: Optional[str] = None) -> AsyncIterator[str]:
-    """Yield SSE events for a chat response."""
-    # Try deterministic first
-    result = await route_deterministic(message, page_context=page_context)
-    if result:
-        yield await sse_event("deterministic", result)
-        return
+async def _stream_chat_response(
+    recorder: TraceRecorder, message: str, page_context: Optional[str] = None
+) -> AsyncIterator[str]:
+    """Yield SSE events for a chat response, then a terminal trace event."""
+    current_recorder.set(recorder)
+    outcome_type = "chat"
+    outcome_route = None
+    outcome_error = None
+    try:
+        result = await route_deterministic(message, page_context=page_context)
+        if result:
+            outcome_type = result.get("type", "chat")
+            outcome_route = result.get("route")
+            yield await sse_event("deterministic", result)
+        else:
+            from chatbot.ollama_client import (
+                llm_unconfigured_error,
+                active_model_label,
+                stream_chat_with_ollama,
+            )
 
-    # Streaming fallback via the configured LLM provider (Ollama or NVIDIA NIM)
-    from chatbot.ollama_client import llm_unconfigured_error, active_model_label, stream_chat_with_ollama
-
-    llm_error = llm_unconfigured_error()
-    if llm_error:
-        yield await sse_event(
-            "error",
-            {"message": f"No matching pattern found and the LLM is not configured. {llm_error}"},
-        )
-        return
-
-    text_buffer = ""
-    async for event in stream_chat_with_ollama(message, page_context=page_context):
-        if event.get("type") == "stream":
-            chunk = event.get("chunk", "")
-            text_buffer += chunk
-            yield await sse_event("stream", {"chunk": chunk, "text": text_buffer})
-        elif event.get("type") == "done":
-            yield await sse_event("done", {"message": text_buffer, "route": f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()"})
-        elif event.get("type") == "error":
-            yield await sse_event("error", {"message": event.get("message", "Unknown error")})
+            llm_error = llm_unconfigured_error()
+            if llm_error:
+                outcome_type = "error"
+                outcome_error = llm_error
+                yield await sse_event(
+                    "error",
+                    {"message": f"No matching pattern found and the LLM is not configured. {llm_error}"},
+                )
+            else:
+                text_buffer = ""
+                async for event in stream_chat_with_ollama(message, page_context=page_context):
+                    if event.get("type") == "stream":
+                        chunk = event.get("chunk", "")
+                        text_buffer += chunk
+                        yield await sse_event("stream", {"chunk": chunk, "text": text_buffer})
+                    elif event.get("type") == "done":
+                        outcome_route = f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()"
+                        yield await sse_event("done", {"message": text_buffer, "route": outcome_route})
+                    elif event.get("type") == "error":
+                        outcome_type = "error"
+                        outcome_error = event.get("message", "Unknown error")
+                        yield await sse_event("error", {"message": outcome_error})
+    except Exception as e:  # noqa: BLE001
+        outcome_type = "error"
+        outcome_error = f"{type(e).__name__}: {e}"
+        yield await sse_event("error", {"message": f"Server error: {outcome_error}"})
+    finally:
+        trace = recorder.finalize(outcome_type, route=outcome_route, error=outcome_error)
+        yield await sse_event("trace", {"trace": trace})
 
 
 @router.post("/chat/stream")
 async def post_chat_stream(request: ChatRequest):
     """Process a chat message and stream the response via SSE."""
+    recorder = TraceRecorder(
+        "/chat/stream",
+        request.message,
+        mode=request.mode,
+        mode_params=request.mode_params,
+        history_length=len(request.history or []),
+        page_context=request.page_context,
+    )
     return StreamingResponse(
-        sse_stream(_stream_chat_response(request.message, page_context=request.page_context)),
+        sse_stream(_stream_chat_response(recorder, request.message, page_context=request.page_context)),
         media_type="text/event-stream",
     )
