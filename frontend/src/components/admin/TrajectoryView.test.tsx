@@ -44,6 +44,7 @@ describe('TrajectoryView', () => {
 
     await userEvent.click(screen.getByTitle(/Ollama \(m\)/))     // llm step is a timeline segment
     expect(screen.getByText(/840 total/)).toBeInTheDocument()    // total tokens
+    expect(screen.queryByText(/bytes total/)).not.toBeInTheDocument() // nothing truncated
   })
 
   it('formatDuration switches to seconds past 1000ms', () => {

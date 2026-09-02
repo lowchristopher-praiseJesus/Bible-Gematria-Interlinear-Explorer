@@ -164,7 +164,9 @@ function truncate(s: string, n = 120): string {
 
 function previewLength(value: unknown): number {
   try {
-    return (typeof value === 'string' ? value : JSON.stringify(value)).length
+    return typeof value === 'string'
+      ? new TextEncoder().encode(value).length
+      : new TextEncoder().encode(JSON.stringify(value)).length
   } catch {
     return 0
   }
