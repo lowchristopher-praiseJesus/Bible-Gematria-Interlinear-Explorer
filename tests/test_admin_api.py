@@ -37,6 +37,16 @@ def test_list_requires_credentials(ctx):
     assert resp.headers["WWW-Authenticate"].startswith("Basic")
 
 
+def test_list_rejects_wrong_credentials(ctx):
+    client, _ = ctx
+    bad_pw = client.get("/api/admin/feedback", headers=_auth(pw="wrong"))
+    assert bad_pw.status_code == 401
+    assert bad_pw.headers["WWW-Authenticate"].startswith("Basic")
+    bad_user = client.get("/api/admin/feedback", headers=_auth(user="nobody"))
+    assert bad_user.status_code == 401
+    assert bad_user.headers["WWW-Authenticate"].startswith("Basic")
+
+
 def test_list_returns_items_with_valid_credentials(ctx):
     client, _ = ctx
     resp = client.get("/api/admin/feedback", headers=_auth())

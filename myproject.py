@@ -2157,7 +2157,9 @@ def require_admin(fn):
 			try:
 				decoded = base64.b64decode(header[6:]).decode('utf-8', 'replace')
 				got_user, _, got_pw = decoded.partition(':')
-				ok = hmac.compare_digest(got_user, user) and hmac.compare_digest(got_pw, pw)
+				user_ok = hmac.compare_digest(got_user, user)
+				pw_ok = hmac.compare_digest(got_pw, pw)
+				ok = user_ok and pw_ok
 			except Exception:                    # noqa: BLE001
 				ok = False
 		if not ok:
@@ -2201,6 +2203,8 @@ def admin_get_feedback(rid):
 @require_admin
 def admin_patch_feedback(rid):
 	payload = request.get_json(silent=True) or {}
+	if not isinstance(payload, dict):
+		payload = {}
 	status = payload.get('status')
 	if status is not None and status not in feedback_store.STATUSES:
 		return jsonify({'error': 'bad_status'}), 400
