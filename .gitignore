@@ -16,6 +16,17 @@ CACHED_PAGES/
 frontend/CACHED_PAGES/
 .data/
 
+# Docker deployment: local secrets + nginx logs
+.env
+nginx/logs/
+
+# Real mybibletoolbox-code commentary corpus if staged in-repo (keep the
+# empty data/{commentary,strongs} stubs, ignore any real content dropped in)
+vendor/mybibletoolbox-code/data/commentary/*
+vendor/mybibletoolbox-code/data/strongs/*
+!vendor/mybibletoolbox-code/data/commentary/.gitkeep
+!vendor/mybibletoolbox-code/data/strongs/.gitkeep
+
 # playwright MCP scratch output
 .playwright-mcp/
 

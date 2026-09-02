@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+#
+# Process (1): the Flask app — JSON API, server-rendered HTML, and the internal
+# reverse proxy to the chatbot at /api/bible-chat/*. Run under gunicorn.
+#
+# python:3.13-slim is a multi-arch manifest; on the OCI Ampere A1 (aarch64) a
+# plain `docker compose build` on the VM pulls linux/arm64 automatically — no
+# buildx / cross-build needed.
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# gunicorn is the only extra runtime dep beyond requirements.txt for this service.
+RUN pip install --no-cache-dir "gunicorn==23.0.0"
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# App code + the static assets the server-rendered pages reference at /static/.
+COPY myproject.py .
+COPY static/ ./static/
+
+# Complete.db (read-only) and CACHED_PAGES/ (writable) are bind-mounted by
+# docker-compose.yml. DB_PATH in myproject.py is the relative 'sqlite:///Complete.db'
+# and CACHE_DIR is the relative 'CACHED_PAGES', both resolved against WORKDIR=/app.
+RUN mkdir -p CACHED_PAGES LC_
+
+EXPOSE 5000
+
+# Sync/threaded workers are plenty at this traffic scale. The /api/bible-chat/*
+# proxy holds a worker for up to ~180s (myproject.py uses requests(timeout=180)),
+# so the gunicorn --timeout must comfortably exceed that or workers get killed
+# mid chat request.
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:5000", \
+     "--workers", "3", \
+     "--threads", "2", \
+     "--timeout", "300", \
+     "--graceful-timeout", "30", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "myproject:app"]

@@ -12,8 +12,15 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Path to mybibletoolbox-code project (source of research data)
-MYBIBLETOOLBOX_PATH = Path.home() / "Documents" / "mybibletoolbox-code"
+# Path to mybibletoolbox-code project (source of research data).
+# Override with the MYBIBLETOOLBOX_PATH env var (Docker points this at the
+# vendored copy baked into the image); default is unchanged.
+MYBIBLETOOLBOX_PATH = Path(
+    os.environ.get(
+        "MYBIBLETOOLBOX_PATH",
+        str(Path.home() / "Documents" / "mybibletoolbox-code"),
+    )
+).expanduser()
 if str(MYBIBLETOOLBOX_PATH) not in sys.path:
     sys.path.insert(0, str(MYBIBLETOOLBOX_PATH))
 

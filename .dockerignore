@@ -1,0 +1,41 @@
+# Keep the build context small — these are bind-mounted at runtime or unused in images.
+.git
+.gitattributes
+.pytest_cache
+.superpowers
+.worktrees
+.playwright-mcp
+.data
+.claude
+CACHED_PAGES
+frontend/CACHED_PAGES
+
+# Large data — mounted read-only at runtime, never baked into an image
+Complete.db
+Complete.db-shm
+Complete.db-wal
+Complete.zip
+LC_
+
+# Node / SPA — the built dist/ is bind-mounted into the nginx container
+frontend/node_modules
+frontend/dist
+frontend/.vite
+node_modules
+
+# Python bytecode / caches
+**/__pycache__
+*.pyc
+*.pyo
+
+# Docs, screenshots, scratch
+*.png
+docs
+context.md
+
+# The real 4.4 GB commentary corpus is a runtime bind mount, never in an image.
+# (The empty data/{commentary,strongs} stubs ARE kept — they are not matched here.)
+vendor/mybibletoolbox-code/data/commentary/*
+vendor/mybibletoolbox-code/data/strongs/*
+!vendor/mybibletoolbox-code/data/commentary/.gitkeep
+!vendor/mybibletoolbox-code/data/strongs/.gitkeep

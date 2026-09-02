@@ -1,0 +1,130 @@
+# Bible Gematria Interlinear Explorer — OCI Ampere A1 (ARM64) deployment.
+#
+# Runs the exact current 3-part architecture:
+#   nginx (public :80)  ──►  flask-api :5000  ──►  chatbot :8020
+#                       └─►  SPA static files + /LC_/ images served directly
+#
+# Only nginx publishes a host port. flask-api and chatbot are reachable only on
+# the internal `bible-net` bridge, by service name.
+#
+#   docker compose build      # native arm64 on the VM, no buildx needed
+#   docker compose up -d
+#   docker compose ps
+
+name: bible-explorer
+
+networks:
+  bible-net:
+    driver: bridge
+
+services:
+  # --------------------------------------------------------------------------
+  # (2) FastAPI chatbot — ASGI/uvicorn, SSE on /chat/stream.
+  # --------------------------------------------------------------------------
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile.chatbot
+    image: bible-explorer/chatbot:latest
+    environment:
+      # Vendored mybibletoolbox-code baked into the image (also set in the
+      # Dockerfile; repeated here so it is visible in `docker compose config`).
+      MYBIBLETOOLBOX_PATH: /app/vendor/mybibletoolbox-code
+    env_file:
+      # LLM provider config — see .env.example. Default deployment uses
+      # LLM_PROVIDER=nvidia + NVIDIA_API_URL / NVIDIA_MODEL / NVIDIA_API_KEY
+      # (hosted NVIDIA NIM). LLM_PROVIDER=ollama switches to the OLLAMA_* vars.
+      # .env is git-ignored; copy .env.example to .env and fill it in.
+      - .env
+    volumes:
+      # Both processes read Complete.db directly, per the app's design. The
+      # workload is SELECT-only, BUT the `dataset` library issues
+      # `PRAGMA journal_mode=WAL` on every connect (dataset>=... sqlite_wal_mode
+      # defaults True), which writes to the DB header — so a `:ro` mount makes
+      # every DB route 500 with "attempt to write a readonly database". Mounted
+      # read-write for that reason only; no application data is ever written.
+      # See DEPLOYMENT.md §3a.
+      - ./Complete.db:/app/Complete.db
+
+      # ---- FULL-FIDELITY commentary corpus (~4.4 GB) --------------------------
+      # Degraded (no-corpus) mode is the default and is the safe starting point.
+      # To enable the real corpus: put it on the block volume and uncomment.
+      # src/config.py auto-detects it at .../data — no env var needed.
+      # - /opt/bible-app/mybibletoolbox-data:/app/vendor/mybibletoolbox-code/data:ro
+      # ----------------------------------------------------------------------
+    expose:
+      - "8020"
+    networks:
+      - bible-net
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # (1) Flask app — WSGI/gunicorn. JSON API, server-rendered HTML, and the
+  #     internal /api/bible-chat/* proxy to the chatbot.
+  # --------------------------------------------------------------------------
+  flask-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.flask
+    image: bible-explorer/flask-api:latest
+    environment:
+      # The one wiring change: point the internal proxy at the chatbot service.
+      CHATBOT_BASE_URL: http://chatbot:8020
+    volumes:
+      # Read-write for the same reason as the chatbot service (dataset forces
+      # PRAGMA journal_mode=WAL on connect). SELECT-only workload otherwise.
+      - ./Complete.db:/app/Complete.db
+      # flask-caching's filesystem cache — the genuinely writable mount.
+      - ./CACHED_PAGES:/app/CACHED_PAGES
+    expose:
+      - "5000"
+    depends_on:
+      - chatbot
+    networks:
+      - bible-net
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # nginx — the only public entrypoint. Serves the SPA and /LC_/ images off
+  #         disk; proxies everything else to flask-api.
+  # --------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      # - "443:443"   # add with TLS later (see nginx/conf.d/default.conf)
+    volumes:
+      - ./nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Built SPA — build outside Docker (npm ci && npm run build in frontend/,
+      # locally or on the VM) and bind-mount the result. See the commented
+      # `frontend-build` note below for the in-Docker alternative.
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      # Leningrad Codex scans — served directly by nginx via `alias`.
+      - ./LC_:/srv/LC_:ro
+      # Logs on the host for easy tailing while debugging.
+      - ./nginx/logs:/var/log/nginx
+      # - ./nginx/certs:/etc/letsencrypt:ro   # TLS later
+    depends_on:
+      - flask-api
+    networks:
+      - bible-net
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+# ALTERNATIVE (not wired in): build the SPA inside Docker instead of bind-
+# mounting a pre-built dist/. Costs ~1–2 GB RAM + a few minutes of the free
+# VM's 2 OCPUs per build, which is why the bind mount is the default. To use
+# it: add this stage to a Dockerfile, build the image, and swap the nginx
+# `./frontend/dist:/usr/share/nginx/html:ro` mount for `COPY --from=spa-build`.
+#
+#   FROM node:lts-slim AS spa-build          # multi-arch; arm64 on the A1
+#   WORKDIR /spa
+#   COPY frontend/package.json frontend/package-lock.json ./
+#   RUN npm ci
+#   COPY frontend/ ./
+#   RUN npm run build                         # -> /spa/dist
+#
+#   FROM nginx:alpine
+#   COPY nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
+#   COPY --from=spa-build /spa/dist /usr/share/nginx/html
+# ---------------------------------------------------------------------------

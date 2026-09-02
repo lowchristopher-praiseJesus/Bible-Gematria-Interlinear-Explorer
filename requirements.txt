@@ -1,8 +1,12 @@
 # Core Flask dependencies
-flask>=2.0.0
-flask-caching>=1.10.0
-flask-cors>=3.0.0
+# Upper bounds match the known-good local set (Flask 3.0 / Flask-Caching 2.4 /
+# Flask-Cors 4.0). Flask-Caching 2.5.0 breaks the lazy 'filesystem' backend
+# import used by CACHE_TYPE='filesystem', so it is capped below.
+flask>=2.0.0,<3.1
+flask-caching>=1.10.0,<2.5
+flask-cors>=3.0.0,<5.0
 dataset>=1.5.0
+requests>=2.28.0            # myproject.py: /api/bible-chat/* reverse proxy
 
 # Chatbot dependencies
 fastapi>=0.115.0

@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+#
+# Process (2): the FastAPI chatbot — uvicorn/ASGI, SSE streaming on /chat/stream.
+# Reads Complete.db directly, parses the in-repo study wikis at start-up, and
+# imports the vendored mybibletoolbox-code package.
+#
+# python:3.13-slim is multi-arch; `docker compose build` on the OCI Ampere A1
+# (aarch64) VM pulls linux/arm64 natively.
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    MYBIBLETOOLBOX_PATH=/app/vendor/mybibletoolbox-code
+
+WORKDIR /app
+
+COPY requirements.txt .
+# requirements.txt covers fastapi / uvicorn[standard] / httpx / pydantic /
+# python-multipart / markdown / dataset / requests. The vendored
+# mybibletoolbox-code/src adds one more third-party import: pyyaml (tool
+# registry + commentary merge).
+RUN pip install --no-cache-dir -r requirements.txt "pyyaml>=6.0"
+
+# Chatbot package (includes chatbot/data/ study wikis, parsed at start-up).
+COPY chatbot/ ./chatbot/
+
+# Vendored external package — produced by scripts/vendor-mybibletoolbox.sh.
+# Contains src/, .claude/skills/quote-bible/scripts/ (book_codes, biblehub_fetcher),
+# bible-study-tools/tool-registry.yaml, and EMPTY data/{commentary,strongs}/ dirs.
+# src/config.py runs a data-dir check at import time and sys.exit(1)s if neither
+# data/strongs nor data/commentary exists, so the empty dirs must be present.
+# This is the "degraded" (no-corpus) mode; commentary/translation lookups then
+# return nothing and the router degrades gracefully.
+#
+# FULL FIDELITY: bind-mount the real 4.4 GB corpus over
+# /app/vendor/mybibletoolbox-code/data (see docker-compose.yml). src/config.py
+# auto-detects it there — no env change needed.
+COPY vendor/mybibletoolbox-code/ ./vendor/mybibletoolbox-code/
+RUN mkdir -p ./vendor/mybibletoolbox-code/data/commentary \
+             ./vendor/mybibletoolbox-code/data/strongs
+
+# Complete.db is bind-mounted at /app/Complete.db. chatbot/bible_search.py
+# resolves it as <pkg parent>/../Complete.db == /app/Complete.db.
+
+EXPOSE 8020
+
+# SSE works with a plain uvicorn worker — no special flag. The buffering risk is
+# in nginx, handled in nginx/conf.d/default.conf.
+CMD ["uvicorn", "chatbot.main:app", "--host", "0.0.0.0", "--port", "8020"]

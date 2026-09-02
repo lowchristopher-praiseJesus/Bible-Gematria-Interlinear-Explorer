@@ -5,6 +5,7 @@ from html import escape
 import dataset
 import re
 import requests
+import os
 
 app = Flask(__name__)
 app.config.from_mapping({'CACHE_TYPE' : 'filesystem', 'CACHE_DIR' : 'CACHED_PAGES', 'CACHE_THRESHOLD' : 150000})
@@ -2007,7 +2008,7 @@ def lc_images(filename):
 # Bible Chatbot Proxy Routes
 # ------------------------------------------------------------------------------
 
-CHATBOT_BASE_URL = "http://localhost:8020"  # Configure as needed — moved off 8000, which a
+CHATBOT_BASE_URL = os.environ.get("CHATBOT_BASE_URL", "http://localhost:8020")  # env override (Docker sets http://chatbot:8020); default unchanged — moved off 8000, which a
 # Docker container (open-notebook-surrealdb-1, unrelated to this app) has claimed on this machine.
 
 @app.route('/api/bible-chat', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
