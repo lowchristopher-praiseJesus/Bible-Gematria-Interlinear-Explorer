@@ -30,6 +30,7 @@ from chatbot.data.parables import PARABLES
 from chatbot import wiki_loader, wiki_qa
 from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups, _usfm_from_name
 from chatbot.streaming import sse_stream, sse_event
+from chatbot.trace import TraceRecorder, current_recorder
 
 router = APIRouter()
 
@@ -221,10 +222,28 @@ async def get_wiki_page(series_id: str, slug: str):
 @router.post("/chat", response_model=ChatResponse)
 async def post_chat(request: ChatRequest):
     """Process a chat message and return a structured response."""
+    recorder = TraceRecorder(
+        "/chat",
+        request.message,
+        mode=request.mode,
+        mode_params=request.mode_params,
+        history_length=len(request.history or []),
+        page_context=request.page_context,
+    )
+    current_recorder.set(recorder)
+
+    def _with_trace(result: dict) -> ChatResponse:
+        trace = recorder.finalize(
+            result.get("type", "chat"),
+            route=result.get("route"),
+            error=result.get("message") if result.get("type") == "error" else None,
+        )
+        return ChatResponse(**result, trace=trace)
+
     try:
         if request.mode and not request.message.strip():
             result = await build_mode_primer(request.mode, request.mode_params)
-            return ChatResponse(**result)
+            return _with_trace(result)
 
         history = (
             [{"role": m.role, "text": m.text} for m in request.history]
@@ -240,13 +259,13 @@ async def post_chat(request: ChatRequest):
         if series_id:
             concept_slug = (request.mode_params or {}).get("concept_slug")
             result = await wiki_qa.answer(series_id, request.message, history, concept_slug=concept_slug)
-            return ChatResponse(**result)
+            return _with_trace(result)
 
         result = await route_deterministic(
             request.message, history=history, page_context=request.page_context
         )
         if result:
-            return ChatResponse(**result)
+            return _with_trace(result)
         result = await route_claude(
             request.message, history=history, page_context=request.page_context
         )
@@ -254,14 +273,14 @@ async def post_chat(request: ChatRequest):
             result["follow_up_questions"] = _generate_follow_ups(
                 result.get("type", "chat"), result.get("data"), ""
             )
-        return ChatResponse(**result)
+        return _with_trace(result)
     except Exception as e:
-        return ChatResponse(
-            type="error",
-            message=f"Server error: {type(e).__name__}: {e}",
-            data=None,
-            route="Error path",
-        )
+        return _with_trace({
+            "type": "error",
+            "message": f"Server error: {type(e).__name__}: {e}",
+            "data": None,
+            "route": "Error path",
+        })
 
 
 # ---------------------------------------------------------------------------
