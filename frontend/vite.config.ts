@@ -11,10 +11,16 @@ export default defineConfig({
     },
   },
   server: {
+    // Listen on 0.0.0.0 so other machines on the LAN can reach the dev server.
+    host: true,
     proxy: {
       '/api': 'http://localhost:5000',
       '/LC_': 'http://localhost:5000',
     },
+  },
+  // `npm run build && npm run preview` — also bind all interfaces.
+  preview: {
+    host: true,
   },
   test: {
     environment: 'jsdom',

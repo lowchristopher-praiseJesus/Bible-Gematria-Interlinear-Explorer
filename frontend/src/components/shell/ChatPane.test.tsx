@@ -409,4 +409,27 @@ describe('ChatPane', () => {
     expect(await screen.findByText('Grace is unmerited favor.')).toBeInTheDocument()
     expect(screen.queryByRole('status', { name: /thinking/i })).not.toBeInTheDocument()
   })
+
+  it('stores the response trace on the assistant message', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+      type: 'chat', message: 'answer',
+      trace: { turnId: 'tt', requestPath: '/chat', steps: [], outcome: { type: 'chat', route: null, error: null } },
+    } as never)
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    const msgs = useSessionsStore.getState().sessions[session.id].messages
+    const assistant = msgs.find((m) => m.role === 'assistant')
+    expect(assistant?.trace?.turnId).toBe('tt')
+  })
+
+  it('opens the report dialog from the header', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: /report an issue/i }))
+    expect(await screen.findByText(/report an issue with this chat/i)).toBeInTheDocument()
+  })
 })

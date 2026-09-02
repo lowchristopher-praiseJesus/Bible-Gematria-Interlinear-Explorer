@@ -9,6 +9,7 @@ import type {
   WikiPageResponse,
 } from '@/types/api'
 import type { ArtifactLink, ModeParams } from '@/types/session'
+import type { Trace } from '@/types/trace'
 
 const CHAT_API = '/api/bible-chat'
 
@@ -61,6 +62,7 @@ interface ChatApiResponse {
   route?: string
   follow_up_questions?: string[]
   artifacts?: ArtifactLink[]
+  trace?: Trace
 }
 
 /**

@@ -101,4 +101,18 @@ describe('useSessionsStore', () => {
     // than pointing at nothing.
     expect(state.activeSessionId).toBeNull()
   })
+
+  it('round-trips an assistant message trace through append', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'hi',
+      trace: { turnId: 't1', requestPath: '/chat', steps: [], outcome: { type: 'chat', route: null, error: null } } as never,
+    })
+    const stored = useSessionsStore.getState().sessions[session.id].messages[0]
+    expect(stored.trace?.turnId).toBe('t1')
+  })
+
+  it('persists at version 2', () => {
+    expect(useSessionsStore.persist.getOptions().version).toBe(2)
+  })
 })

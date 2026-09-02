@@ -121,6 +121,23 @@
   padding: 0 4px;
 }
 
+.bcw-report {
+  margin-left: auto;
+  margin-right: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.bcw-report:hover {
+  opacity: 1;
+}
+
 /* Messages */
 .bible-chat-messages {
   flex: 1;

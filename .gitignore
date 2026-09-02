@@ -11,6 +11,11 @@ frontend/Complete.db
 frontend/Complete.db-shm
 frontend/Complete.db-wal
 
+# Writable troubleshooting-feedback DB (created at runtime, never committed)
+feedback.db
+feedback.db-shm
+feedback.db-wal
+
 # flask_caching filesystem cache
 CACHED_PAGES/
 frontend/CACHED_PAGES/
@@ -38,3 +43,9 @@ vendor/mybibletoolbox-code/data/strongs/*
 /static/chatbot-widget/
 .worktrees/
 .DS_Store
+
+# stray root-level node_modules (frontend deps live in frontend/node_modules)
+/node_modules/
+
+# session scratch logs (dev server / chatbot output)
+/scratch-logs/

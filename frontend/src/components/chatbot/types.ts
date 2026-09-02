@@ -1,3 +1,5 @@
+import type { Trace } from '../../types/trace'
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -5,6 +7,7 @@ export interface ChatMessage {
   text: string;
   data?: Record<string, any>;
   route?: string;
+  trace?: Trace;
   isStreaming?: boolean;
   followUpQuestions?: string[];
 }

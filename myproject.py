@@ -6,6 +6,12 @@ import dataset
 import re
 import requests
 import os
+import time
+import json as _json
+import hmac
+import base64
+from functools import wraps
+import feedback_store
 
 app = Flask(__name__)
 app.config.from_mapping({'CACHE_TYPE' : 'filesystem', 'CACHE_DIR' : 'CACHED_PAGES', 'CACHE_THRESHOLD' : 150000})
@@ -2011,6 +2017,33 @@ def lc_images(filename):
 CHATBOT_BASE_URL = os.environ.get("CHATBOT_BASE_URL", "http://localhost:8020")  # env override (Docker sets http://chatbot:8020); default unchanged — moved off 8000, which a
 # Docker container (open-notebook-surrealdb-1, unrelated to this app) has claimed on this machine.
 
+# ---------------------------------------------------------------------------
+# Troubleshooting feedback: ingest + admin API (writable feedback.db)
+# ---------------------------------------------------------------------------
+_FEEDBACK_DB_URL = os.environ.get("FEEDBACK_DB_URL", "sqlite:///feedback.db")
+_MAX_FEEDBACK_BYTES = 5 * 1024 * 1024
+_feedback_db = None
+_feedback_buckets = {}          # ip -> [tokens: float, last_refill: float]
+
+
+def _get_feedback_db():
+	global _feedback_db
+	if _feedback_db is None:
+		_feedback_db = feedback_store.get_db(_FEEDBACK_DB_URL)
+		feedback_store.init_db(_feedback_db)
+	return _feedback_db
+
+
+def _rate_ok(ip, *, capacity=5, refill_seconds=12.0):
+	now = time.time()
+	tokens, last = _feedback_buckets.get(ip, [float(capacity), now])
+	tokens = min(capacity, tokens + (now - last) / refill_seconds)
+	if tokens < 1.0:
+		_feedback_buckets[ip] = [tokens, now]
+		return False
+	_feedback_buckets[ip] = [tokens - 1.0, now]
+	return True
+
 @app.route('/api/bible-chat', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @app.route('/api/bible-chat/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 def chatbot_proxy(subpath=None):
@@ -2048,6 +2081,156 @@ def chatbot_proxy(subpath=None):
 		return resp.content, resp.status_code, response_headers
 	except requests.exceptions.ConnectionError:
 		return jsonify({'error': 'Chatbot service unavailable. Please ensure the chatbot is running on port 8000.'}), 503
+
+
+@app.route('/api/feedback', methods=['POST'])
+def submit_feedback():
+	raw = request.get_data(cache=False)
+	if len(raw) > _MAX_FEEDBACK_BYTES:
+		return jsonify({'error': 'too_large'}), 413
+
+	if not _rate_ok(request.headers.get('X-Real-IP') or request.remote_addr or 'unknown'):
+		return jsonify({'error': 'rate_limited'}), 429
+
+	try:
+		payload = _json.loads(raw or b'{}')
+	except ValueError:
+		return jsonify({'error': 'bad_json'}), 400
+	if not isinstance(payload, dict):
+		return jsonify({'error': 'bad_json'}), 400
+
+	category = (payload.get('category') or '').strip()
+	if category not in feedback_store.CATEGORIES:
+		return jsonify({'error': 'bad_category'}), 400
+
+	description = (payload.get('description') or '').strip()
+	if not description:
+		return jsonify({'error': 'empty_description'}), 400
+	description = description[:8192]
+
+	session_json = payload.get('session_json')
+	if not isinstance(session_json, dict) or not isinstance(session_json.get('messages'), list):
+		return jsonify({'error': 'bad_session'}), 400
+
+	email = (payload.get('email') or '').strip() or None
+	if email and ('@' not in email or len(email) > 254):
+		return jsonify({'error': 'bad_email'}), 400
+
+	messages = session_json.get('messages', [])
+	session_mode = str(session_json.get('mode') or 'unknown')
+	session_title = str(session_json.get('title') or '')[:200]
+
+	try:
+		rid = feedback_store.insert_report(
+			_get_feedback_db(),
+			client_id=str(payload.get('client_id') or 'unknown')[:64],
+			email=email,
+			category=category,
+			description=description,
+			session_json=session_json,
+			session_mode=session_mode,
+			session_title=session_title,
+			message_count=len(messages),
+			app_version=str(payload.get('app_version') or 'unknown')[:64],
+			user_agent=str(payload.get('user_agent') or '')[:512],
+			viewport=str(payload.get('viewport') or '')[:32],
+			page_url=str(payload.get('page_url') or '')[:2048],
+		)
+	except Exception as e:                       # noqa: BLE001
+		app.logger.exception("feedback insert failed: %s", e)
+		return jsonify({'error': 'store_unavailable'}), 500
+
+	return jsonify({'id': rid}), 201
+
+
+def require_admin(fn):
+	@wraps(fn)
+	def wrapper(*args, **kwargs):
+		user = os.environ.get('ADMIN_USER') or ''
+		pw = os.environ.get('ADMIN_PASSWORD') or ''
+		if not user or not pw:
+			return jsonify({'error': 'admin_not_configured'}), 503
+
+		header = request.headers.get('Authorization', '')
+		ok = False
+		if header.startswith('Basic '):
+			try:
+				decoded = base64.b64decode(header[6:]).decode('utf-8', 'replace')
+				got_user, _, got_pw = decoded.partition(':')
+				user_ok = hmac.compare_digest(got_user, user)
+				pw_ok = hmac.compare_digest(got_pw, pw)
+				ok = user_ok and pw_ok
+			except Exception:                    # noqa: BLE001
+				ok = False
+		if not ok:
+			resp = jsonify({'error': 'unauthorized'})
+			resp.status_code = 401
+			resp.headers['WWW-Authenticate'] = 'Basic realm="admin"'
+			return resp
+		return fn(*args, **kwargs)
+	return wrapper
+
+
+@app.route('/api/admin/feedback', methods=['GET'])
+@require_admin
+def admin_list_feedback():
+	def _int(name, default):
+		try:
+			return int(request.args.get(name, default))
+		except (TypeError, ValueError):
+			return default
+
+	result = feedback_store.list_reports(
+		_get_feedback_db(),
+		status=request.args.get('status') or None,
+		category=request.args.get('category') or None,
+		limit=_int('limit', 50),
+		offset=_int('offset', 0),
+	)
+	return jsonify(result)
+
+
+@app.route('/api/admin/feedback/<rid>', methods=['GET'])
+@require_admin
+def admin_get_feedback(rid):
+	row = feedback_store.get_report(_get_feedback_db(), rid)
+	if row is None:
+		return jsonify({'error': 'not_found'}), 404
+	return jsonify(row)
+
+
+@app.route('/api/admin/feedback/<rid>', methods=['PATCH'])
+@require_admin
+def admin_patch_feedback(rid):
+	payload = request.get_json(silent=True) or {}
+	if not isinstance(payload, dict):
+		payload = {}
+	status = payload.get('status')
+	if status is not None and status not in feedback_store.STATUSES:
+		return jsonify({'error': 'bad_status'}), 400
+	notes = payload.get('admin_notes')
+	if notes is not None:
+		notes = str(notes)[:16384]
+	row = feedback_store.update_report(_get_feedback_db(), rid, status=status, admin_notes=notes)
+	if row is None:
+		return jsonify({'error': 'not_found'}), 404
+	return jsonify(row)
+
+
+@app.route('/api/admin/feedback/<rid>', methods=['DELETE'])
+@require_admin
+def admin_delete_feedback(rid):
+	deleted = feedback_store.delete_report(_get_feedback_db(), rid)
+	if not deleted:
+		return jsonify({'error': 'not_found'}), 404
+	return jsonify({'deleted': rid})
+
+
+@app.route('/api/admin/feedback', methods=['DELETE'])
+@require_admin
+def admin_delete_all_feedback():
+	count = feedback_store.delete_all_reports(_get_feedback_db())
+	return jsonify({'deleted_count': count})
 
 
 if __name__ == '__main__':

@@ -185,7 +185,7 @@ export const useSessionsStore = create<SessionsState>()(
     }),
     {
       name: 'bible-explorer-sessions',
-      version: 1,
+      version: 2,
       // `migrate` only runs when the persisted version differs from the
       // one above, so it alone can't catch corruption written under the
       // current version (the actual incident this defends against: a

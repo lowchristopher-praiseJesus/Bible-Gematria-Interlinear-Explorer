@@ -15,6 +15,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from chatbot.tools import fetch_verse_translations, fetch_scripture_study, fetch_strongs, search_gematria, search_english
+from chatbot.trace import record_routing
 from chatbot.book_context import get_book_context
 
 # ---------------------------------------------------------------------------
@@ -635,6 +636,7 @@ async def route_deterministic(
     if not refs and _RANDOM_VERSE_RE.search(text_lower):
         resp = await _random_verse_response("Deterministic → Random verse keyword → random_verse()")
         if resp:
+            record_routing("deterministic: random verse keyword")
             return resp
 
     # When there is no verse ref in the current message, fall back to what's
@@ -662,6 +664,7 @@ async def route_deterministic(
         result = await search_gematria(value)
         word_count = len(result.get("wordResults", []))
         verse_count = len(result.get("verseResults", []))
+        record_routing("deterministic: gematria value match")
         return {
             "type": "gematria",
             "message": f"Found {word_count} word{'s' if word_count != 1 else ''} and {verse_count} verse{'s' if verse_count != 1 else ''} with gematria value **{value}**.",
@@ -681,6 +684,7 @@ async def route_deterministic(
         query = english_match.group(1)
         result = await search_english(query)
         result_count = len(result.get("results", []))
+        record_routing("deterministic: english search match")
         return {
             "type": "english_search",
             "message": f"Found {result_count} verse{'s' if result_count != 1 else ''} containing \"{query}\".",
@@ -700,6 +704,7 @@ async def route_deterministic(
             prefix = strongs_match.group(1).upper()
             num = strongs_match.group(2).zfill(4)
             result = await fetch_strongs(numbers=[f"{prefix}{num}"])
+            record_routing("deterministic: strongs number match")
             return {
                 "type": "strongs",
                 "message": f"Here is the Strong's entry for **{prefix}{num}**.",
@@ -721,6 +726,7 @@ async def route_deterministic(
             # Skip common/generic words that would return too many results
             if word.lower() not in ['greek', 'hebrew', 'word', 'the', 'a', 'in']:
                 result = await fetch_strongs(words=[word])
+                record_routing("deterministic: strongs word search")
                 return {
                     "type": "strongs",
                     "message": f"Here are Strong's entries matching the word **{word}**.",
@@ -736,6 +742,7 @@ async def route_deterministic(
     # insight on this verse based on its greek interpretation" contains
     # "give me", a quote keyword, but the user wants prose, not a raw quote).
     if _wants_word_level_analysis(text_lower):
+        record_routing("fell through to LLM")
         return None
 
     if not refs:
@@ -755,6 +762,7 @@ async def route_deterministic(
             if book_usfm:
                 resp = _book_context_response(book_usfm, text_lower)
                 if resp:
+                    record_routing("deterministic: book context")
                     return resp
 
         # ── No verse ref — try keyword routing using history context ref ──────
@@ -763,7 +771,9 @@ async def route_deterministic(
                 try:
                     result = await fetch_scripture_study(context_ref, depth="medium")
                 except Exception:
+                    record_routing("fell through to LLM")
                     return None
+                record_routing("deterministic: study keyword (context ref)")
                 return {
                     "type": "study",
                     "message": f"Here is the commentary for **{context_ref}** (from {context_source}).",
@@ -778,7 +788,9 @@ async def route_deterministic(
                     f"Deterministic → Quote keyword ({context_source}) → fetch_verse_translations()",
                 )
                 if resp:
+                    record_routing("deterministic: quote keyword (context ref)")
                     return resp
+        record_routing("fell through to LLM")
         return None
 
     # A verse reference embedded in a larger question ("how does John 3:16
@@ -789,6 +801,7 @@ async def route_deterministic(
     # to the AI fallback instead; it re-attaches the boxed verse via
     # _enhance_with_cited_verse(). Bare lookups keep their fast card.
     if _has_question_beyond_refs(message, refs):
+        record_routing("fell through to LLM")
         return None
 
     # Quote / verse fetch patterns
@@ -800,6 +813,7 @@ async def route_deterministic(
             "Deterministic → Quote keyword → fetch_verse_translations()",
         )
         if resp:
+            record_routing("deterministic: quote keyword")
             return resp
 
     # Book-level questions that include a verse ref (e.g. "Who wrote Luke 1:1?")
@@ -807,6 +821,7 @@ async def route_deterministic(
         usfm = _format_reference(*refs[0]).split(" ")[0].upper()
         resp = _book_context_response(usfm, text_lower)
         if resp:
+            record_routing("deterministic: book context")
             return resp
 
     # Study / commentary patterns
@@ -816,7 +831,9 @@ async def route_deterministic(
         try:
             result = await fetch_scripture_study(ref, depth="medium")
         except Exception:
+            record_routing("fell through to LLM")
             return None
+        record_routing("deterministic: study keyword")
         return {
             "type": "study",
             "message": f"Here is the commentary for **{ref}**.",
@@ -833,8 +850,10 @@ async def route_deterministic(
         "Deterministic → Default verse lookup → fetch_verse_translations()",
     )
     if resp:
+        record_routing("deterministic: default verse lookup")
         return resp
 
+    record_routing("fell through to LLM")
     return None
 
 
@@ -969,6 +988,7 @@ _FULL_NAME_TO_USFM = {full: usfm for usfm, full in _USFM_TO_BOOK.items()}
 
 async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Build the seeded first assistant turn for a newly created mode session."""
+    record_routing(f"mode primer: {mode}")
     mode_params = mode_params or {}
 
     if mode == "reading_plan":

@@ -9,6 +9,7 @@ import { VerseBubble, type VerseBubbleData } from './VerseBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
 import { WikiPageBubble } from './WikiPageBubble'
+import { ReportIssueDialog } from './ReportIssueDialog'
 import type { WikiPageResponse } from '@/types/api'
 import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
 
@@ -77,6 +78,7 @@ export function ChatPane({ sessionId }: Props) {
   const [resolvingChoiceId, setResolvingChoiceId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Partial<Record<string, Feedback>>>({})
+  const [reportOpen, setReportOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Any in-flight backend round-trip that leaves the message area idle —
@@ -118,6 +120,7 @@ export function ChatPane({ sessionId }: Props) {
           data: response.data ?? undefined,
           artifacts: response.artifacts,
           followUpQuestions: response.follow_up_questions,
+          trace: response.trace,
         })
       } catch (err) {
         appendMessage(sessionId, {
@@ -159,6 +162,7 @@ export function ChatPane({ sessionId }: Props) {
           data: response.data ?? undefined,
           artifacts: response.artifacts,
           followUpQuestions: response.follow_up_questions,
+          trace: response.trace,
         })
       } catch (err) {
         appendMessage(sessionId, {
@@ -215,6 +219,7 @@ export function ChatPane({ sessionId }: Props) {
             data: response.data ?? undefined,
             artifacts: response.artifacts,
             followUpQuestions: response.follow_up_questions,
+            trace: response.trace,
           })
         }
       } catch (err) {
@@ -319,6 +324,7 @@ export function ChatPane({ sessionId }: Props) {
         data: response.data ?? undefined,
         artifacts: response.artifacts,
         followUpQuestions: response.follow_up_questions,
+        trace: response.trace,
       })
     } catch (err) {
       appendMessage(sessionId, {
@@ -361,6 +367,12 @@ export function ChatPane({ sessionId }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-theme-border)]">
         <h2 className="text-sm font-semibold truncate min-w-0">{session.title}</h2>
+        <button
+          onClick={() => setReportOpen(true)}
+          className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+        >
+          Report an issue
+        </button>
         <span className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]">
           {MODE_LABELS[session.mode]}
         </span>
@@ -558,6 +570,8 @@ export function ChatPane({ sessionId }: Props) {
           {loading ? '…' : '➤'}
         </button>
       </form>
+
+      <ReportIssueDialog session={session} open={reportOpen} onOpenChange={setReportOpen} />
     </div>
   )
 }

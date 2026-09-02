@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, AsyncIterator
 import httpx
 
 from chatbot.tools import fetch_verse_translations, fetch_scripture_study, fetch_strongs
+from chatbot.trace import record_llm
 
 # Verse reference pattern
 VERSE_REF_PATTERN = re.compile(
@@ -261,6 +262,14 @@ def _extract_content(provider, result):
     return content, result.get("error")
 
 
+def _extract_tokens(provider, result):
+    """(prompt_tokens, completion_tokens) from a non-streaming response body."""
+    if provider == "nvidia":
+        usage = result.get("usage") or {}
+        return usage.get("prompt_tokens"), usage.get("completion_tokens")
+    return result.get("prompt_eval_count"), result.get("eval_count")
+
+
 def _stream_delta(provider, line):
     """Parse one raw stream line.
 
@@ -346,45 +355,40 @@ async def call_ollama_with_context(
     messages.append({"role": "user", "content": message})
 
     provider, url, headers, payload = _build_request(messages, stream=False)
+    llm_request = {
+        "system": system_prompt,
+        "messages": messages,
+        "params": {k: v for k, v in payload.items() if k != "messages"},
+    }
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=180.0,
-            )
-            response.raise_for_status()
-            result = response.json()
-        except httpx.HTTPError as e:
-            detail = str(e) or type(e).__name__
-            return {
-                "type": "error",
-                "message": f"LLM API error: {detail}",
-                "data": None,
-            }
-        except Exception as e:
-            return {
-                "type": "error",
-                "message": f"LLM error: {type(e).__name__}: {e}",
-                "data": None,
-            }
+    with record_llm(active_model_label(), llm_request) as _step:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, headers=headers, json=payload, timeout=180.0)
+                response.raise_for_status()
+                result = response.json()
+            except httpx.HTTPError as e:
+                detail = str(e) or type(e).__name__
+                _step.set_error(f"LLM API error: {detail}")
+                return {"type": "error", "message": f"LLM API error: {detail}", "data": None}
+            except Exception as e:  # noqa: BLE001
+                _step.set_error(f"{type(e).__name__}: {e}")
+                return {"type": "error", "message": f"LLM error: {type(e).__name__}: {e}", "data": None}
 
-        content, error = _extract_content(provider, result)
-        if not content and error:
-            return {
-                "type": "error",
-                "message": f"LLM error: {error}",
-                "data": None,
-            }
+            content, error = _extract_content(provider, result)
+            if not content and error:
+                _step.set_error(str(error))
+                return {"type": "error", "message": f"LLM error: {error}", "data": None}
 
-        return {
-            "type": "chat",
-            "message": content,
-            "data": None,
-            "route": f"AI Fallback → {active_model_label()} → call_ollama_with_context()",
-        }
+            prompt_tok, completion_tok = _extract_tokens(provider, result)
+            _step.set_tokens(prompt_tok, completion_tok)
+            _step.set_response(content)
+            return {
+                "type": "chat",
+                "message": content,
+                "data": None,
+                "route": f"AI Fallback → {active_model_label()} → call_ollama_with_context()",
+            }
 
 
 async def chat_with_ollama(
@@ -440,38 +444,39 @@ async def stream_chat_with_ollama(
     messages.append({"role": "user", "content": message})
 
     provider, url, headers, payload = _build_request(messages, stream=True)
+    llm_request = {
+        "system": system_prompt,
+        "messages": messages,
+        "params": {k: v for k, v in payload.items() if k != "messages"},
+    }
 
-    async with httpx.AsyncClient() as client:
-        try:
-            async with client.stream(
-                "POST",
-                url,
-                headers=headers,
-                json=payload,
-                timeout=180.0,
-            ) as response:
-                response.raise_for_status()
-
-                done_sent = False
-                async for line in response.aiter_lines():
-                    parsed = _stream_delta(provider, line)
-                    if parsed is None:
-                        continue
-                    kind, text = parsed
-                    if kind == "done":
-                        done_sent = True
+    with record_llm(active_model_label(), llm_request) as _step:
+        accumulated = ""
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream("POST", url, headers=headers, json=payload, timeout=180.0) as response:
+                    response.raise_for_status()
+                    done_sent = False
+                    async for line in response.aiter_lines():
+                        parsed = _stream_delta(provider, line)
+                        if parsed is None:
+                            continue
+                        kind, text = parsed
+                        if kind == "done":
+                            done_sent = True
+                            _step.set_response(accumulated)
+                            yield {"type": "done", "message": ""}
+                            break
+                        if text:
+                            accumulated += text
+                            yield {"type": "stream", "chunk": text}
+                    if not done_sent:
+                        _step.set_response(accumulated)
                         yield {"type": "done", "message": ""}
-                        break
-                    if text:
-                        yield {"type": "stream", "chunk": text}
-
-                if not done_sent:
-                    # Stream ended without an explicit terminator (some NIM
-                    # builds omit "data: [DONE]"); close it out anyway.
-                    yield {"type": "done", "message": ""}
-
-        except httpx.HTTPError as e:
-            detail = str(e) or type(e).__name__
-            yield {"type": "error", "message": f"LLM API error: {detail}"}
-        except Exception as e:
-            yield {"type": "error", "message": f"LLM error: {type(e).__name__}: {e}"}
+            except httpx.HTTPError as e:
+                detail = str(e) or type(e).__name__
+                _step.set_error(f"LLM API error: {detail}")
+                yield {"type": "error", "message": f"LLM API error: {detail}"}
+            except Exception as e:  # noqa: BLE001
+                _step.set_error(f"{type(e).__name__}: {e}")
+                yield {"type": "error", "message": f"LLM error: {type(e).__name__}: {e}"}
