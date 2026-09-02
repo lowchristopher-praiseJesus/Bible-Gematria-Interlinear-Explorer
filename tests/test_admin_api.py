@@ -78,3 +78,40 @@ def test_503_when_admin_not_configured(ctx, monkeypatch):
     monkeypatch.delenv("ADMIN_USER", raising=False)
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     assert client.get("/api/admin/feedback", headers=_auth()).status_code == 503
+
+
+def test_delete_one_report(ctx):
+    client, rid = ctx
+    resp = client.delete(f"/api/admin/feedback/{rid}", headers=_auth())
+    assert resp.status_code == 200
+    assert resp.get_json() == {"deleted": rid}
+    assert client.get(f"/api/admin/feedback/{rid}", headers=_auth()).status_code == 404
+    # deleting again is a 404
+    assert client.delete(f"/api/admin/feedback/{rid}", headers=_auth()).status_code == 404
+
+
+def test_delete_one_requires_credentials(ctx):
+    client, rid = ctx
+    assert client.delete(f"/api/admin/feedback/{rid}").status_code == 401
+    # row is untouched
+    assert client.get(f"/api/admin/feedback/{rid}", headers=_auth()).status_code == 200
+
+
+def test_delete_all_reports(ctx):
+    client, _ = ctx
+    db = fs.get_db(myproject._FEEDBACK_DB_URL)
+    fs.insert_report(
+        db, client_id="c2", email=None, category="ui", description="d2",
+        session_json={"messages": []}, session_mode="freeform", session_title="t2",
+        message_count=0, app_version="v", user_agent="UA", viewport="1x1", page_url="u",
+    )
+    resp = client.delete("/api/admin/feedback", headers=_auth())
+    assert resp.status_code == 200
+    assert resp.get_json() == {"deleted_count": 2}
+    assert client.get("/api/admin/feedback", headers=_auth()).get_json()["total"] == 0
+
+
+def test_delete_all_requires_credentials(ctx):
+    client, _ = ctx
+    assert client.delete("/api/admin/feedback").status_code == 401
+    assert client.get("/api/admin/feedback", headers=_auth()).get_json()["total"] == 1

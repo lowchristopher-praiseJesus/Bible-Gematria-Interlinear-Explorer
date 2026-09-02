@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { listReports, getReport, updateReport } from './adminApi'
+import { listReports, getReport, updateReport, deleteReport, deleteAllReports } from './adminApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -26,4 +26,22 @@ it('PATCHes a status update', async () => {
   const out = await updateReport('r1', { status: 'resolved' })
   expect(out.status).toBe('resolved')
   expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH' })
+})
+
+it('DELETEs one report by id', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ deleted: 'r1' }) })
+  vi.stubGlobal('fetch', fetchMock)
+  const out = await deleteReport('r1')
+  expect(out).toEqual({ deleted: 'r1' })
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/feedback/r1')
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' })
+})
+
+it('DELETEs all reports', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ deleted_count: 4 }) })
+  vi.stubGlobal('fetch', fetchMock)
+  const out = await deleteAllReports()
+  expect(out).toEqual({ deleted_count: 4 })
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/feedback')
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' })
 })

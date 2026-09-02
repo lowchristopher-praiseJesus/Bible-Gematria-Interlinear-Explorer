@@ -80,3 +80,13 @@ export function updateReport(
     body: JSON.stringify(patch),
   })
 }
+
+export function deleteReport(id: string): Promise<{ deleted: string }> {
+  return adminFetch<{ deleted: string }>(`/api/admin/feedback/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function deleteAllReports(): Promise<{ deleted_count: number }> {
+  return adminFetch<{ deleted_count: number }>('/api/admin/feedback', { method: 'DELETE' })
+}

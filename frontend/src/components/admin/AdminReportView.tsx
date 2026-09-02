@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react'
-import { getReport, updateReport, type ReportDetail } from '@/lib/adminApi'
+import { getReport, updateReport, deleteReport, type ReportDetail } from '@/lib/adminApi'
 import { TrajectoryView } from './TrajectoryView'
 
 interface AdminReportViewProps {
   id: string
   onBack: () => void
+  onDeleted?: () => void
 }
 
 const STATUSES = ['new', 'triaged', 'resolved']
 
-export function AdminReportView({ id, onBack }: AdminReportViewProps) {
+export function AdminReportView({ id, onBack, onDeleted }: AdminReportViewProps) {
   const [report, setReport] = useState<ReportDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState('new')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -52,6 +54,19 @@ export function AdminReportView({ id, onBack }: AdminReportViewProps) {
     }
   }
 
+  async function remove() {
+    if (!window.confirm('Delete this report permanently?')) return
+    setDeleting(true)
+    setSaveError(null)
+    try {
+      await deleteReport(id)
+      ;(onDeleted ?? onBack)()
+    } catch (e) {
+      setSaveError((e as Error).message)
+      setDeleting(false)
+    }
+  }
+
   if (error === 'unauthorized') return <p className="p-6 text-sm">Please sign in as an admin.</p>
   if (error === 'admin_not_configured') return <p className="p-6 text-sm">Admin access is not configured.</p>
   if (error) return <p className="p-6 text-sm text-red-600">{error}</p>
@@ -61,7 +76,17 @@ export function AdminReportView({ id, onBack }: AdminReportViewProps) {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <button onClick={onBack} className="self-start text-sm text-[var(--color-theme-accent)]">← Back to list</button>
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="text-sm text-[var(--color-theme-accent)]">← Back to list</button>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={deleting}
+          className="rounded border border-red-600 px-2 py-1 text-xs text-red-600 disabled:opacity-40"
+        >
+          {deleting ? 'Deleting…' : 'Delete report'}
+        </button>
+      </div>
 
       <header className="rounded-lg border border-[var(--color-theme-border)] p-3 text-sm">
         <p className="font-semibold">{report.category} · {report.session_title}</p>

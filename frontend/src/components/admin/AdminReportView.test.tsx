@@ -1,10 +1,14 @@
-import { expect, it, vi, afterEach, type Mock } from 'vitest'
+import { expect, it, vi, afterEach, beforeEach, type Mock } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AdminReportView } from './AdminReportView'
 
-vi.mock('@/lib/adminApi', () => ({ getReport: vi.fn(), updateReport: vi.fn() }))
-import { getReport, updateReport } from '@/lib/adminApi'
+vi.mock('@/lib/adminApi', () => ({
+  getReport: vi.fn(),
+  updateReport: vi.fn(),
+  deleteReport: vi.fn(),
+}))
+import { getReport, updateReport, deleteReport } from '@/lib/adminApi'
 
 const detail = {
   id: 'r1', created_at: '2026-09-02T00:00:00Z', client_id: 'c', email: null,
@@ -25,7 +29,14 @@ const detail = {
   },
 }
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.unstubAllGlobals()
+})
+
+beforeEach(() => {
+  vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
+})
 
 it('renders the transcript and a trajectory per traced turn', async () => {
   ;(getReport as unknown as Mock).mockResolvedValue(detail)
@@ -44,4 +55,26 @@ it('saves a status change', async () => {
   await userEvent.selectOptions(screen.getByLabelText(/status/i), 'resolved')
   await userEvent.click(screen.getByRole('button', { name: /save/i }))
   await waitFor(() => expect(updateReport).toHaveBeenCalledWith('r1', { status: 'resolved', admin_notes: '' }))
+})
+
+it('deletes the report and calls onDeleted', async () => {
+  ;(getReport as unknown as Mock).mockResolvedValue(detail)
+  ;(deleteReport as unknown as Mock).mockResolvedValue({ deleted: 'r1' })
+  const onDeleted = vi.fn()
+  const onBack = vi.fn()
+  render(<AdminReportView id="r1" onBack={onBack} onDeleted={onDeleted} />)
+  await screen.findByText('the answer was wrong')
+  await userEvent.click(screen.getByRole('button', { name: /delete report/i }))
+  await waitFor(() => expect(deleteReport).toHaveBeenCalledWith('r1'))
+  expect(onDeleted).toHaveBeenCalledTimes(1)
+  expect(onBack).not.toHaveBeenCalled()
+})
+
+it('does not delete when the confirm is cancelled', async () => {
+  ;(globalThis.confirm as unknown as Mock).mockReturnValue(false)
+  ;(getReport as unknown as Mock).mockResolvedValue(detail)
+  render(<AdminReportView id="r1" onBack={() => {}} onDeleted={() => {}} />)
+  await screen.findByText('the answer was wrong')
+  await userEvent.click(screen.getByRole('button', { name: /delete report/i }))
+  expect(deleteReport).not.toHaveBeenCalled()
 })

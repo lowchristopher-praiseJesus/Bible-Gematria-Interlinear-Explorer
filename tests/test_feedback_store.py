@@ -59,3 +59,27 @@ def test_update_report_sets_status_and_notes(db):
     assert updated["status"] == "triaged"
     assert updated["admin_notes"] == "looking into it"
     assert fs.update_report(db, "nope", status="resolved") is None
+
+
+def test_delete_report_removes_one_row(db):
+    keep = _insert(db)
+    drop = _insert(db)
+    assert fs.delete_report(db, drop) is True
+    assert fs.get_report(db, drop) is None
+    assert fs.get_report(db, keep) is not None
+    assert fs.list_reports(db)["total"] == 1
+
+
+def test_delete_report_returns_false_for_unknown_id(db):
+    _insert(db)
+    assert fs.delete_report(db, "not-a-real-id") is False
+    assert fs.list_reports(db)["total"] == 1
+
+
+def test_delete_all_reports_clears_the_table(db):
+    for _ in range(3):
+        _insert(db)
+    assert fs.delete_all_reports(db) == 3
+    assert fs.list_reports(db)["total"] == 0
+    # idempotent: a second clear removes nothing
+    assert fs.delete_all_reports(db) == 0

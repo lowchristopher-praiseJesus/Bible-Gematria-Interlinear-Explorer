@@ -2217,5 +2217,21 @@ def admin_patch_feedback(rid):
 	return jsonify(row)
 
 
+@app.route('/api/admin/feedback/<rid>', methods=['DELETE'])
+@require_admin
+def admin_delete_feedback(rid):
+	deleted = feedback_store.delete_report(_get_feedback_db(), rid)
+	if not deleted:
+		return jsonify({'error': 'not_found'}), 404
+	return jsonify({'deleted': rid})
+
+
+@app.route('/api/admin/feedback', methods=['DELETE'])
+@require_admin
+def admin_delete_all_feedback():
+	count = feedback_store.delete_all_reports(_get_feedback_db())
+	return jsonify({'deleted_count': count})
+
+
 if __name__ == '__main__':
 	app.run(debug=True, host='0.0.0.0', port=5000)

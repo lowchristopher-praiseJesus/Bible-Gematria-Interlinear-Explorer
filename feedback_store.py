@@ -148,3 +148,20 @@ def update_report(
         patch["admin_notes"] = admin_notes
     table.update(patch, ["id"])
     return _hydrate(table.find_one(id=rid))
+
+
+def delete_report(db: "dataset.Database", rid: str) -> bool:
+    """Delete one report. Returns True if a row was removed, False if not found."""
+    table = db["reports"]
+    if table.find_one(id=rid) is None:
+        return False
+    table.delete(id=rid)
+    return True
+
+
+def delete_all_reports(db: "dataset.Database") -> int:
+    """Delete every report. Returns how many rows were removed."""
+    table = db["reports"]
+    n = table.count()
+    table.delete()
+    return n

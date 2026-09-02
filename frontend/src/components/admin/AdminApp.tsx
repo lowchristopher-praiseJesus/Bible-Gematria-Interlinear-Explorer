@@ -28,7 +28,11 @@ export function AdminApp() {
       <header className="border-b border-[var(--color-theme-border)] px-4 py-2 text-sm font-semibold">
         Troubleshooting reports
       </header>
-      {id ? <AdminReportView id={id} onBack={back} /> : <AdminListView onOpen={open} />}
+      {id ? (
+        <AdminReportView key={id} id={id} onBack={back} onDeleted={back} />
+      ) : (
+        <AdminListView onOpen={open} />
+      )}
     </div>
   )
 }
