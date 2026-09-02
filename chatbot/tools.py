@@ -39,6 +39,8 @@ from src.lib.scripture_study import (
 from src.lib.get_strongs import fetch_strongs_entries as _fetch_strongs
 from src.config import COMMENTARY_DIR
 
+from chatbot.trace import record_tool
+
 # Path to the tool registry used by scripture_study
 TOOL_REGISTRY_PATH = MYBIBLETOOLBOX_PATH / "bible-study-tools" / "tool-registry.yaml"
 
@@ -61,17 +63,13 @@ async def fetch_verse_translations(
     languages: Optional[List[str]] = None,
 ) -> Dict[str, str]:
     """Fetch verse translations for a reference string (e.g. 'JHN 3:16')."""
-    book, chapter, verse = _parse_reference(reference)
-
-    # fetch_verse does web requests + file I/O
-    translations = await _run_in_thread(_fetch_verse, book, chapter, verse)
-
-    if languages:
-        translations = await _run_in_thread(
-            _filter_by_languages, translations, languages
-        )
-
-    return translations
+    with record_tool("fetch_verse_translations", {"args": {"reference": reference, "languages": languages}}) as _step:
+        book, chapter, verse = _parse_reference(reference)
+        translations = await _run_in_thread(_fetch_verse, book, chapter, verse)
+        if languages:
+            translations = await _run_in_thread(_filter_by_languages, translations, languages)
+        _step.set_response(translations)
+        return translations
 
 
 # ---------------------------------------------------------------------------
@@ -84,19 +82,14 @@ async def fetch_scripture_study(
     excludes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Fetch merged commentary for a verse reference."""
-    verses = await _run_in_thread(_parse_verse_reference, reference)
-    tool_registry = await _run_in_thread(_load_tool_registry, TOOL_REGISTRY_PATH)
-
-    result = await _run_in_thread(
-        _merge_commentary,
-        verses,
-        depth,
-        COMMENTARY_DIR,
-        tool_registry,
-        filters,
-        excludes,
-    )
-    return result
+    with record_tool("fetch_scripture_study", {"args": {"reference": reference, "depth": depth}}) as _step:
+        verses = await _run_in_thread(_parse_verse_reference, reference)
+        tool_registry = await _run_in_thread(_load_tool_registry, TOOL_REGISTRY_PATH)
+        result = await _run_in_thread(
+            _merge_commentary, verses, depth, COMMENTARY_DIR, tool_registry, filters, excludes,
+        )
+        _step.set_response(result)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -107,13 +100,12 @@ async def fetch_strongs(
     words: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Fetch Strong's entries by numbers or English word search."""
-    result = await _run_in_thread(
-        _fetch_strongs,
-        numbers=numbers or None,
-        words=words or None,
-        case_sensitive=False,
-    )
-    return result
+    with record_tool("fetch_strongs", {"args": {"numbers": numbers, "words": words}}) as _step:
+        result = await _run_in_thread(
+            _fetch_strongs, numbers=numbers or None, words=words or None, case_sensitive=False,
+        )
+        _step.set_response(result)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -131,15 +123,24 @@ from chatbot.bible_search import (
 
 
 async def search_gematria(value: int) -> Dict[str, Any]:
-    return await _run_in_thread(search_gematria_sync, value)
+    with record_tool("search_gematria", {"args": {"value": value}}) as _step:
+        result = await _run_in_thread(search_gematria_sync, value)
+        _step.set_response(result)
+        return result
 
 
 async def search_english(query: str) -> Dict[str, Any]:
-    return await _run_in_thread(search_english_sync, query)
+    with record_tool("search_english", {"args": {"query": query}}) as _step:
+        result = await _run_in_thread(search_english_sync, query)
+        _step.set_response(result)
+        return result
 
 
 async def random_verse() -> tuple:
-    return await _run_in_thread(random_verse_sync)
+    with record_tool("random_verse", None) as _step:
+        result = await _run_in_thread(random_verse_sync)
+        _step.set_response(list(result))
+        return result
 
 
 async def list_passage_verses(
@@ -148,4 +149,10 @@ async def list_passage_verses(
     start_verse: Optional[int] = None,
     end_verse: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    return await _run_in_thread(list_passage_verses_sync, book_name, chapter, start_verse, end_verse)
+    with record_tool(
+        "list_passage_verses",
+        {"args": {"book_name": book_name, "chapter": chapter, "start_verse": start_verse, "end_verse": end_verse}},
+    ) as _step:
+        result = await _run_in_thread(list_passage_verses_sync, book_name, chapter, start_verse, end_verse)
+        _step.set_response(result)
+        return result
