@@ -31,6 +31,9 @@ class ChatResponse(BaseModel):
     route: Optional[str] = Field(None, description="Human-readable description of the routing path taken")
     follow_up_questions: Optional[List[str]] = Field(None, description="Suggested follow-up questions")
     artifacts: Optional[List[ArtifactLink]] = Field(None, description="Links the frontend can open in the artifact panel")
+    trace: Optional[Dict[str, Any]] = Field(
+        None, description="Per-turn trace of routing/tool/LLM steps (troubleshooting)"
+    )
 
 
 class VerseResponse(BaseModel):

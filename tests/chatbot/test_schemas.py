@@ -58,3 +58,9 @@ def test_wiki_page_response_round_trips():
         citation="Joseph Prince — The Present-Day Ministry of Jesus and How It Empowers You",
     )
     assert page.model_dump()["slug"] == "grace"
+
+
+def test_chat_response_accepts_optional_trace():
+    resp = ChatResponse(type="chat", message="hi", trace={"turnId": "abc", "steps": []})
+    assert resp.trace == {"turnId": "abc", "steps": []}
+    assert ChatResponse(type="chat", message="hi").trace is None
