@@ -43,3 +43,9 @@ vendor/mybibletoolbox-code/data/strongs/*
 /static/chatbot-widget/
 .worktrees/
 .DS_Store
+
+# stray root-level node_modules (frontend deps live in frontend/node_modules)
+/node_modules/
+
+# session scratch logs (dev server / chatbot output)
+/scratch-logs/
