@@ -13,6 +13,7 @@ def app_client(tmp_path, monkeypatch):
     monkeypatch.setenv("FEEDBACK_DB_URL", url)
     monkeypatch.setattr(myproject, "_FEEDBACK_DB_URL", url, raising=False)
     monkeypatch.setattr(myproject, "_feedback_db", None, raising=False)
+    myproject._feedback_buckets.clear()
     myproject.app.config.update(TESTING=True)
     return myproject.app.test_client()
 
@@ -65,6 +66,21 @@ def test_rejects_malformed_session_json(app_client):
     resp = app_client.post("/api/feedback", json=_body(session_json={"no": "messages"}))
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "bad_session"
+
+
+def test_rejects_bad_email(app_client):
+    resp = app_client.post("/api/feedback", json=_body(email="not-an-email"))
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "bad_email"
+
+
+def test_rate_limited_after_bucket_exhausted(app_client):
+    myproject._feedback_buckets.clear()
+    codes = [app_client.post("/api/feedback", json=_body()).status_code for _ in range(6)]
+    assert codes[:5] == [201, 201, 201, 201, 201]
+    assert codes[5] == 429
+    resp = app_client.post("/api/feedback", json=_body())
+    assert resp.get_json()["error"] == "rate_limited"
 
 
 def test_rejects_oversize_body(app_client):

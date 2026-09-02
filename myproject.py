@@ -2086,12 +2086,14 @@ def submit_feedback():
 	if len(raw) > _MAX_FEEDBACK_BYTES:
 		return jsonify({'error': 'too_large'}), 413
 
-	if not _rate_ok(request.remote_addr or 'unknown'):
+	if not _rate_ok(request.headers.get('X-Real-IP') or request.remote_addr or 'unknown'):
 		return jsonify({'error': 'rate_limited'}), 429
 
 	try:
 		payload = _json.loads(raw or b'{}')
 	except ValueError:
+		return jsonify({'error': 'bad_json'}), 400
+	if not isinstance(payload, dict):
 		return jsonify({'error': 'bad_json'}), 400
 
 	category = (payload.get('category') or '').strip()
