@@ -15,6 +15,7 @@ import {
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { describeSession } from '@/lib/sessionDescription'
+import { filterSessions, splitHighlight } from '@/lib/sessionSearch'
 import { noteLabel } from '@/lib/noteLabel'
 import { formatSessionTimestamp } from '@/lib/formatTimestamp'
 import type { Session, SessionMode } from '@/types/session'
@@ -52,11 +53,15 @@ function groupByMode(sessions: Session[]): Partial<Record<SessionMode, Session[]
 export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }: Props) {
   const sessions = useSessionsStore((s) => s.sessions)
   const deleteSession = useSessionsStore((s) => s.deleteSession)
-  const grouped = groupByMode(Object.values(sessions))
   // Every category starts expanded; collapsing one just hides its rows —
   // nothing here needs to survive a reload, so plain component state is
-  // enough.
+  // enough. The search box is the same: transient, reset on reload.
   const [collapsed, setCollapsed] = useState<Partial<Record<SessionMode, boolean>>>({})
+  const [query, setQuery] = useState('')
+
+  const searching = query.trim().length > 0
+  const filtered = filterSessions(Object.values(sessions), query)
+  const grouped = groupByMode(filtered)
 
   function toggleMode(mode: SessionMode) {
     setCollapsed((prev) => ({ ...prev, [mode]: !prev[mode] }))
@@ -64,7 +69,7 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-3 border-b border-[var(--color-theme-border)]">
+      <div className="p-3 border-b border-[var(--color-theme-border)] flex flex-col gap-2">
         <button
           onClick={onNewSession}
           className="w-full inline-flex items-center justify-center gap-1.5 text-sm px-3 py-2 rounded-md bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] transition-opacity hover:opacity-90"
@@ -72,10 +77,41 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
           <Plus className="h-4 w-4" aria-hidden="true" />
           New session
         </button>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-secondary)]"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search conversations"
+            placeholder="Search conversations"
+            className="w-full rounded-md border border-[var(--color-theme-border)] bg-[var(--color-surface)] py-1.5 pl-8 pr-7 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)]"
+          />
+          {searching && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setQuery('')}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto">
+        {searching && filtered.length === 0 && (
+          <p className="px-3 py-4 text-sm text-[var(--color-text-secondary)]">
+            No conversations match “{query.trim()}”.
+          </p>
+        )}
         {MODE_ORDER.filter((mode) => grouped[mode]?.length).map((mode) => {
-          const isCollapsed = !!collapsed[mode]
+          // While searching, force sections open so matches aren't hidden
+          // inside a group the user happened to have collapsed.
+          const isCollapsed = !searching && !!collapsed[mode]
           return (
             <div key={mode}>
               <button
@@ -108,7 +144,22 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
                       onClick={() => onSelectSession(session.id)}
                     >
                       <div className="min-w-0 flex flex-col">
-                        <span className="truncate">{describeSession(session)}</span>
+                        <span className="truncate">
+                          {searching
+                            ? splitHighlight(describeSession(session), query).map((seg, i) =>
+                                seg.hit ? (
+                                  <mark
+                                    key={i}
+                                    className="rounded-sm bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]"
+                                  >
+                                    {seg.text}
+                                  </mark>
+                                ) : (
+                                  <span key={i}>{seg.text}</span>
+                                )
+                              )
+                            : describeSession(session)}
+                        </span>
                         <span className="text-xs text-[var(--color-text-secondary)]">
                           {formatSessionTimestamp(session.createdAt)}
                         </span>
