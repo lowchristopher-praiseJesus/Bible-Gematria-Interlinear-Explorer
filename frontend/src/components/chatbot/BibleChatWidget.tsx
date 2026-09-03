@@ -175,6 +175,7 @@ export function BibleChatWidget({
       modeParams: {},
       title,
       messages: messages as Session['messages'],
+      notes: [],
     }
     try {
       await submitReport(syntheticSession, { category: 'other', description })

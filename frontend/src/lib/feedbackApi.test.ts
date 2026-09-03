@@ -9,6 +9,7 @@ const session: Session = {
     { id: 'm1', role: 'user', text: 'hi' },
     { id: 'm2', role: 'assistant', text: 'hello', trace: { turnId: 't' } as never },
   ],
+  notes: [],
 }
 
 afterEach(() => vi.unstubAllGlobals())

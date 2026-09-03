@@ -40,6 +40,13 @@ export interface SessionMessage extends ChatMessage {
   resolvedChoiceLabel?: string
 }
 
+export interface Note {
+  id: string
+  createdAt: number
+  updatedAt: number
+  body: string
+}
+
 export interface Session {
   id: string
   createdAt: number
@@ -48,4 +55,5 @@ export interface Session {
   modeParams: ModeParams
   title: string
   messages: SessionMessage[]
+  notes: Note[]
 }

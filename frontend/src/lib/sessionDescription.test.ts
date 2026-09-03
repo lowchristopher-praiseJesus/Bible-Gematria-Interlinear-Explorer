@@ -11,6 +11,7 @@ function makeSession(overrides: Partial<Session>): Session {
     modeParams: {},
     title: 'Ask Anything',
     messages: [],
+    notes: [],
     ...overrides,
   }
 }

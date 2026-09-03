@@ -20,7 +20,7 @@ vi.mock('@/lib/feedbackApi', () => ({
 
 const session: Session = {
   id: 's1', createdAt: 1, updatedAt: 2, mode: 'freeform', modeParams: {},
-  title: 'Ask Anything', messages: [{ id: 'm1', role: 'user', text: 'hi' }],
+  title: 'Ask Anything', messages: [{ id: 'm1', role: 'user', text: 'hi' }], notes: [],
 }
 
 describe('ReportIssueDialog', () => {

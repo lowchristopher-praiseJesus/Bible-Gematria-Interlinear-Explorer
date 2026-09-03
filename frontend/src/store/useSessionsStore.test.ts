@@ -112,7 +112,102 @@ describe('useSessionsStore', () => {
     expect(stored.trace?.turnId).toBe('t1')
   })
 
-  it('persists at version 2', () => {
-    expect(useSessionsStore.persist.getOptions().version).toBe(2)
+  it('persists at version 3', () => {
+    expect(useSessionsStore.persist.getOptions().version).toBe(3)
+  })
+
+  it('createSession starts with an empty notes array', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    expect(session.notes).toEqual([])
+  })
+
+  it('addNote appends a note, returns it, and does not bump session.updatedAt', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const before = useSessionsStore.getState().sessions[session.id].updatedAt
+    const note = useSessionsStore.getState().addNote(session.id, 'first thought')
+    expect(note).not.toBeNull()
+    expect(note!.body).toBe('first thought')
+    const stored = useSessionsStore.getState().sessions[session.id]
+    expect(stored.notes).toEqual([note])
+    expect(stored.updatedAt).toBe(before)
+  })
+
+  it('addNote returns null and does not mutate once a session has 5 notes', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    for (let i = 0; i < 5; i++) useSessionsStore.getState().addNote(session.id, `n${i}`)
+    const sixth = useSessionsStore.getState().addNote(session.id, 'n6')
+    expect(sixth).toBeNull()
+    expect(useSessionsStore.getState().sessions[session.id].notes).toHaveLength(5)
+  })
+
+  it('addNote returns null for an unknown session', () => {
+    expect(useSessionsStore.getState().addNote('nope', 'x')).toBeNull()
+  })
+
+  it('updateNote replaces the body and bumps only the note updatedAt', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const note = useSessionsStore.getState().addNote(session.id, 'draft')!
+    const sessionUpdatedAt = useSessionsStore.getState().sessions[session.id].updatedAt
+    useSessionsStore.getState().updateNote(session.id, note.id, 'revised')
+    const stored = useSessionsStore.getState().sessions[session.id]
+    expect(stored.notes[0].body).toBe('revised')
+    expect(stored.notes[0].updatedAt).toBeGreaterThanOrEqual(note.updatedAt)
+    expect(stored.updatedAt).toBe(sessionUpdatedAt)
+  })
+
+  it('deleteNote removes the matching note only', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const a = useSessionsStore.getState().addNote(session.id, 'a')!
+    const b = useSessionsStore.getState().addNote(session.id, 'b')!
+    useSessionsStore.getState().deleteNote(session.id, a.id)
+    const notes = useSessionsStore.getState().sessions[session.id].notes
+    expect(notes.map((n) => n.id)).toEqual([b.id])
+  })
+
+  it('normalises a persisted session whose notes are missing or malformed', async () => {
+    localStorage.setItem(
+      'bible-explorer-sessions',
+      JSON.stringify({
+        state: {
+          sessions: {
+            noNotes: {
+              id: 'noNotes', mode: 'freeform', modeParams: {}, title: 'Ask Anything',
+              messages: [], createdAt: 1, updatedAt: 1,
+            },
+            messyNotes: {
+              id: 'messyNotes', mode: 'freeform', modeParams: {}, title: 'Ask Anything',
+              messages: [], createdAt: 1, updatedAt: 1,
+              notes: [
+                { id: 'n1', body: 'keep me', createdAt: 2, updatedAt: 2 },
+                'not-an-object',
+                { id: 5, body: 'bad id' },
+                { id: 'n2', body: 'no timestamps' },
+              ],
+            },
+          },
+          activeSessionId: 'noNotes',
+        },
+        version: 2,
+      })
+    )
+    await useSessionsStore.persist.rehydrate()
+    const state = useSessionsStore.getState()
+    expect(state.sessions.noNotes.notes).toEqual([])
+    const kept = state.sessions.messyNotes.notes
+    expect(kept.map((n) => n.id)).toEqual(['n1', 'n2'])
+    expect(typeof kept[1].createdAt).toBe('number')
+  })
+
+  it('trims a persisted notes array longer than 5 to the first 5', async () => {
+    const notes = Array.from({ length: 8 }, (_, i) => ({ id: `n${i}`, body: `${i}`, createdAt: i, updatedAt: i }))
+    localStorage.setItem('bible-explorer-sessions', JSON.stringify({
+      state: {
+        sessions: { s: { id: 's', mode: 'freeform', modeParams: {}, title: 'Ask Anything', messages: [], createdAt: 1, updatedAt: 1, notes } },
+        activeSessionId: 's',
+      },
+      version: 3,
+    }))
+    await useSessionsStore.persist.rehydrate()
+    expect(useSessionsStore.getState().sessions.s.notes.map((n) => n.id)).toEqual(['n0', 'n1', 'n2', 'n3', 'n4'])
   })
 })
