@@ -8,6 +8,11 @@ interface Props {
   sessionId: string
   /** Empty string means "a new, unsaved note". */
   noteId: string
+  /**
+   * The consumer MUST mount this with `key={`${sessionId}:${noteId}`}` so
+   * that local state (mode, draft) resets on the draft→saved transition,
+   * when `noteId` changes from `''` to the created note's id.
+   */
 }
 
 const PILL_PRIMARY =
@@ -51,6 +56,9 @@ export function NoteEditor({ sessionId, noteId }: Props) {
       return
     }
     openNote(sessionId, created.id)
+    // Harmless under the ArtifactPane remount (the component is replaced
+    // via its `key`); correct if ever mounted without one.
+    setMode('view')
   }
 
   function handleSaveEdit() {
@@ -86,7 +94,7 @@ export function NoteEditor({ sessionId, noteId }: Props) {
         />
       ) : (
         <div className="flex-1 text-sm whitespace-pre-wrap text-[var(--color-text-primary)]">
-          {note!.body || <span className="italic text-[var(--color-text-secondary)]">Empty note.</span>}
+          {note!.body.trim() ? note!.body : <span className="italic text-[var(--color-text-secondary)]">Empty note.</span>}
         </div>
       )}
 

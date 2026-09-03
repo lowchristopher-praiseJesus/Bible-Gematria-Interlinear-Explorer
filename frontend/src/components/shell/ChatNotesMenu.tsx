@@ -24,25 +24,24 @@ export function ChatNotesMenu({ sessionId }: Props) {
 
   const atLimit = notes.length >= MAX_NOTES_PER_SESSION
 
-  // The button's own onClick fully drives `open` (the popover is anchored,
-  // not triggered): with no notes there's nothing to list, so a click goes
-  // straight to a fresh draft; with notes it toggles the list.
-  function handleTriggerClick() {
-    if (notes.length === 0) {
-      openNewNote(sessionId)
-      return
-    }
-    setOpen((v) => !v)
-  }
-
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Anchor asChild>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        // With no notes there's nothing to list, so opening the menu goes
+        // straight to a fresh draft and the popover never opens.
+        if (next && notes.length === 0) {
+          openNewNote(sessionId)
+          return
+        }
+        setOpen(next)
+      }}
+    >
+      <Popover.Trigger asChild>
         <button
           type="button"
           aria-label="Notes"
           title="Notes"
-          onClick={handleTriggerClick}
           className="relative shrink-0 flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
         >
           <NotebookPen className="h-4 w-4" aria-hidden="true" />
@@ -52,7 +51,7 @@ export function ChatNotesMenu({ sessionId }: Props) {
             </span>
           )}
         </button>
-      </Popover.Anchor>
+      </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           align="end"

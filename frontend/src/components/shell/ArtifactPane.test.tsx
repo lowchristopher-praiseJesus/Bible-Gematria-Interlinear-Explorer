@@ -101,6 +101,21 @@ describe('ArtifactPane', () => {
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
+  it('saving a draft note remounts the editor into view mode with the note persisted', async () => {
+    const user = userEvent.setup()
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useArtifactStore.setState({ activeNote: { sessionId: session.id, noteId: '' }, activeArtifact: null })
+    render(<ArtifactPane />)
+
+    await user.type(screen.getByLabelText('Note text'), 'drafted body')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    const notes = useSessionsStore.getState().sessions[session.id].notes
+    expect(notes).toHaveLength(1)
+    expect(notes[0].body).toBe('drafted body')
+  })
+
   it('titles the pane "Note" while a note is active', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     const note = useSessionsStore.getState().addNote(session.id, 'x')!

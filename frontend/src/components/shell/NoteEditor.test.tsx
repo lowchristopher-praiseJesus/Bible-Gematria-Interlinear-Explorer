@@ -9,6 +9,14 @@ function newSession() {
   return useSessionsStore.getState().createSession('freeform', {})
 }
 
+// Mirrors how ArtifactPane binds the editor: noteId comes from the
+// artifact store and the key resets local state on the draft→saved flip.
+function BoundEditor({ sessionId }: { sessionId: string }) {
+  const activeNote = useArtifactStore((s) => s.activeNote)
+  const noteId = activeNote && activeNote.sessionId === sessionId ? activeNote.noteId : ''
+  return <NoteEditor key={`${sessionId}:${noteId}`} sessionId={sessionId} noteId={noteId} />
+}
+
 describe('NoteEditor', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -20,7 +28,7 @@ describe('NoteEditor', () => {
 
   it('a draft opens in edit mode and Save creates the note', async () => {
     const session = newSession()
-    render(<NoteEditor sessionId={session.id} noteId="" />)
+    render(<BoundEditor sessionId={session.id} />)
     await userEvent.type(screen.getByLabelText('Note text'), 'A fresh thought')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -28,6 +36,8 @@ describe('NoteEditor', () => {
     expect(notes).toHaveLength(1)
     expect(notes[0].body).toBe('A fresh thought')
     expect(useArtifactStore.getState().activeNote).toEqual({ sessionId: session.id, noteId: notes[0].id })
+    // The draft remounts into view mode once saved.
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
   it('Cancel on a draft closes the pane and persists nothing', async () => {

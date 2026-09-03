@@ -120,6 +120,7 @@ describe('App', () => {
 
     useArtifactStore.setState({
       activeArtifact: { type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } },
+      activeNote: { sessionId: 'stale-session', noteId: 'x' },
       status: 'ready',
       data: { definition: null, verses: [], resultSummary: '' },
       error: null,
@@ -130,5 +131,6 @@ describe('App', () => {
 
     expect(useArtifactStore.getState().status).toBe('idle')
     expect(useArtifactStore.getState().activeArtifact).toBeNull()
+    expect(useArtifactStore.getState().activeNote).toBeNull()
   })
 })

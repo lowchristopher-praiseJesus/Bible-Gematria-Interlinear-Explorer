@@ -50,6 +50,19 @@ describe('ChatNotesMenu', () => {
     expect(screen.getByText(/maximum of 5 notes/i)).toBeInTheDocument()
   })
 
+  it('clicking the icon a second time closes the open menu', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().addNote(session.id, 'toggle me')
+    render(<ChatNotesMenu sessionId={session.id} />)
+    const trigger = screen.getByRole('button', { name: 'Notes' })
+
+    await userEvent.click(trigger)
+    expect(screen.getByText('New note')).toBeInTheDocument()
+
+    await userEvent.click(trigger)
+    expect(screen.queryByText('New note')).not.toBeInTheDocument()
+  })
+
   it('shows a count badge equal to the number of notes', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().addNote(session.id, 'a')
