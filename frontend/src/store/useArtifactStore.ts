@@ -17,6 +17,7 @@ function sameArtifact(a: ArtifactLink | null, b: ArtifactLink): boolean {
 
 interface ArtifactState {
   activeArtifact: ArtifactLink | null
+  activeNote: { sessionId: string; noteId: string } | null
   /** Every artifact navigated away from, most-recent last — e.g. the verse
    * a user was reading before clicking a Strong's number. `goBack` pops
    * this to return there instead of just closing the panel. */
@@ -25,6 +26,8 @@ interface ArtifactState {
   data: unknown
   error: string | null
   openArtifact: (link: ArtifactLink) => Promise<void>
+  openNote: (sessionId: string, noteId: string) => void
+  openNewNote: (sessionId: string) => void
   goBack: () => Promise<void>
   close: () => void
 }
@@ -50,6 +53,7 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
 
 export const useArtifactStore = create<ArtifactState>((set, get) => ({
   activeArtifact: null,
+  activeNote: null,
   history: [],
   status: 'idle',
   data: null,
@@ -61,7 +65,7 @@ export const useArtifactStore = create<ArtifactState>((set, get) => ({
     // history so `goBack` can return to it (a Strong's lookup from a
     // verse, one verse to the next, etc.).
     const history = current && !sameArtifact(current, link) ? [...get().history, current] : get().history
-    set({ activeArtifact: link, history, status: 'loading', data: null, error: null })
+    set({ activeArtifact: link, activeNote: null, history, status: 'loading', data: null, error: null })
     try {
       const data = await fetchForLink(link)
       set({ status: 'ready', data })
@@ -70,11 +74,31 @@ export const useArtifactStore = create<ArtifactState>((set, get) => ({
     }
   },
 
+  openNote: (sessionId, noteId) =>
+    set({
+      activeNote: { sessionId, noteId },
+      activeArtifact: null,
+      history: [],
+      status: 'idle',
+      data: null,
+      error: null,
+    }),
+
+  openNewNote: (sessionId) =>
+    set({
+      activeNote: { sessionId, noteId: '' },
+      activeArtifact: null,
+      history: [],
+      status: 'idle',
+      data: null,
+      error: null,
+    }),
+
   goBack: async () => {
     const history = get().history
     if (history.length === 0) return
     const previous = history[history.length - 1]
-    set({ activeArtifact: previous, history: history.slice(0, -1), status: 'loading', data: null, error: null })
+    set({ activeArtifact: previous, activeNote: null, history: history.slice(0, -1), status: 'loading', data: null, error: null })
     try {
       const data = await fetchForLink(previous)
       set({ status: 'ready', data })
@@ -83,5 +107,5 @@ export const useArtifactStore = create<ArtifactState>((set, get) => ({
     }
   },
 
-  close: () => set({ activeArtifact: null, history: [], status: 'idle', data: null, error: null }),
+  close: () => set({ activeArtifact: null, activeNote: null, history: [], status: 'idle', data: null, error: null }),
 }))

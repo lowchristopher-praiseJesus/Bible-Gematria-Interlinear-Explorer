@@ -4,7 +4,9 @@ import * as chatApi from '@/lib/chatApi'
 
 describe('useArtifactStore', () => {
   beforeEach(() => {
-    useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
+    useArtifactStore.setState({
+      activeArtifact: null, activeNote: null, history: [], status: 'idle', data: null, error: null,
+    })
   })
 
   afterEach(() => {
@@ -116,5 +118,49 @@ describe('useArtifactStore', () => {
     await useArtifactStore.getState().openArtifact({ ...link, label: 'different label but same target' })
 
     expect(useArtifactStore.getState().history).toEqual([])
+  })
+
+  it('openNote sets activeNote and clears any active artifact and history', async () => {
+    vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
+    await useArtifactStore.getState().openArtifact({ type: 'strongs', label: '', params: { id: 'G26' } })
+    useArtifactStore.getState().openNote('session-1', 'note-1')
+    const s = useArtifactStore.getState()
+    expect(s.activeNote).toEqual({ sessionId: 'session-1', noteId: 'note-1' })
+    expect(s.activeArtifact).toBeNull()
+    expect(s.history).toEqual([])
+    expect(s.status).toBe('idle')
+  })
+
+  it('openNewNote sets activeNote with an empty noteId sentinel', () => {
+    useArtifactStore.getState().openNewNote('session-1')
+    expect(useArtifactStore.getState().activeNote).toEqual({ sessionId: 'session-1', noteId: '' })
+  })
+
+  it('openArtifact clears an active note', async () => {
+    vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
+    useArtifactStore.getState().openNote('s1', 'n1')
+    await useArtifactStore.getState().openArtifact({ type: 'strongs', label: '', params: { id: 'G26' } })
+    expect(useArtifactStore.getState().activeNote).toBeNull()
+  })
+
+  it('close clears an active note', () => {
+    useArtifactStore.getState().openNote('s1', 'n1')
+    useArtifactStore.getState().close()
+    expect(useArtifactStore.getState().activeNote).toBeNull()
+  })
+
+  it('goBack clears an active note while returning to the previous artifact', async () => {
+    const verseLink = { type: 'interlinear' as const, label: 'v', params: { versenumber: 1 } }
+    const strongsLink = { type: 'strongs' as const, label: 's', params: { id: 'G26' } }
+    vi.spyOn(chatApi, 'fetchInterlinearByVersenumber').mockResolvedValue({
+      verse: {}, navigation: { previous: 1, next: 2 }, kjvWords: [], originalWords: [], strongsDefinitions: {},
+    } as never)
+    vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
+    await useArtifactStore.getState().openArtifact(verseLink)
+    await useArtifactStore.getState().openArtifact(strongsLink)
+    useArtifactStore.setState({ activeNote: { sessionId: 's1', noteId: 'n1' } })
+    await useArtifactStore.getState().goBack()
+    expect(useArtifactStore.getState().activeNote).toBeNull()
+    expect(useArtifactStore.getState().activeArtifact).toEqual(verseLink)
   })
 })
