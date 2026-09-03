@@ -11,7 +11,7 @@ describe('App', () => {
   beforeEach(() => {
     localStorage.clear()
     useSessionsStore.setState({ sessions: {}, activeSessionId: null })
-    useArtifactStore.setState({ activeArtifact: null, status: 'idle', data: null, error: null })
+    useArtifactStore.setState({ activeArtifact: null, activeNote: null, status: 'idle', data: null, error: null })
     window.history.pushState({}, '', '/')
   })
 
@@ -80,6 +80,21 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-current', 'true')
   })
+
+  it('opening a note brings the Artifact pane forward', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+    const sid = useSessionsStore.getState().activeSessionId!
+    const note = useSessionsStore.getState().addNote(sid, 'a note')!
+
+    useArtifactStore.getState().openNote(sid, note.id)
+
+    expect(await screen.findByRole('button', { name: 'Artifact' })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it.todo('a note belonging to the newly selected session survives the switch')
 
   it('switching the active session resets the artifact store to idle', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })

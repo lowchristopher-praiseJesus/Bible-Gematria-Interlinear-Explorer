@@ -5,6 +5,7 @@ import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtif
 import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
 import { StrongsArtifact } from '@/components/artifacts/StrongsArtifact'
+import { NoteEditor } from '@/components/shell/NoteEditor'
 import type {
   BookContextResponse,
   EnglishResponse,
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export function ArtifactPane({ onClose }: Props) {
-  const { activeArtifact, history, status, data, error, close, goBack } = useArtifactStore()
+  const { activeArtifact, activeNote, history, status, data, error, close, goBack } = useArtifactStore()
 
   function handleClose() {
     close()
@@ -38,7 +39,9 @@ export function ArtifactPane({ onClose }: Props) {
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
-          <span className="font-semibold text-sm truncate">{activeArtifact?.label ?? 'Artifact'}</span>
+          <span className="font-semibold text-sm truncate">
+            {activeNote ? 'Note' : activeArtifact?.label ?? 'Artifact'}
+          </span>
         </div>
         <button
           onClick={handleClose}
@@ -49,20 +52,30 @@ export function ArtifactPane({ onClose }: Props) {
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        {status === 'idle' && (
-          <div className="text-sm text-[var(--color-text-secondary)] italic">
-            Click a link in the chat to see details here.
-          </div>
-        )}
-        {status === 'loading' && <div className="text-sm text-[var(--color-text-secondary)]">Loading…</div>}
-        {status === 'error' && <div className="text-sm text-red-600">{error}</div>}
-        {status === 'ready' && activeArtifact && !!data && (
+        {activeNote ? (
+          <NoteEditor
+            key={`${activeNote.sessionId}:${activeNote.noteId}`}
+            sessionId={activeNote.sessionId}
+            noteId={activeNote.noteId}
+          />
+        ) : (
           <>
-            {activeArtifact.type === 'interlinear' && <InterlinearArtifact data={data as ExplorerResponse} />}
-            {activeArtifact.type === 'strongs' && <StrongsArtifact data={data as StrongsResponse} />}
-            {activeArtifact.type === 'book_context' && <BookContextArtifact data={data as BookContextResponse} />}
-            {activeArtifact.type === 'gematria' && <GematriaArtifact data={data as GematriaResponse} />}
-            {activeArtifact.type === 'english_search' && <EnglishSearchArtifact data={data as EnglishResponse} />}
+            {status === 'idle' && (
+              <div className="text-sm text-[var(--color-text-secondary)] italic">
+                Click a link in the chat to see details here.
+              </div>
+            )}
+            {status === 'loading' && <div className="text-sm text-[var(--color-text-secondary)]">Loading…</div>}
+            {status === 'error' && <div className="text-sm text-red-600">{error}</div>}
+            {status === 'ready' && activeArtifact && !!data && (
+              <>
+                {activeArtifact.type === 'interlinear' && <InterlinearArtifact data={data as ExplorerResponse} />}
+                {activeArtifact.type === 'strongs' && <StrongsArtifact data={data as StrongsResponse} />}
+                {activeArtifact.type === 'book_context' && <BookContextArtifact data={data as BookContextResponse} />}
+                {activeArtifact.type === 'gematria' && <GematriaArtifact data={data as GematriaResponse} />}
+                {activeArtifact.type === 'english_search' && <EnglishSearchArtifact data={data as EnglishResponse} />}
+              </>
+            )}
           </>
         )}
       </div>

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ArtifactPane } from './ArtifactPane'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { useSessionsStore } from '@/store/useSessionsStore'
 import * as chatApi from '@/lib/chatApi'
 import type { ExplorerResponse, StrongsResponse } from '@/types/api'
 
@@ -31,7 +32,11 @@ const strongsFixture: StrongsResponse = {
 
 describe('ArtifactPane', () => {
   beforeEach(() => {
-    useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
+    localStorage.clear()
+    useSessionsStore.setState({ sessions: {}, activeSessionId: null })
+    useArtifactStore.setState({
+      activeArtifact: null, activeNote: null, history: [], status: 'idle', data: null, error: null,
+    })
   })
 
   afterEach(() => {
@@ -85,6 +90,23 @@ describe('ArtifactPane', () => {
     useArtifactStore.setState({ activeArtifact: { type: 'strongs', label: 'G26', params: {} }, status: 'ready', data: strongsFixture })
     render(<ArtifactPane />)
     expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+  })
+
+  it('renders the note editor when a note is active', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const note = useSessionsStore.getState().addNote(session.id, 'my note body')!
+    useArtifactStore.setState({ activeNote: { sessionId: session.id, noteId: note.id } })
+    render(<ArtifactPane />)
+    expect(screen.getByText('my note body')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+  })
+
+  it('titles the pane "Note" while a note is active', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const note = useSessionsStore.getState().addNote(session.id, 'x')!
+    useArtifactStore.setState({ activeNote: { sessionId: session.id, noteId: note.id } })
+    render(<ArtifactPane />)
+    expect(screen.getByText('Note')).toBeInTheDocument()
   })
 
   it('shows a back button after navigating from a verse to its Strong\'s definition, and it returns there', async () => {

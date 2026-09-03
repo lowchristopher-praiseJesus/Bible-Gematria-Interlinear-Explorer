@@ -39,6 +39,7 @@ export default function App() {
   const [sessionId, setSessionId] = useSessionIdParam()
   const sessions = useSessionsStore((s) => s.sessions)
   const activeArtifact = useArtifactStore((s) => s.activeArtifact)
+  const activeNote = useArtifactStore((s) => s.activeNote)
   const [activePane, setActivePane] = useState<Pane>('chat')
 
   useEffect(() => {
@@ -51,7 +52,10 @@ export default function App() {
   // in the panel. On narrow viewports it also brings the chat pane
   // forward, since that's where the just-started/selected session lives.
   useEffect(() => {
-    useArtifactStore.getState().close()
+    const artifact = useArtifactStore.getState()
+    if (!artifact.activeNote || artifact.activeNote.sessionId !== sessionId) {
+      artifact.close()
+    }
     setActivePane('chat')
   }, [sessionId])
 
@@ -60,8 +64,8 @@ export default function App() {
   // find the tab themselves — this is a no-op at the lg+ breakpoint,
   // where all three panes are already visible.
   useEffect(() => {
-    if (activeArtifact) setActivePane('artifact')
-  }, [activeArtifact])
+    if (activeArtifact || activeNote) setActivePane('artifact')
+  }, [activeArtifact, activeNote])
 
   const activeSession = sessionId ? sessions[sessionId] : undefined
 
@@ -102,7 +106,7 @@ export default function App() {
         </div>
 
         <div
-          className={`w-full lg:w-96 shrink-0 ${activePane === 'artifact' ? 'block' : 'hidden'} ${activeArtifact ? 'lg:block' : 'lg:hidden'}`}
+          className={`w-full lg:w-96 shrink-0 ${activePane === 'artifact' ? 'block' : 'hidden'} ${activeArtifact || activeNote ? 'lg:block' : 'lg:hidden'}`}
         >
           <ErrorBoundary>
             <ArtifactPane onClose={() => setActivePane('chat')} />
