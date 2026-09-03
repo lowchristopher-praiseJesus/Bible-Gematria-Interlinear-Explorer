@@ -9,8 +9,18 @@ Usage:
     app.mount("/api/bible-chat", create_chatbot_app())
 """
 
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Load the repo-root .env so a directly-launched process picks up LLM_PROVIDER
+# and the provider-specific vars. docker-compose wires these via `env_file`, but
+# `python -m chatbot` / uvicorn started by hand does not. Runs at import time,
+# before create_chatbot_app() imports chatbot.api -> ollama_client (which reads
+# these vars into module-level constants). Real env vars still win over .env.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 def create_chatbot_app() -> FastAPI:
