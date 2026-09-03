@@ -1,4 +1,4 @@
-import { expect, it, vi, afterEach, beforeEach, type Mock } from 'vitest'
+import { expect, it, vi, afterEach, type Mock } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AdminReportView } from './AdminReportView'
@@ -31,12 +31,8 @@ const detail = {
 
 afterEach(() => {
   vi.clearAllMocks()
-  vi.unstubAllGlobals()
 })
 
-beforeEach(() => {
-  vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
-})
 
 it('renders the transcript and a trajectory per traced turn', async () => {
   ;(getReport as unknown as Mock).mockResolvedValue(detail)
@@ -65,16 +61,18 @@ it('deletes the report and calls onDeleted', async () => {
   render(<AdminReportView id="r1" onBack={onBack} onDeleted={onDeleted} />)
   await screen.findByText('the answer was wrong')
   await userEvent.click(screen.getByRole('button', { name: /delete report/i }))
+  // Deleting now goes through a confirmation dialog.
+  await userEvent.click(await screen.findByRole('button', { name: /delete permanently/i }))
   await waitFor(() => expect(deleteReport).toHaveBeenCalledWith('r1'))
   expect(onDeleted).toHaveBeenCalledTimes(1)
   expect(onBack).not.toHaveBeenCalled()
 })
 
 it('does not delete when the confirm is cancelled', async () => {
-  ;(globalThis.confirm as unknown as Mock).mockReturnValue(false)
   ;(getReport as unknown as Mock).mockResolvedValue(detail)
   render(<AdminReportView id="r1" onBack={() => {}} onDeleted={() => {}} />)
   await screen.findByText('the answer was wrong')
   await userEvent.click(screen.getByRole('button', { name: /delete report/i }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
   expect(deleteReport).not.toHaveBeenCalled()
 })

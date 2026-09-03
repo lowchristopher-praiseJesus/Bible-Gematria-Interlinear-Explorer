@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { AdminShell } from './AdminShell'
 import { AdminListView } from './AdminListView'
 import { AdminReportView } from './AdminReportView'
 
@@ -24,16 +25,13 @@ export function AdminApp() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text-primary)]">
-      <header className="border-b border-[var(--color-theme-border)] px-4 py-2 text-sm font-semibold">
-        Troubleshooting reports
-      </header>
+    <AdminShell>
       {id ? (
         <AdminReportView key={id} id={id} onBack={back} onDeleted={back} />
       ) : (
         <AdminListView onOpen={open} />
       )}
-    </div>
+    </AdminShell>
   )
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BookOpen } from 'lucide-react'
 import { ModePickerScreen } from '@/components/shell/ModePickerScreen'
 import { ChatPane } from '@/components/shell/ChatPane'
 import { ArtifactPane } from '@/components/shell/ArtifactPane'
@@ -71,7 +72,10 @@ export default function App() {
           className={`w-full lg:w-64 shrink-0 border-r border-[var(--color-theme-border)] flex-col ${activePane === 'sessions' ? 'flex' : 'hidden'} lg:flex`}
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-theme-border)]">
-            <span className="font-semibold text-sm">Bible Explorer</span>
+            <span className="flex items-center gap-1.5 font-semibold text-sm">
+              <BookOpen className="h-4 w-4 text-[var(--color-theme-accent)]" aria-hidden="true" />
+              Bible Explorer
+            </span>
             <SettingsPanel />
           </div>
           <div className="flex-1 min-h-0">

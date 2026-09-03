@@ -26,6 +26,32 @@
   --color-theme-border: var(--theme-border);
 }
 
+/* ── Admin console design tokens ──────────────────────────────────────────
+   The admin portal (/admin) has its own visual identity, independent of the
+   four reader themes. Utilities like `bg-admin-surface` / `text-admin-muted`
+   resolve these at the element, so the light/dark swap below just works. */
+@theme {
+  --font-admin: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-admin-mono: 'Fira Code', ui-monospace, 'SF Mono', 'Menlo', monospace;
+
+  /* LIGHT literals — dark overrides live in the `.admin-scope` media query
+     below. These must be concrete values (not `var(--x)` chains) so Tailwind
+     registers the `bg-admin-*` / `text-admin-*` utilities and so a descendant
+     override inside `.admin-scope` actually takes effect. */
+  --color-admin-bg: #f5f6f8;
+  --color-admin-surface: #ffffff;
+  --color-admin-raised: #fafbfc;
+  --color-admin-border: #e6e8ec;
+  --color-admin-border-strong: #d3d7de;
+  --color-admin-text: #10131a;
+  --color-admin-muted: #5c6472;
+  --color-admin-subtle: #8b93a1;
+  --color-admin-accent: #4f46e5;
+  --color-admin-accent-hover: #4338ca;
+  --color-admin-accent-weak: #eef2ff;
+  --color-admin-accent-contrast: #ffffff;
+}
+
 /* Modern Scholarly — default */
 :root,
 :root[data-theme='scholarly'] {
@@ -66,6 +92,77 @@
   --theme-accent: #a34a2f;
   --theme-accent-contrast: #fdfbf7;
   --theme-border: #e0d3bd;
+}
+
+/* Admin console — light semantic tokens. These are consumed as
+   `bg-[var(--admin-new-bg)]` / `text-[var(--admin-danger)]` and via inline
+   styles (StatCard), so they live as plain custom properties, not `@theme`. */
+.admin-scope {
+  --admin-accent: #4f46e5;
+  --admin-new: #1d4ed8;
+  --admin-new-bg: #eef4ff;
+  --admin-triaged: #b45309;
+  --admin-triaged-bg: #fff7ed;
+  --admin-resolved: #15803d;
+  --admin-resolved-bg: #f0fdf4;
+  --admin-neutral: #4b5563;
+  --admin-neutral-bg: #f3f4f6;
+  --admin-danger: #dc2626;
+  --admin-danger-hover: #b91c1c;
+  --admin-danger-bg: #fef2f2;
+
+  font-family: var(--font-admin);
+  background: var(--color-admin-bg);
+  color: var(--color-admin-text);
+}
+
+/* Admin console — dark (follows the OS, since /admin has no theme switcher).
+   Overrides both the @theme palette utilities and the semantic tokens for
+   everything nested under `.admin-scope`. */
+@media (prefers-color-scheme: dark) {
+  .admin-scope {
+    --color-admin-bg: #0b0d11;
+    --color-admin-surface: #14171d;
+    --color-admin-raised: #191d24;
+    --color-admin-border: #262b33;
+    --color-admin-border-strong: #363c46;
+    --color-admin-text: #e7e9ec;
+    --color-admin-muted: #9aa2b1;
+    --color-admin-subtle: #6b7280;
+    --color-admin-accent: #818cf8;
+    --color-admin-accent-hover: #a5b4fc;
+    --color-admin-accent-weak: #1f2440;
+    --color-admin-accent-contrast: #0b0d11;
+
+    --admin-accent: #818cf8;
+    --admin-new: #93b4ff;
+    --admin-new-bg: #172554;
+    --admin-triaged: #fdba74;
+    --admin-triaged-bg: #3a2410;
+    --admin-resolved: #86efac;
+    --admin-resolved-bg: #0f2e1c;
+    --admin-neutral: #cbd5e1;
+    --admin-neutral-bg: #232833;
+    --admin-danger: #f87171;
+    --admin-danger-hover: #fca5a5;
+    --admin-danger-bg: #3a1a1a;
+  }
+}
+
+.admin-scope :focus-visible {
+  outline: 2px solid var(--color-admin-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {

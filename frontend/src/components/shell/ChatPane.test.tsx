@@ -426,6 +426,82 @@ describe('ChatPane', () => {
     expect(assistant?.trace?.turnId).toBe('tt')
   })
 
+  it('shows suggested starter chips when a freeform chat has no user turn yet, and sends one on click', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u0', role: 'user', text: '💬 Ask Anything' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'a0', role: 'assistant', text: 'What would you like to explore?' })
+    const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Selah likely marks a musical pause.' })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: /what does .selah. mean/i }))
+
+    expect(postChat).toHaveBeenCalledWith(expect.objectContaining({ mode: 'freeform', message: expect.stringMatching(/selah/i) }))
+    expect(await screen.findByText('Selah likely marks a musical pause.')).toBeInTheDocument()
+    // Once a real question has been asked, the starters are gone.
+    expect(screen.queryByRole('button', { name: /trace the theme of covenant/i })).not.toBeInTheDocument()
+  })
+
+  it('hides suggested starter chips once the user has sent a message', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u0', role: 'user', text: '💬 Ask Anything' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'a0', role: 'assistant', text: 'What would you like to explore?' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: 'What is love?' })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.queryByRole('button', { name: /trace the theme of covenant/i })).not.toBeInTheDocument()
+  })
+
+  it('does not show starter chips for a guided mode that opens with its own choice pills', () => {
+    const session = useSessionsStore.getState().createSession('reading_plan', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u0', role: 'user', text: '📅 Bible in a Year' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'a0', role: 'assistant', text: 'Chronological or canonical?' })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.queryByText('Try asking…')).not.toBeInTheDocument()
+  })
+
+  it('renders follow-up question chips under the latest assistant message and sends one on click', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: 'What is grace?' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1',
+      role: 'assistant',
+      text: 'Grace is unmerited favour.',
+      followUpQuestions: ['How is grace different from mercy?', 'Where does Paul discuss grace?'],
+    })
+    const postChat = vi
+      .spyOn(chatApi, 'postChat')
+      .mockResolvedValue({ type: 'chat', message: 'Mercy withholds punishment; grace gives blessing.' })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: 'How is grace different from mercy?' }))
+
+    expect(postChat).toHaveBeenCalledWith(expect.objectContaining({ message: 'How is grace different from mercy?', mode: 'freeform' }))
+    expect(await screen.findByText('Mercy withholds punishment; grace gives blessing.')).toBeInTheDocument()
+  })
+
+  it('does not render follow-up chips under a superseded assistant message', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: 'q1' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1',
+      role: 'assistant',
+      text: 'first answer',
+      followUpQuestions: ['stale follow-up'],
+    })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u2', role: 'user', text: 'q2' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a2',
+      role: 'assistant',
+      text: 'second answer',
+      followUpQuestions: ['fresh follow-up'],
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.queryByRole('button', { name: 'stale follow-up' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'fresh follow-up' })).toBeInTheDocument()
+  })
+
   it('opens the report dialog from the header', async () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     render(<ChatPane sessionId={session.id} />)

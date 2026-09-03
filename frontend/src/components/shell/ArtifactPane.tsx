@@ -1,3 +1,4 @@
+import { ChevronLeft, X } from 'lucide-react'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { BookContextArtifact } from '@/components/artifacts/BookContextArtifact'
 import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtifact'
@@ -32,9 +33,9 @@ export function ArtifactPane({ onClose }: Props) {
             <button
               onClick={() => goBack()}
               aria-label="Back"
-              className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] leading-none text-base px-1"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
             >
-              ‹
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
           <span className="font-semibold text-sm truncate">{activeArtifact?.label ?? 'Artifact'}</span>
@@ -42,9 +43,9 @@ export function ArtifactPane({ onClose }: Props) {
         <button
           onClick={handleClose}
           aria-label="Close artifact"
-          className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] leading-none text-lg px-1"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
         >
-          ×
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-4">

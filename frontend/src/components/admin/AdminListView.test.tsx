@@ -1,4 +1,4 @@
-import { expect, it, vi, afterEach, beforeEach, type Mock } from 'vitest'
+import { expect, it, vi, afterEach, type Mock } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AdminListView } from './AdminListView'
@@ -12,11 +12,6 @@ import { listReports, deleteReport, deleteAllReports } from '@/lib/adminApi'
 
 afterEach(() => {
   vi.clearAllMocks()
-  vi.unstubAllGlobals()
-})
-
-beforeEach(() => {
-  vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
 })
 
 const twoRows = {
@@ -62,12 +57,14 @@ it('deletes a single report from its row without opening it', async () => {
 
   const firstRow = (await screen.findByText('First Session')).closest('tr')!
   await userEvent.click(within(firstRow).getByRole('button', { name: /delete report r1/i }))
+  // The row action now asks for confirmation before it deletes anything.
+  await userEvent.click(await screen.findByRole('button', { name: 'Delete report' }))
 
   expect(deleteReport).toHaveBeenCalledWith('r1')
   expect(onOpen).not.toHaveBeenCalled()
   expect(screen.queryByText('First Session')).not.toBeInTheDocument()
   expect(screen.getByText('Second Session')).toBeInTheDocument()
-  expect(screen.getByText('1 report(s)')).toBeInTheDocument()
+  expect(screen.getByText('1 report')).toBeInTheDocument()
 })
 
 it('clears all reports after confirmation', async () => {
@@ -79,19 +76,20 @@ it('clears all reports after confirmation', async () => {
 
   await screen.findByText('First Session')
   await userEvent.click(screen.getByRole('button', { name: /clear all/i }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Delete all reports' }))
 
   expect(deleteAllReports).toHaveBeenCalledTimes(1)
   expect(screen.queryByText('First Session')).not.toBeInTheDocument()
-  expect(screen.getByText('0 report(s)')).toBeInTheDocument()
+  expect(screen.getByText('0 reports')).toBeInTheDocument()
 })
 
 it('does not clear when the user cancels the confirm', async () => {
-  ;(globalThis.confirm as unknown as Mock).mockReturnValue(false)
   ;(listReports as unknown as Mock).mockResolvedValue(twoRows)
   render(<AdminListView onOpen={() => {}} />)
 
   await screen.findByText('First Session')
   await userEvent.click(screen.getByRole('button', { name: /clear all/i }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
 
   expect(deleteAllReports).not.toHaveBeenCalled()
   expect(screen.getByText('First Session')).toBeInTheDocument()

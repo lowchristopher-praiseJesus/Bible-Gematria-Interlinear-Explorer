@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowUp, BookOpen, CalendarDays, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
 import { postChat } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -121,9 +122,12 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 py-10 overflow-y-auto">
       <div className="w-full max-w-lg flex flex-col items-center gap-6">
-        <div className="flex flex-col items-center gap-1.5 text-center">
-          <span className="text-4xl" aria-hidden="true">
-            📖
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span
+            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]"
+            aria-hidden="true"
+          >
+            <BookOpen className="h-6 w-6" />
           </span>
           <h1 className="text-xl font-semibold">Bible Explorer</h1>
           <p className="text-sm text-[var(--color-text-secondary)] max-w-sm">
@@ -148,9 +152,13 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
             type="submit"
             aria-label="Ask"
             disabled={asking || !askInput.trim()}
-            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] disabled:opacity-40"
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] transition-opacity disabled:opacity-40"
           >
-            {asking ? '…' : '➤'}
+            {asking ? (
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowUp className="w-4 h-4" aria-hidden="true" />
+            )}
           </button>
         </form>
 
@@ -175,7 +183,7 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
                   )
             }
           >
-            <span aria-hidden="true">📅</span> Bible in a Year
+            <CalendarDays className="h-4 w-4 shrink-0" aria-hidden="true" /> Bible in a Year
           </button>
           <button
             className={STARTER_BUBBLE}
@@ -191,7 +199,7 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
               )
             }
           >
-            <span aria-hidden="true">🌿</span> Parable Study
+            <Sprout className="h-4 w-4 shrink-0" aria-hidden="true" /> Parable Study
           </button>
           <button
             className={STARTER_BUBBLE}
@@ -204,7 +212,7 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
               )
             }
           >
-            <span aria-hidden="true">✨</span> Verse of the Day
+            <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" /> Verse of the Day
           </button>
           <button
             className={STARTER_BUBBLE}
@@ -220,10 +228,10 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
               )
             }
           >
-            <span aria-hidden="true">🔎</span> Topical Study
+            <Search className="h-4 w-4 shrink-0" aria-hidden="true" /> Topical Study
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
-            <span aria-hidden="true">💬</span> Ask Anything
+            <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything
           </button>
         </div>
       </div>

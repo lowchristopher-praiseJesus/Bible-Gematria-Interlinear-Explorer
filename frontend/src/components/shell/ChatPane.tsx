@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { fetchWikiConcept, postChat } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -9,7 +10,9 @@ import { VerseBubble, type VerseBubbleData } from './VerseBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
 import { WikiPageBubble } from './WikiPageBubble'
+import { PromptChips } from './PromptChips'
 import { ReportIssueDialog } from './ReportIssueDialog'
+import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
 import type { WikiPageResponse } from '@/types/api'
 import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
 
@@ -363,14 +366,26 @@ export function ChatPane({ sessionId }: Props) {
   const showMarkComplete = session.mode === 'reading_plan' && !!session.modeParams.plan && !!lastMessage
   const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id
 
+  // The synthetic "💬 Ask Anything" bubble a mode starter posts as the
+  // first message isn't a real question — strip a leading emoji and
+  // compare to the mode label to tell it apart from something the user
+  // actually typed. Suggested starters show only until a real question
+  // has been asked.
+  const hasUserTurn = session.messages.some(
+    (m) => m.role === 'user' && m.text.replace(/^\p{Emoji}\s*/u, '').trim() !== MODE_LABELS[session.mode]
+  )
+  const starterPrompts = SUGGESTED_PROMPTS[session.mode]
+  const showStarters = !hasUserTurn && !!starterPrompts && !isBusy
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-theme-border)]">
         <h2 className="text-sm font-semibold truncate min-w-0">{session.title}</h2>
         <button
           onClick={() => setReportOpen(true)}
-          className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+          className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
         >
+          <Flag className="w-3 h-3" aria-hidden="true" />
           Report an issue
         </button>
         <span className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]">
@@ -479,29 +494,33 @@ export function ChatPane({ sessionId }: Props) {
                       onClick={() => copyMessage(msg.id, msg.text)}
                       aria-label="Copy response"
                       title="Copy"
-                      className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] text-xs"
+                      className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
                     >
-                      {copiedId === msg.id ? '✓' : '📋'}
+                      {copiedId === msg.id ? (
+                        <Check className="w-3.5 h-3.5 text-[var(--color-green)]" aria-hidden="true" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                      )}
                     </button>
                     <button
                       onClick={() => rateMessage(msg.id, 'up')}
                       aria-label="Good response"
                       title="Good response"
-                      className={`w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-surface-alt)] text-xs ${
+                      className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-surface-alt)] transition-colors ${
                         feedback[msg.id] === 'up' ? 'text-[var(--color-theme-accent)]' : 'hover:text-[var(--color-text-primary)]'
                       }`}
                     >
-                      👍
+                      <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                     <button
                       onClick={() => rateMessage(msg.id, 'down')}
                       aria-label="Poor response"
                       title="Poor response"
-                      className={`w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-surface-alt)] text-xs ${
+                      className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-surface-alt)] transition-colors ${
                         feedback[msg.id] === 'down' ? 'text-[var(--color-theme-accent)]' : 'hover:text-[var(--color-text-primary)]'
                       }`}
                     >
-                      👎
+                      <ThumbsDown className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                     {msg.id === lastAssistantId && (
                       <button
@@ -509,17 +528,34 @@ export function ChatPane({ sessionId }: Props) {
                         disabled={regeneratingId === msg.id}
                         aria-label="Regenerate response"
                         title="Regenerate"
-                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] text-xs disabled:opacity-50"
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
                       >
-                        {regeneratingId === msg.id ? '…' : '🔁'}
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 ${regeneratingId === msg.id ? 'animate-spin' : ''}`}
+                          aria-hidden="true"
+                        />
                       </button>
                     )}
                   </div>
                 )}
+                {/* Backend follow-up suggestions, only under the latest
+                 * assistant reply so they don't stack up the transcript.
+                 * Suppressed while the freeform starters are showing, to
+                 * avoid two chip rows under the opening greeting. */}
+                {msg.id === lastAssistantId &&
+                  !msg.choicesStatus &&
+                  !showStarters &&
+                  msg.followUpQuestions &&
+                  msg.followUpQuestions.length > 0 && (
+                    <PromptChips prompts={msg.followUpQuestions} onPick={sendMessage} disabled={isBusy} />
+                  )}
               </div>
             )}
           </div>
         ))}
+        {showStarters && starterPrompts && (
+          <PromptChips label="Try asking…" prompts={starterPrompts} onPick={sendMessage} />
+        )}
         {isBusy && (
           <div
             className="flex justify-start"
@@ -565,9 +601,13 @@ export function ChatPane({ sessionId }: Props) {
           type="submit"
           aria-label="Send"
           disabled={loading || !input.trim()}
-          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] disabled:opacity-40"
+          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] transition-opacity disabled:opacity-40"
         >
-          {loading ? '…' : '➤'}
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <ArrowUp className="w-4 h-4" aria-hidden="true" />
+          )}
         </button>
       </form>
 
