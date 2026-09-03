@@ -6,6 +6,19 @@ import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { describeSession } from '@/lib/sessionDescription'
 
+// While a search is active the description line is broken into <mark> /
+// <span> fragments for highlighting, so a plain getByText(fullString)
+// no longer resolves it. This matches the innermost element whose
+// combined text is the whole description.
+function queryDescriptionLine(text: string): HTMLElement | null {
+  return screen.queryByText((_, node) => {
+    if (!node) return false
+    const own = node.textContent === text
+    const childMatches = Array.from(node.children).some((c) => c.textContent === text)
+    return own && !childMatches
+  })
+}
+
 describe('SessionsPane', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -190,6 +203,91 @@ describe('SessionsPane', () => {
     const session = useSessionsStore.getState().createSession('parable', { parableId: 'lost_sheep' })
     await waitFor(() => {
       expect(screen.getByText(describeSession(session))).toBeInTheDocument()
+    })
+  })
+
+  describe('search', () => {
+    it('hides sessions that do not match what was typed, keeping matches grouped by mode', async () => {
+      const parable = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      const topic = useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'prodigal')
+
+      expect(queryDescriptionLine(describeSession(parable))).toBeInTheDocument()
+      expect(screen.getByText(/Parable Study/)).toBeInTheDocument()
+      expect(queryDescriptionLine(describeSession(topic))).not.toBeInTheDocument()
+      expect(screen.queryByText(/Topical Study/)).not.toBeInTheDocument()
+    })
+
+    it('matches on message text, not just the session title', async () => {
+      const session = useSessionsStore.getState().createSession('freeform', {})
+      useSessionsStore.getState().appendMessage(session.id, {
+        id: 'u1',
+        role: 'user',
+        text: 'Tell me about the pearl of great price',
+      })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'pearl of great price')
+
+      expect(screen.getByText(/Ask Anything/)).toBeInTheDocument()
+    })
+
+    it('reflects the number of matches in the section header count', async () => {
+      useSessionsStore.getState().createSession('parable', { parableId: 'lost_sheep' })
+      useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveTextContent('(2)')
+      await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'prodigal')
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveTextContent('(1)')
+    })
+
+    it('shows a no-results message when the query matches nothing', async () => {
+      useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'nothingmatchesthis')
+
+      expect(screen.getByText(/no conversations match/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Parable Study/)).not.toBeInTheDocument()
+    })
+
+    it('restores the full list when the search box is cleared', async () => {
+      const parable = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      const topic = useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+      const box = screen.getByRole('searchbox', { name: /search conversations/i })
+
+      await userEvent.type(box, 'prodigal')
+      expect(queryDescriptionLine(describeSession(topic))).not.toBeInTheDocument()
+
+      await userEvent.clear(box)
+
+      expect(screen.getByText(describeSession(parable))).toBeInTheDocument()
+      expect(screen.getByText(describeSession(topic))).toBeInTheDocument()
+    })
+
+    it('reveals a match inside a section the user had collapsed', async () => {
+      const session = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
+      expect(screen.queryByText(describeSession(session))).not.toBeInTheDocument()
+
+      await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'prodigal')
+
+      expect(queryDescriptionLine(describeSession(session))).toBeInTheDocument()
+    })
+
+    it('highlights the matched text in a result row', async () => {
+      useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'prodigal')
+
+      expect(screen.getByText('Prodigal', { selector: 'mark' })).toBeInTheDocument()
     })
   })
 })
