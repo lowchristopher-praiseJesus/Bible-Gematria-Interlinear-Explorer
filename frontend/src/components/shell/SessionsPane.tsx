@@ -130,6 +130,7 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
                     {session.notes.map((note) => (
                       <button
                         key={note.id}
+                        title={noteLabel(note)}
                         onClick={() => {
                           if (session.id !== activeSessionId) onSelectSession(session.id)
                           useArtifactStore.getState().openNote(session.id, note.id)

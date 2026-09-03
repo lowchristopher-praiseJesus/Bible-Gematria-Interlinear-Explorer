@@ -133,7 +133,7 @@ export function NoteEditor({ sessionId, noteId }: Props) {
             </button>
             {confirmingDelete && (
               <button
-                className="text-xs px-2 py-1 rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+                className="text-sm px-3 py-1.5 rounded-full text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
                 onClick={() => setConfirmingDelete(false)}
               >
                 Cancel

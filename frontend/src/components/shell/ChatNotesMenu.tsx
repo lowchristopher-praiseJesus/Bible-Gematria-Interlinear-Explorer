@@ -57,7 +57,7 @@ export function ChatNotesMenu({ sessionId }: Props) {
         <Popover.Content
           align="end"
           sideOffset={6}
-          className="z-50 flex w-64 flex-col gap-1 rounded-lg border border-[var(--color-theme-border)] bg-[var(--color-surface)] p-2 shadow-lg"
+          className="z-50 flex w-56 flex-col gap-1 rounded-lg border border-[var(--color-theme-border)] bg-[var(--color-surface)] p-2 shadow-lg"
         >
           <div className="px-2 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
             Notes ({notes.length}/{MAX_NOTES_PER_SESSION})
