@@ -508,4 +508,10 @@ describe('ChatPane', () => {
     await userEvent.click(screen.getByRole('button', { name: /report an issue/i }))
     expect(await screen.findByText(/report an issue with this chat/i)).toBeInTheDocument()
   })
+
+  it('shows the notes control in the header', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument()
+  })
 })

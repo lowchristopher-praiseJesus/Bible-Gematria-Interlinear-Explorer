@@ -11,6 +11,7 @@ import { StrongsBubble } from './StrongsBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
 import { WikiPageBubble } from './WikiPageBubble'
 import { PromptChips } from './PromptChips'
+import { ChatNotesMenu } from './ChatNotesMenu'
 import { ReportIssueDialog } from './ReportIssueDialog'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
 import type { WikiPageResponse } from '@/types/api'
@@ -381,6 +382,7 @@ export function ChatPane({ sessionId }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-theme-border)]">
         <h2 className="text-sm font-semibold truncate min-w-0">{session.title}</h2>
+        <ChatNotesMenu sessionId={session.id} />
         <button
           onClick={() => setReportOpen(true)}
           className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
