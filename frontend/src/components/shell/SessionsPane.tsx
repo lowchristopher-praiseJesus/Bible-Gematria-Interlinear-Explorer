@@ -8,12 +8,14 @@ import {
   Search,
   Sparkles,
   Sprout,
+  StickyNote,
   X,
   type LucideIcon,
 } from 'lucide-react'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { describeSession } from '@/lib/sessionDescription'
+import { noteLabel } from '@/lib/noteLabel'
 import { formatSessionTimestamp } from '@/lib/formatTimestamp'
 import type { Session, SessionMode } from '@/types/session'
 
@@ -98,32 +100,51 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
               </button>
               {!isCollapsed &&
                 grouped[mode]!.map((session) => (
-                  <div
-                    key={session.id}
-                    className={`group flex items-start justify-between gap-2 px-3 py-2 cursor-pointer text-sm transition-colors ${
-                      session.id === activeSessionId ? 'bg-[var(--color-surface-alt)] font-medium' : 'hover:bg-[var(--color-surface-alt)]'
-                    }`}
-                    onClick={() => onSelectSession(session.id)}
-                  >
-                    <div className="min-w-0 flex flex-col">
-                      <span className="truncate">{describeSession(session)}</span>
-                      <span className="text-xs text-[var(--color-text-secondary)]">
-                        {formatSessionTimestamp(session.createdAt)}
-                      </span>
-                    </div>
-                    <button
-                      aria-label="Delete session"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteSession(session.id)
-                        if (session.id === activeSessionId) {
-                          useArtifactStore.getState().close()
-                        }
-                      }}
-                      className="shrink-0 rounded p-0.5 text-[var(--color-text-secondary)] opacity-40 transition-opacity hover:bg-[var(--color-surface-alt)] hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100"
+                  <div key={session.id}>
+                    <div
+                      className={`group flex items-start justify-between gap-2 px-3 py-2 cursor-pointer text-sm transition-colors ${
+                        session.id === activeSessionId ? 'bg-[var(--color-surface-alt)] font-medium' : 'hover:bg-[var(--color-surface-alt)]'
+                      }`}
+                      onClick={() => onSelectSession(session.id)}
                     >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
+                      <div className="min-w-0 flex flex-col">
+                        <span className="truncate">{describeSession(session)}</span>
+                        <span className="text-xs text-[var(--color-text-secondary)]">
+                          {formatSessionTimestamp(session.createdAt)}
+                        </span>
+                      </div>
+                      <button
+                        aria-label="Delete session"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteSession(session.id)
+                          if (session.id === activeSessionId) {
+                            useArtifactStore.getState().close()
+                          }
+                        }}
+                        className="shrink-0 rounded p-0.5 text-[var(--color-text-secondary)] opacity-40 transition-opacity hover:bg-[var(--color-surface-alt)] hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                    {session.notes.map((note) => (
+                      <button
+                        key={note.id}
+                        onClick={() => {
+                          if (session.id !== activeSessionId) onSelectSession(session.id)
+                          useArtifactStore.getState().openNote(session.id, note.id)
+                        }}
+                        className="w-full flex flex-col items-start gap-0.5 pl-9 pr-3 py-1.5 text-left text-xs hover:bg-[var(--color-surface-alt)] transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5 max-w-full">
+                          <StickyNote className="h-3 w-3 shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true" />
+                          <span className="truncate">{noteLabel(note)}</span>
+                        </span>
+                        <span className="pl-[1.125rem] text-[10px] text-[var(--color-text-secondary)]">
+                          {formatSessionTimestamp(note.createdAt)}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 ))}
             </div>

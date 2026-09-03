@@ -94,7 +94,23 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Artifact' })).toHaveAttribute('aria-current', 'true')
   })
 
-  it.todo('a note belonging to the newly selected session survives the switch')
+  it('a note belonging to the newly selected session survives the switch', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+    const other = useSessionsStore.getState().createSession('topic', { conceptSlug: 'grace' })
+    const note = useSessionsStore.getState().addNote(other.id, 'carry me over')!
+
+    // Simulate the sidebar note click: open the note, then select its session.
+    useArtifactStore.getState().openNote(other.id, note.id)
+    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    // The sidebar note row is a <button>; scope to it since the open
+    // NoteEditor also renders the note body text.
+    await userEvent.click(screen.getByRole('button', { name: /carry me over/ }))
+
+    expect(useArtifactStore.getState().activeNote).toEqual({ sessionId: other.id, noteId: note.id })
+  })
 
   it('switching the active session resets the artifact store to idle', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })

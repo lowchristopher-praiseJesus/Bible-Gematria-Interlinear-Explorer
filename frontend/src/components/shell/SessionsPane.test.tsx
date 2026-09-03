@@ -10,7 +10,42 @@ describe('SessionsPane', () => {
   beforeEach(() => {
     localStorage.clear()
     useSessionsStore.setState({ sessions: {}, activeSessionId: null })
-    useArtifactStore.setState({ activeArtifact: null, status: 'idle', data: null, error: null })
+    useArtifactStore.setState({ activeArtifact: null, activeNote: null, status: 'idle', data: null, error: null })
+  })
+
+  it("renders a session's notes as indented rows beneath it", () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().addNote(session.id, 'Note about mercy')
+    render(<SessionsPane activeSessionId={session.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+    expect(screen.getByText('Note about mercy')).toBeInTheDocument()
+  })
+
+  it('clicking a note row opens it in the artifact store', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const note = useSessionsStore.getState().addNote(session.id, 'Open me')!
+    render(<SessionsPane activeSessionId={session.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+    await userEvent.click(screen.getByText('Open me'))
+    expect(useArtifactStore.getState().activeNote).toEqual({ sessionId: session.id, noteId: note.id })
+  })
+
+  it('selects the parent session when a note from an inactive session is clicked', async () => {
+    const active = useSessionsStore.getState().createSession('freeform', {})
+    const other = useSessionsStore.getState().createSession('parable', { parableId: 'lost_sheep' })
+    const note = useSessionsStore.getState().addNote(other.id, 'from the other one')!
+    const onSelectSession = vi.fn()
+    render(<SessionsPane activeSessionId={active.id} onSelectSession={onSelectSession} onNewSession={() => {}} />)
+    await userEvent.click(screen.getByText('from the other one'))
+    expect(onSelectSession).toHaveBeenCalledWith(other.id)
+    expect(useArtifactStore.getState().activeNote).toEqual({ sessionId: other.id, noteId: note.id })
+  })
+
+  it('hides note rows when their mode section is collapsed', async () => {
+    const session = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+    useSessionsStore.getState().addNote(session.id, 'collapsible note')
+    render(<SessionsPane activeSessionId={session.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+    expect(screen.getByText('collapsible note')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
+    expect(screen.queryByText('collapsible note')).not.toBeInTheDocument()
   })
 
   it('lists a session under its mode section, with a description and calls onSelectSession when clicked', async () => {
