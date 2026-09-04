@@ -21,6 +21,13 @@ interface ReadingPlanState {
    * whenever a session's reading-plan progress needs to be mirrored here
    * (e.g. after marking a day complete). */
   setProgress: (progress: ReadingPlanProgress) => void
+  /** Change the saved plan from Settings. The two reading orders are
+   * completely different day-by-day, so switching restarts at day 1.
+   * No-op if the user hasn't started a plan yet. */
+  switchPlan: (plan: ReadingPlanProgress['plan']) => void
+  /** Restart the saved plan from day 1, keeping the same plan. No-op if
+   * the user hasn't started a plan yet. */
+  restartDayCount: () => void
   reset: () => void
 }
 
@@ -48,6 +55,12 @@ export const useReadingPlanStore = create<ReadingPlanState>()(
     (set) => ({
       progress: null,
       setProgress: (progress) => set({ progress }),
+      switchPlan: (plan) =>
+        set((state) => (state.progress ? { progress: { plan, dayIndex: 0, completedDays: [] } } : state)),
+      restartDayCount: () =>
+        set((state) =>
+          state.progress ? { progress: { ...state.progress, dayIndex: 0, completedDays: [] } } : state
+        ),
       reset: () => set({ progress: null }),
     }),
     {
