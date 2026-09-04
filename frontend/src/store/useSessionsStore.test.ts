@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionsStore } from './useSessionsStore'
+
+const TRACE = {
+  turnId: 't1',
+  requestPath: '/chat',
+  steps: [],
+  outcome: { type: 'chat', route: null, error: null },
+} as never
 
 describe('useSessionsStore', () => {
   beforeEach(() => {
@@ -105,11 +112,53 @@ describe('useSessionsStore', () => {
   it('round-trips an assistant message trace through append', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {
-      id: 'a1', role: 'assistant', text: 'hi',
-      trace: { turnId: 't1', requestPath: '/chat', steps: [], outcome: { type: 'chat', route: null, error: null } } as never,
+      id: 'a1', role: 'assistant', text: 'hi', trace: TRACE,
     })
     const stored = useSessionsStore.getState().sessions[session.id].messages[0]
     expect(stored.trace?.turnId).toBe('t1')
+  })
+
+  it('keeps trace in memory but strips it from the localStorage copy', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'hi', trace: TRACE,
+    })
+    // Still available for "Report an issue" during the session.
+    expect(useSessionsStore.getState().sessions[session.id].messages[0].trace?.turnId).toBe('t1')
+    // But never written to disk — that blob is what blows the quota.
+    const raw = localStorage.getItem('bible-explorer-sessions')!
+    expect(raw).not.toContain('turnId')
+    expect(JSON.parse(raw).state.sessions[session.id].messages[0].trace).toBeUndefined()
+  })
+
+  it('evicts the oldest session instead of throwing when storage is full', () => {
+    const older = useSessionsStore.getState().createSession('freeform', {})
+    const newer = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(newer.id, { id: 'm', role: 'user', text: 'hi' })
+
+    const realSetItem = localStorage.setItem.bind(localStorage)
+    let calls = 0
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+      calls += 1
+      // Fail only the first attempt (the full blob); let the retry after
+      // eviction go through to real storage.
+      if (calls === 1) {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+      }
+      realSetItem(key, value)
+    })
+
+    try {
+      expect(() =>
+        useSessionsStore.getState().appendMessage(newer.id, { id: 'm2', role: 'user', text: 'again' })
+      ).not.toThrow()
+
+      const persisted = JSON.parse(localStorage.getItem('bible-explorer-sessions')!)
+      expect(persisted.state.sessions[older.id]).toBeUndefined()
+      expect(persisted.state.sessions[newer.id]).toBeDefined()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('persists at version 3', () => {

@@ -5,6 +5,7 @@ import { SettingsPanel } from './SettingsPanel'
 import { useThemeStore } from '@/store/useThemeStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 
 describe('SettingsPanel', () => {
   beforeEach(() => {
@@ -13,6 +14,7 @@ describe('SettingsPanel', () => {
     document.documentElement.removeAttribute('data-theme')
     useSessionsStore.setState({ sessions: {}, activeSessionId: null })
     useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
+    useReadingPlanStore.setState({ progress: null })
   })
 
   it('opens and lists all four themes', async () => {
@@ -85,6 +87,46 @@ describe('SettingsPanel', () => {
     expect(screen.getByRole('button', { name: /clear all chat history/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /click again to confirm/i })).not.toBeInTheDocument()
     expect(Object.keys(useSessionsStore.getState().sessions)).toHaveLength(1)
+  })
+
+  it('hides the Bible in a Year controls until a plan has been started', async () => {
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.queryByText(/bible in a year/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the current plan once one has been started', async () => {
+    useReadingPlanStore.setState({ progress: { plan: 'chronological', dayIndex: 3, completedDays: [0, 1, 2] } })
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByText(/bible in a year/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^chronological/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^canonical/i })).toBeInTheDocument()
+  })
+
+  it('requires a second click to switch plan, then restarts at day 1', async () => {
+    useReadingPlanStore.setState({ progress: { plan: 'chronological', dayIndex: 5, completedDays: [0, 1, 2, 3, 4] } })
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+
+    await userEvent.click(screen.getByRole('button', { name: /^canonical/i }))
+    // Armed, not yet switched.
+    expect(useReadingPlanStore.getState().progress?.plan).toBe('chronological')
+
+    await userEvent.click(screen.getByRole('button', { name: /click again to confirm/i }))
+    expect(useReadingPlanStore.getState().progress).toEqual({ plan: 'canonical', dayIndex: 0, completedDays: [] })
+  })
+
+  it('requires a second click to reset the day count, keeping the plan', async () => {
+    useReadingPlanStore.setState({ progress: { plan: 'canonical', dayIndex: 8, completedDays: [0, 1, 2] } })
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+
+    await userEvent.click(screen.getByRole('button', { name: /reset to day 1/i }))
+    expect(useReadingPlanStore.getState().progress?.dayIndex).toBe(8)
+
+    await userEvent.click(screen.getByRole('button', { name: /click again to confirm/i }))
+    expect(useReadingPlanStore.getState().progress).toEqual({ plan: 'canonical', dayIndex: 0, completedDays: [] })
   })
 
   it('forgets an armed confirm once the panel is closed and reopened', async () => {

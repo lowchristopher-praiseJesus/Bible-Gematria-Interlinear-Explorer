@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { ModeParams, Note, Session, SessionMessage, SessionMode } from '@/types/session'
 
 interface SessionsState {
@@ -117,6 +117,112 @@ function sanitizePersistedState(
       : null
   return { sessions, activeSessionId }
 }
+
+type PersistedSessions = Pick<SessionsState, 'sessions' | 'activeSessionId'>
+
+/**
+ * `trace` is a per-turn diagnostic blob: every step can carry up to 16 KB
+ * of request preview plus 16 KB of response preview (see _MAX_PREVIEW_BYTES
+ * in chatbot/trace.py), and there are several steps per turn. It's kept in
+ * memory so "Report an issue" can attach the current session's traces, but
+ * persisting it on every message in every session is what pushes the store
+ * past the localStorage quota. Strip it from the persisted copy only.
+ */
+function stripPersistHeavyFields(message: SessionMessage): SessionMessage {
+  if (!message.trace) return message
+  const copy = { ...message }
+  delete copy.trace
+  return copy
+}
+
+function partializeSessions(state: SessionsState): PersistedSessions {
+  return {
+    activeSessionId: state.activeSessionId,
+    sessions: Object.fromEntries(
+      Object.entries(state.sessions).map(([id, session]) => [
+        id,
+        { ...session, messages: session.messages.map(stripPersistHeavyFields) },
+      ])
+    ),
+  }
+}
+
+/**
+ * localStorage.setItem throws a QuotaExceededError once the serialized store
+ * outgrows the browser's storage budget (~5 MB; tighter on mobile Safari).
+ * zustand's persist middleware calls setItem with no try/catch, so that
+ * throw propagates straight out of appendMessage and surfaces in the chat
+ * as "Sorry, something went wrong: The quota has been exceeded." (the
+ * sendMessage catch in ChatPane). Guard the write so a full quota instead
+ * degrades by evicting the least-recently-updated sessions from the
+ * persisted copy — the live in-memory store is untouched until reload.
+ */
+function isQuotaExceeded(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22 ||
+      err.code === 1014)
+  )
+}
+
+interface PersistEnvelope {
+  state?: { sessions?: Record<string, Session>; activeSessionId?: unknown }
+  version?: number
+}
+
+function setItemWithQuotaGuard(name: string, value: string): void {
+  try {
+    localStorage.setItem(name, value)
+    return
+  } catch (err) {
+    if (!isQuotaExceeded(err)) throw err
+  }
+
+  let envelope: PersistEnvelope
+  try {
+    envelope = JSON.parse(value) as PersistEnvelope
+  } catch {
+    console.warn('[sessions] storage quota exceeded; persisted blob unparseable, skipping write')
+    return
+  }
+  const sessions = envelope.state?.sessions
+  if (!sessions || Object.keys(sessions).length === 0) {
+    console.warn('[sessions] storage quota exceeded; nothing to evict, skipping write')
+    return
+  }
+
+  // Oldest-updated first, so the conversation in front of the user is the
+  // last thing to be dropped.
+  const evictionOrder = Object.values(sessions).sort(
+    (a, b) => (a.updatedAt ?? 0) - (b.updatedAt ?? 0)
+  )
+  let evicted = 0
+  for (const victim of evictionOrder) {
+    delete sessions[victim.id]
+    evicted++
+    if (envelope.state && envelope.state.activeSessionId === victim.id) {
+      envelope.state.activeSessionId = null
+    }
+    try {
+      localStorage.setItem(name, JSON.stringify(envelope))
+      console.warn(
+        `[sessions] storage quota exceeded; evicted ${evicted} old session(s) from local history`
+      )
+      return
+    } catch (err) {
+      if (!isQuotaExceeded(err)) throw err
+    }
+  }
+  console.warn('[sessions] storage quota exceeded; even an empty history did not fit, skipping write')
+}
+
+const guardedSessionStorage = createJSONStorage<PersistedSessions>(() => ({
+  getItem: (key) => localStorage.getItem(key),
+  setItem: (key, value) => setItemWithQuotaGuard(key, value),
+  removeItem: (key) => localStorage.removeItem(key),
+}))
 
 export const useSessionsStore = create<SessionsState>()(
   persist(
@@ -266,6 +372,10 @@ export const useSessionsStore = create<SessionsState>()(
     {
       name: 'bible-explorer-sessions',
       version: 3,
+      storage: guardedSessionStorage,
+      // Keep `trace` blobs out of localStorage (they're the bulk of the
+      // store's growth); they stay in memory for the current session.
+      partialize: partializeSessions,
       // `migrate` only runs when the persisted version differs from the
       // one above, so it alone can't catch corruption written under the
       // current version (the actual incident this defends against: a

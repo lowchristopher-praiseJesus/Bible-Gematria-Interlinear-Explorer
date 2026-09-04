@@ -24,7 +24,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /ask anything/i })).toBeInTheDocument()
   })
 
-  it('starting a session switches to the three-pane chat layout', async () => {
+  it('starting a session shows the chat plus the (empty) detail panel', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
@@ -33,25 +33,36 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /new session/i })).toBeInTheDocument()
   })
 
-  it('renders a Sessions/Chat/Artifact tab bar for narrow viewports', () => {
+  it('renders a mobile top bar with conversations and new-chat controls', () => {
     render(<App />)
-    expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Artifact' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Conversations' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
   })
 
-  it('defaults to the chat pane active and switches panes via the tab bar', async () => {
+  it('opens the conversations drawer from the top bar and closes it on Escape', async () => {
     render(<App />)
-    const chatTab = screen.getByRole('button', { name: 'Chat' })
-    const sessionsTab = screen.getByRole('button', { name: 'Sessions' })
-    expect(chatTab).toHaveAttribute('aria-current', 'true')
+    const menu = screen.getByRole('button', { name: 'Conversations' })
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
 
-    await userEvent.click(sessionsTab)
-    expect(sessionsTab).toHaveAttribute('aria-current', 'true')
-    expect(chatTab).not.toHaveAttribute('aria-current')
+    await userEvent.click(menu)
+    expect(menu).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.keyboard('{Escape}')
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('opening an artifact link switches the active pane to Artifact', async () => {
+  it('the top-bar New chat button returns to the mode picker', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+
+    await userEvent.click(screen.getByRole('button', { name: 'New chat' }))
+
+    expect(await screen.findByText(/start a guided study below/i)).toBeInTheDocument()
+  })
+
+  it('opening an artifact link brings the detail sheet forward', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
     render(<App />)
@@ -60,10 +71,13 @@ describe('App', () => {
 
     useArtifactStore.getState().openArtifact({ type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } })
 
-    expect(await screen.findByRole('button', { name: 'Artifact' })).toHaveAttribute('aria-current', 'true')
+    expect(await screen.findByRole('complementary', { name: 'Scripture details' })).toHaveAttribute(
+      'data-state',
+      'open'
+    )
   })
 
-  it('selecting a different session from the sessions pane brings the Chat pane forward', async () => {
+  it('selecting a session from the drawer closes the drawer', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
@@ -73,15 +87,16 @@ describe('App', () => {
     // distinct entry to click that actually changes the active session id.
     const otherSession = useSessionsStore.getState().createSession('topic', { conceptSlug: 'grace' })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
-    expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'true')
+    const menu = screen.getByRole('button', { name: 'Conversations' })
+    await userEvent.click(menu)
+    expect(menu).toHaveAttribute('aria-expanded', 'true')
 
     await userEvent.click(screen.getByText(describeSession(otherSession)))
 
-    expect(screen.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-current', 'true')
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('opening a note brings the Artifact pane forward', async () => {
+  it('opening a note brings the detail sheet forward', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
@@ -91,7 +106,10 @@ describe('App', () => {
 
     useArtifactStore.getState().openNote(sid, note.id)
 
-    expect(await screen.findByRole('button', { name: 'Artifact' })).toHaveAttribute('aria-current', 'true')
+    expect(await screen.findByRole('complementary', { name: 'Scripture details' })).toHaveAttribute(
+      'data-state',
+      'open'
+    )
   })
 
   it('a note belonging to the newly selected session survives the switch', async () => {
@@ -104,7 +122,7 @@ describe('App', () => {
 
     // Simulate the sidebar note click: open the note, then select its session.
     useArtifactStore.getState().openNote(other.id, note.id)
-    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Conversations' }))
     // The sidebar note row is a <button>; scope to it since the open
     // NoteEditor also renders the note body text.
     await userEvent.click(screen.getByRole('button', { name: /carry me over/ }))

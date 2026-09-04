@@ -45,7 +45,10 @@ async def test_bare_verse_lookups_still_answered_deterministically(monkeypatch):
     assert (await route_deterministic("John 3:16"))["data"]["reference"] == "JHN 3:16"
     assert (await route_deterministic("what does John 3:16 mean"))["type"] == "verse"
     assert (await route_deterministic("show me John 3:16"))["type"] == "verse"
-    assert (await route_deterministic("explain John 3:16"))["type"] == "study"
+    # "explain"/"commentary" requests are handed to the LLM, not the raw
+    # analysis card — route_deterministic yields so route_claude() answers.
+    assert await route_deterministic("explain John 3:16") is None
+    assert await route_deterministic("commentary on John 3:16") is None
     assert (await route_deterministic("quote 1 Thessalonians 4:13-18"))["type"] == "chat"
 
 

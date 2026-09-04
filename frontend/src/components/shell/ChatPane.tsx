@@ -8,6 +8,7 @@ import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { VerseBubble, type VerseBubbleData } from './VerseBubble'
 import { StrongsBubble } from './StrongsBubble'
+import { StudyBubble } from './StudyBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
 import { WikiPageBubble } from './WikiPageBubble'
 import { PromptChips } from './PromptChips'
@@ -380,8 +381,8 @@ export function ChatPane({ sessionId }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-theme-border)]">
-        <h2 className="text-sm font-semibold truncate min-w-0">{session.title}</h2>
+      <div className="flex items-center justify-end lg:justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-theme-border)]">
+        <h2 className="hidden lg:block text-sm font-semibold truncate min-w-0">{session.title}</h2>
         <div className="flex shrink-0 items-center gap-2">
           <ChatNotesMenu sessionId={session.id} />
           <button
@@ -391,7 +392,7 @@ export function ChatPane({ sessionId }: Props) {
             <Flag className="w-3 h-3" aria-hidden="true" />
             Report an issue
           </button>
-          <span className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]">
+          <span className="hidden lg:inline-block shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]">
             {MODE_LABELS[session.mode]}
           </span>
         </div>
@@ -420,6 +421,7 @@ export function ChatPane({ sessionId }: Props) {
                     </div>
                   )}
                   {msg.type === 'strongs' && msg.data && <StrongsBubble data={msg.data} />}
+                  {msg.type === 'study' && msg.data && <StudyBubble data={msg.data} />}
                   {msg.type === 'wiki_page' && msg.data && (
                     <WikiPageBubble
                       data={msg.data as unknown as WikiPageResponse}
@@ -589,7 +591,7 @@ export function ChatPane({ sessionId }: Props) {
       </div>
 
       <form
-        className="flex items-center gap-2 m-3 rounded-2xl border border-[var(--color-theme-border)] bg-[var(--color-surface-alt)] px-4 py-3 shadow-sm focus-within:border-[var(--color-theme-accent)] transition-colors"
+        className="flex items-center gap-2 mx-3 mt-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border border-[var(--color-theme-border)] bg-[var(--color-surface-alt)] px-4 py-3 shadow-sm focus-within:border-[var(--color-theme-accent)] transition-colors"
         onSubmit={(e) => {
           e.preventDefault()
           sendMessage(input)

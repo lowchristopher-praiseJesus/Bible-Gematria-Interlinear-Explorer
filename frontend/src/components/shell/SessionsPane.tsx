@@ -70,9 +70,11 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 border-b border-[var(--color-theme-border)] flex flex-col gap-2">
+        {/* On mobile the top bar's "+ New" is the new-chat entry point, so
+            this button only shows on the desktop sidebar. */}
         <button
           onClick={onNewSession}
-          className="w-full inline-flex items-center justify-center gap-1.5 text-sm px-3 py-2 rounded-md bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] transition-opacity hover:opacity-90"
+          className="w-full hidden lg:inline-flex items-center justify-center gap-1.5 text-sm px-3 py-2 rounded-md bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           New session
