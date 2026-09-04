@@ -31,7 +31,7 @@ node_modules
 # Docs, screenshots, scratch
 *.png
 docs
-context.md
+# NB: context.md is NOT ignored — chatbot/book_context.py parses it at start-up.
 
 # The real 4.4 GB commentary corpus is a runtime bind mount, never in an image.
 # (The empty data/{commentary,strongs} stubs ARE kept — they are not matched here.)

@@ -25,6 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt "pyyaml>=6.0"
 # Chatbot package (includes chatbot/data/ study wikis, parsed at start-up).
 COPY chatbot/ ./chatbot/
 
+# NT book-level context, parsed once at start-up by chatbot/book_context.py.
+# It resolves the file as <pkg parent>/context.md == /app/context.md; without
+# this line get_book_context() returns None for every book.
+COPY context.md ./
+
 # Vendored external package — produced by scripts/vendor-mybibletoolbox.sh.
 # Contains src/, .claude/skills/quote-bible/scripts/ (book_codes, biblehub_fetcher),
 # bible-study-tools/tool-registry.yaml, and EMPTY data/{commentary,strongs}/ dirs.
