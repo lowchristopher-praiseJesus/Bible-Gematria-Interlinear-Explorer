@@ -515,7 +515,7 @@ def _generate_follow_ups(response_type: str, data: Optional[Dict], ref: str = ""
 
     if response_type == "verse" and ref:
         return [
-            f"Explain the commentary for {ref}",
+            f"Help me understand {ref}",
             f"What do the original language words mean in {ref}?",
             f"Show me related verses on this topic",
             f"What is the historical context of {ref}?",
@@ -768,19 +768,12 @@ async def route_deterministic(
         # ── No verse ref — try keyword routing using history context ref ──────
         if context_ref:
             if any(kw in text_lower for kw in STUDY_KEYWORDS):
-                try:
-                    result = await fetch_scripture_study(context_ref, depth="medium")
-                except Exception:
-                    record_routing("fell through to LLM")
-                    return None
-                record_routing("deterministic: study keyword (context ref)")
-                return {
-                    "type": "study",
-                    "message": f"Here is the commentary for **{context_ref}** (from {context_source}).",
-                    "data": result,
-                    "route": f"Deterministic → Study keyword ({context_source}) → fetch_scripture_study()",
-                    "follow_up_questions": _generate_follow_ups("study", None, context_ref),
-                }
+                # Commentary / "explain this verse" requests are answered by
+                # the LLM (which still pulls the TBTA/Macula analysis in as a
+                # tool, and the boxed verse is re-attached by route_claude) —
+                # not a raw analysis card, which was never useful end-user prose.
+                record_routing("fell through to LLM (study keyword, context ref)")
+                return None
             if _QUOTE_KW_RE.search(text_lower):
                 resp = await _quote_response(
                     context_ref,
@@ -824,23 +817,13 @@ async def route_deterministic(
             record_routing("deterministic: book context")
             return resp
 
-    # Study / commentary patterns
+    # Study / commentary / "explain this verse" patterns are answered by the
+    # LLM (given the verse and its analysis data as tool context), not a raw
+    # commentary card — the verse-level commentary dataset is uneven and the
+    # card was never readable prose. route_claude() re-attaches the boxed verse.
     if any(kw in text_lower for kw in STUDY_KEYWORDS):
-        ref = _format_reference(*refs[0])
-
-        try:
-            result = await fetch_scripture_study(ref, depth="medium")
-        except Exception:
-            record_routing("fell through to LLM")
-            return None
-        record_routing("deterministic: study keyword")
-        return {
-            "type": "study",
-            "message": f"Here is the commentary for **{ref}**.",
-            "data": result,
-            "route": "Deterministic → Study keyword → fetch_scripture_study()",
-            "follow_up_questions": _generate_follow_ups("study", None, ref),
-        }
+        record_routing("fell through to LLM (study keyword)")
+        return None
 
     # Default: if there's a verse ref but no keyword matched, do a verse lookup
     ref = _format_reference(*refs[0])
