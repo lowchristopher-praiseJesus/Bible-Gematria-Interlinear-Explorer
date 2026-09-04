@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_caching import Cache
 from flask_cors import CORS
 from html import escape
@@ -2047,7 +2047,18 @@ def _rate_ok(ip, *, capacity=5, refill_seconds=12.0):
 @app.route('/api/bible-chat', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @app.route('/api/bible-chat/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 def chatbot_proxy(subpath=None):
-	"""Proxy requests to the FastAPI chatbot backend."""
+	"""Proxy requests to the FastAPI chatbot backend.
+
+	Streams the upstream response back to the client as bytes arrive,
+	rather than buffering the whole body first. Without `stream=True` here,
+	`requests` fully reads the chatbot's response before this view ever
+	returns — for /chat/stream's SSE body that meant every token the LLM
+	streamed still arrived at the browser in one burst only once the whole
+	answer finished generating, silently defeating the point of streaming
+	regardless of how unbuffered the chatbot's own response was. Every
+	other proxied route just has its (small, already-fast) body forwarded
+	in one or two chunks, so this changes nothing observable for them.
+	"""
 	# Build target URL
 	if subpath:
 		target_url = f"{CHATBOT_BASE_URL}/{subpath}"
@@ -2071,14 +2082,25 @@ def chatbot_proxy(subpath=None):
 			data=request.get_data(),
 			cookies=request.cookies,
 			allow_redirects=False,
-			timeout=180
+			timeout=180,
+			stream=True,
 		)
 
 		# Build Flask response
 		excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
 		response_headers = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded_headers]
 
-		return resp.content, resp.status_code, response_headers
+		# Small chunk size so an SSE frame (a few hundred bytes) is passed
+		# through as soon as it arrives instead of waiting to fill a large
+		# buffer — resp.close() on generator exit releases the upstream
+		# connection back to the pool if the client disconnects early.
+		def forward():
+			try:
+				yield from resp.iter_content(chunk_size=256)
+			finally:
+				resp.close()
+
+		return Response(stream_with_context(forward()), status=resp.status_code, headers=response_headers)
 	except requests.exceptions.ConnectionError:
 		return jsonify({'error': 'Chatbot service unavailable. Please ensure the chatbot is running on port 8000.'}), 503
 
