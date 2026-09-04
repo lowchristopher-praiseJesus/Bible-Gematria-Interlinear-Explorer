@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw } from 'lucide-react'
 import { fetchWikiConcept, postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -66,8 +66,6 @@ function groupArtifacts(artifacts: ArtifactLink[]): ArtifactGroup[] {
   return groups
 }
 
-type Feedback = 'up' | 'down'
-
 export function ChatPane({ sessionId }: Props) {
   const session = useSessionsStore((s) => s.sessions[sessionId])
   const appendMessage = useSessionsStore((s) => s.appendMessage)
@@ -82,7 +80,6 @@ export function ChatPane({ sessionId }: Props) {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
   const [resolvingChoiceId, setResolvingChoiceId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<Partial<Record<string, Feedback>>>({})
   const [reportOpen, setReportOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -303,10 +300,6 @@ export function ChatPane({ sessionId }: Props) {
     }
   }
 
-  function rateMessage(id: string, rating: Feedback) {
-    setFeedback((prev) => ({ ...prev, [id]: prev[id] === rating ? undefined : rating }))
-  }
-
   const markDayComplete = useCallback(async () => {
     if (!session) return
     const dayIndex = session.modeParams.dayIndex ?? 0
@@ -508,26 +501,6 @@ export function ChatPane({ sessionId }: Props) {
                       ) : (
                         <Copy className="w-3.5 h-3.5" aria-hidden="true" />
                       )}
-                    </button>
-                    <button
-                      onClick={() => rateMessage(msg.id, 'up')}
-                      aria-label="Good response"
-                      title="Good response"
-                      className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-surface-alt)] transition-colors ${
-                        feedback[msg.id] === 'up' ? 'text-[var(--color-theme-accent)]' : 'hover:text-[var(--color-text-primary)]'
-                      }`}
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      onClick={() => rateMessage(msg.id, 'down')}
-                      aria-label="Poor response"
-                      title="Poor response"
-                      className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-surface-alt)] transition-colors ${
-                        feedback[msg.id] === 'down' ? 'text-[var(--color-theme-accent)]' : 'hover:text-[var(--color-text-primary)]'
-                      }`}
-                    >
-                      <ThumbsDown className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                     {msg.id === lastAssistantId && (
                       <button
