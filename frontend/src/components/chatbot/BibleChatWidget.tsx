@@ -69,19 +69,27 @@ export function BibleChatWidget({
               const json = line.slice(6)
               try {
                 const event = JSON.parse(json)
-                if (event.type === 'stream' && event.chunk) {
+                if (event.type === 'stream' && event.text) {
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === assistantId
-                        ? { ...m, text: m.text + event.chunk }
+                        ? { ...m, text: event.text }
                         : m
                     )
                   )
-                } else if (event.type === 'done') {
+                } else if (event.type === 'final') {
+                  const result = event.result ?? {}
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === assistantId
-                        ? { ...m, isStreaming: false, route: event.route }
+                        ? {
+                            ...m,
+                            text: result.message || '',
+                            type: result.type,
+                            data: result.data,
+                            route: result.route,
+                            isStreaming: false,
+                          }
                         : m
                     )
                   )
@@ -89,21 +97,6 @@ export function BibleChatWidget({
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === assistantId ? { ...m, trace: event.trace } : m
-                    )
-                  )
-                } else if (event.type === 'deterministic') {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantId
-                        ? {
-                            ...m,
-                            text: event.message || '',
-                            type: event.type,
-                            data: event.data,
-                            route: event.route,
-                            isStreaming: false,
-                          }
-                        : m
                     )
                   )
                 }

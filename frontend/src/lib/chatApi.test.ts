@@ -8,6 +8,7 @@ import {
   fetchStrongsEntry,
   fetchWikiConcept,
   postChat,
+  postChatStream,
   toWireModeParams,
 } from './chatApi'
 
@@ -25,6 +26,29 @@ function mockFetchOnce(body: unknown) {
 function postedBody() {
   const [, init] = vi.mocked(fetch).mock.calls[0]
   return JSON.parse((init as RequestInit).body as string)
+}
+
+/** A `body.getReader()` stand-in that replays `frames` one chunk per
+ * `read()` call, encoded exactly as the raw bytes a fetch body would
+ * deliver — callers can split one SSE frame across multiple entries to
+ * exercise the buffering logic. */
+function fakeReader(frames: string[]) {
+  let i = 0
+  return {
+    read: async () => {
+      if (i < frames.length) {
+        return { done: false, value: new TextEncoder().encode(frames[i++]) }
+      }
+      return { done: true, value: undefined }
+    },
+  }
+}
+
+function mockStreamFetch(frames: string[]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => fakeReader(frames) } })
+  )
 }
 
 describe('chatApi', () => {
@@ -157,6 +181,72 @@ describe('chatApi', () => {
     const result = await fetchWikiConcept('s1', 'grace')
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/bible-chat/study-wikis/s1/pages/grace')
     expect(result.title).toBe('Grace')
+  })
+})
+
+describe('postChatStream', () => {
+  it('calls onChunk for each streamed chunk and resolves with the final result plus trace', async () => {
+    mockStreamFetch([
+      'data: {"type":"stream","chunk":"Hel","text":"Hel"}\n\n',
+      'data: {"type":"stream","chunk":"lo","text":"Hello"}\n\n',
+      'data: {"type":"final","result":{"type":"chat","message":"Hello there","route":"AI Fallback"}}\n\n',
+      'data: {"type":"trace","trace":{"turnId":"t1"}}\n\n',
+    ])
+    const onChunk = vi.fn()
+
+    const result = await postChatStream({ message: 'hi' }, { onChunk })
+
+    expect(onChunk).toHaveBeenNthCalledWith(1, 'Hel')
+    expect(onChunk).toHaveBeenNthCalledWith(2, 'Hello')
+    expect(result).toEqual({
+      type: 'chat',
+      message: 'Hello there',
+      route: 'AI Fallback',
+      trace: { turnId: 't1' },
+    })
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/bible-chat/chat/stream',
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('resolves with just the final result for a turn that never streams a chunk', async () => {
+    mockStreamFetch([
+      'data: {"type":"final","result":{"type":"verse","message":"Jesus wept.","route":"deterministic"}}\n\n',
+      'data: {"type":"trace","trace":{"turnId":"t2"}}\n\n',
+    ])
+
+    const result = await postChatStream({ message: 'quote John 11:35' })
+
+    expect(result.message).toBe('Jesus wept.')
+    expect(result.trace).toEqual({ turnId: 't2' })
+  })
+
+  it('reassembles an SSE frame split across multiple reads', async () => {
+    mockStreamFetch([
+      'data: {"type":"stre',
+      'am","chunk":"Hi","text":"Hi"}\n\n',
+      'data: {"type":"final","result":{"type":"chat","message":"Hi"}}\n\n',
+    ])
+    const onChunk = vi.fn()
+
+    const result = await postChatStream({ message: 'hi' }, { onChunk })
+
+    expect(onChunk).toHaveBeenCalledWith('Hi')
+    expect(result.message).toBe('Hi')
+  })
+
+  it('throws on a non-ok response instead of trying to read a stream body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error' })
+    )
+    await expect(postChatStream({ message: 'hi' })).rejects.toThrow(/500/)
+  })
+
+  it('throws if the stream ends without ever sending a final event', async () => {
+    mockStreamFetch(['data: {"type":"trace","trace":{}}\n\n'])
+    await expect(postChatStream({ message: 'hi' })).rejects.toThrow(/Stream ended without a response/)
   })
 })
 

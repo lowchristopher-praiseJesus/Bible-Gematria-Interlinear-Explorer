@@ -104,6 +104,84 @@ export async function postChat(payload: ChatPayload): Promise<ChatApiResponse> {
   return parseJsonResponse<ChatApiResponse>(res)
 }
 
+interface ChatStreamHandlers {
+  /** Called with the accumulated answer text so far, each time the AI
+   * fallback emits another token chunk. Never called at all for a turn
+   * that's answered without an LLM generation step (a deterministic
+   * match, a mode primer, Topical Study's wiki Q&A) — those arrive
+   * complete in the resolved result, same as postChat(). */
+  onChunk?: (text: string) => void
+}
+
+/**
+ * Same contract as postChat(), but reads `/chat/stream`'s SSE body instead
+ * of waiting for one buffered JSON response. The backend emits a `stream`
+ * event per token chunk (only while the AI fallback is actually
+ * generating), then exactly one `final` event carrying the complete
+ * ChatResponse-shaped payload, then a terminal `trace` event — see
+ * chatbot/api.py's _stream_chat_response(). Streaming keeps bytes flowing
+ * for the entire wait instead of one multi-minute silence, so no proxy or
+ * browser idle-connection timeout can drop it mid-answer.
+ */
+export async function postChatStream(
+  payload: ChatPayload,
+  handlers: ChatStreamHandlers = {}
+): Promise<ChatApiResponse> {
+  const { mode_params, ...rest } = payload
+  const res = await fetch(`${CHAT_API}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...rest,
+      ...(mode_params && { mode_params: toWireModeParams(mode_params) }),
+    }),
+  })
+  if (!res.ok) {
+    throw new Error(`Request failed: ${res.status} ${res.statusText}`)
+  }
+  const reader = res.body?.getReader()
+  if (!reader) {
+    throw new Error('Streaming response has no readable body')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: ChatApiResponse | undefined
+  let trace: Trace | undefined
+
+  function handleFrame(frame: string) {
+    if (!frame.startsWith('data: ')) return
+    let event: Record<string, unknown>
+    try {
+      event = JSON.parse(frame.slice('data: '.length))
+    } catch {
+      return
+    }
+    if (event.type === 'stream') {
+      handlers.onChunk?.(String(event.text ?? ''))
+    } else if (event.type === 'final') {
+      result = event.result as ChatApiResponse
+    } else if (event.type === 'trace') {
+      trace = event.trace as Trace
+    }
+  }
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const frames = buffer.split('\n\n')
+    buffer = frames.pop() ?? ''
+    for (const frame of frames) handleFrame(frame.trim())
+  }
+  if (buffer.trim()) handleFrame(buffer.trim())
+
+  if (!result) {
+    throw new Error('Stream ended without a response')
+  }
+  return trace ? { ...result, trace } : result
+}
+
 export async function fetchInterlinear(reference: string): Promise<ExplorerResponse> {
   const res = await fetch(
     `/api/explorer?reference=${encodeURIComponent(usfmToFullRef(stripVerseRange(reference)))}`

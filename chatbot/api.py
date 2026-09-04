@@ -28,8 +28,15 @@ from chatbot.tools import (
 from chatbot.book_context import get_book_context
 from chatbot.data.parables import PARABLES
 from chatbot import wiki_loader, wiki_qa
-from chatbot.router import build_mode_primer, route_deterministic, route_claude, _generate_follow_ups, _usfm_from_name
-from chatbot.streaming import sse_stream, sse_event
+from chatbot.router import (
+    build_mode_primer,
+    route_deterministic,
+    route_claude,
+    _enhance_with_cited_verse,
+    _generate_follow_ups,
+    _usfm_from_name,
+)
+from chatbot.streaming import sse_event
 from chatbot.trace import TraceRecorder, current_recorder
 
 router = APIRouter()
@@ -288,52 +295,125 @@ async def post_chat(request: ChatRequest):
 # ---------------------------------------------------------------------------
 
 async def _stream_chat_response(
-    recorder: TraceRecorder, message: str, page_context: Optional[str] = None
+    recorder: TraceRecorder, request: ChatRequest
 ) -> AsyncIterator[str]:
-    """Yield SSE events for a chat response, then a terminal trace event."""
+    """Yield SSE events for a chat response: zero or more `stream` chunk
+    events while the LLM is generating (only the AI-fallback path below ever
+    emits these — everything else already has its full answer in hand),
+    then exactly one `final` event carrying the complete ChatResponse-shaped
+    payload, then a terminal `trace` event.
+
+    Mirrors post_chat()'s routing exactly (mode primers, Topical Study's
+    wiki Q&A, deterministic matches, then the AI fallback), so switching a
+    caller from /chat to /chat/stream never changes *what* answers a
+    message — only whether the AI fallback's own generation streams in as
+    it's produced instead of arriving all at once after a silent wait.
+    """
     current_recorder.set(recorder)
     outcome_type = "chat"
     outcome_route = None
     outcome_error = None
-    try:
-        result = await route_deterministic(message, page_context=page_context)
-        if result:
-            outcome_type = result.get("type", "chat")
-            outcome_route = result.get("route")
-            yield await sse_event("deterministic", result)
-        else:
-            from chatbot.ollama_client import (
-                llm_unconfigured_error,
-                active_model_label,
-                stream_chat_with_ollama,
-            )
 
-            llm_error = llm_unconfigured_error()
-            if llm_error:
-                outcome_type = "error"
-                outcome_error = llm_error
-                yield await sse_event(
-                    "error",
-                    {"message": f"No matching pattern found and the LLM is not configured. {llm_error}"},
+    def _note_outcome(result: dict) -> None:
+        nonlocal outcome_type, outcome_route, outcome_error
+        outcome_type = result.get("type", "chat")
+        outcome_route = result.get("route")
+        outcome_error = result.get("message") if outcome_type == "error" else None
+
+    try:
+        history = (
+            [{"role": m.role, "text": m.text} for m in request.history]
+            if request.history else None
+        )
+
+        if request.mode and not request.message.strip():
+            result = await build_mode_primer(request.mode, request.mode_params)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        # A free-text message inside a Topical Study session that has
+        # already resolved to a series is a question about that series —
+        # same special case post_chat() makes before falling through to
+        # the deterministic/AI-fallback path every other mode uses.
+        series_id = (request.mode_params or {}).get("series_id") if request.mode == "topic" else None
+        if series_id:
+            concept_slug = (request.mode_params or {}).get("concept_slug")
+            result = await wiki_qa.answer(series_id, request.message, history, concept_slug=concept_slug)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        result = await route_deterministic(
+            request.message, history=history, page_context=request.page_context
+        )
+        if result:
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        from chatbot.ollama_client import (
+            llm_unconfigured_error,
+            active_model_label,
+            stream_chat_with_ollama,
+        )
+
+        llm_error = llm_unconfigured_error()
+        if llm_error:
+            result = {
+                "type": "error",
+                "message": f"No matching pattern found and the LLM is not configured. {llm_error}",
+                "data": None,
+                "route": "Error path",
+            }
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        ollama_history = (
+            [{"role": h["role"], "content": h["text"]} for h in history]
+            if history else None
+        )
+        text_buffer = ""
+        stream_error: Optional[str] = None
+        async for event in stream_chat_with_ollama(
+            request.message, conversation_history=ollama_history, page_context=request.page_context
+        ):
+            if event.get("type") == "stream":
+                chunk = event.get("chunk", "")
+                text_buffer += chunk
+                yield await sse_event("stream", {"chunk": chunk, "text": text_buffer})
+            elif event.get("type") == "error":
+                stream_error = event.get("message", "Unknown error")
+
+        if stream_error:
+            result = {"type": "error", "message": stream_error, "data": None, "route": "Error path"}
+        else:
+            result = {
+                "type": "chat",
+                "message": text_buffer,
+                "data": None,
+                "route": f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()",
+            }
+            # Same post-processing post_chat() runs on route_claude()'s
+            # result: box up any verses the answer cites, then backfill
+            # follow-up questions if the LLM didn't suggest its own.
+            result = await _enhance_with_cited_verse(result)
+            if not result.get("follow_up_questions"):
+                result["follow_up_questions"] = _generate_follow_ups(
+                    result.get("type", "chat"), result.get("data"), ""
                 )
-            else:
-                text_buffer = ""
-                async for event in stream_chat_with_ollama(message, page_context=page_context):
-                    if event.get("type") == "stream":
-                        chunk = event.get("chunk", "")
-                        text_buffer += chunk
-                        yield await sse_event("stream", {"chunk": chunk, "text": text_buffer})
-                    elif event.get("type") == "done":
-                        outcome_route = f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()"
-                        yield await sse_event("done", {"message": text_buffer, "route": outcome_route})
-                    elif event.get("type") == "error":
-                        outcome_type = "error"
-                        outcome_error = event.get("message", "Unknown error")
-                        yield await sse_event("error", {"message": outcome_error})
+        _note_outcome(result)
+        yield await sse_event("final", {"result": result})
     except Exception as e:  # noqa: BLE001
         outcome_type = "error"
         outcome_error = f"{type(e).__name__}: {e}"
-        yield await sse_event("error", {"message": f"Server error: {outcome_error}"})
+        yield await sse_event("final", {"result": {
+            "type": "error",
+            "message": f"Server error: {outcome_error}",
+            "data": None,
+            "route": "Error path",
+        }})
     finally:
         trace = recorder.finalize(outcome_type, route=outcome_route, error=outcome_error)
         yield await sse_event("trace", {"trace": trace})
@@ -351,6 +431,6 @@ async def post_chat_stream(request: ChatRequest):
         page_context=request.page_context,
     )
     return StreamingResponse(
-        sse_stream(_stream_chat_response(recorder, request.message, page_context=request.page_context)),
+        _stream_chat_response(recorder, request),
         media_type="text/event-stream",
     )

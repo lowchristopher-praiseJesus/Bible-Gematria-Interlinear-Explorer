@@ -27,7 +27,7 @@ describe('ChatPane', () => {
   it('renders existing messages and sends a new one on submit', async () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'assistant', text: 'Ask me anything.' })
-    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Sure, go ahead.' })
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Sure, go ahead.' })
 
     render(<ChatPane sessionId={session.id} />)
     expect(screen.getByText('Ask me anything.')).toBeInTheDocument()
@@ -211,12 +211,15 @@ describe('ChatPane', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: 'What is love?' })
     useSessionsStore.getState().appendMessage(session.id, { id: 'a1', role: 'assistant', text: 'First answer.' })
-    const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Second answer.' })
+    const postChatStream = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Second answer.' })
 
     render(<ChatPane sessionId={session.id} />)
     await userEvent.click(screen.getByRole('button', { name: /regenerate response/i }))
 
-    expect(postChat).toHaveBeenCalledWith(expect.objectContaining({ message: 'What is love?', mode: 'freeform' }))
+    expect(postChatStream).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'What is love?', mode: 'freeform' }),
+      expect.anything()
+    )
     expect(await screen.findByText('Second answer.')).toBeInTheDocument()
     expect(screen.queryByText('First answer.')).not.toBeInTheDocument()
     const updated = useSessionsStore.getState().sessions[session.id]
@@ -379,7 +382,7 @@ describe('ChatPane', () => {
     Element.prototype.scrollIntoView = scrollIntoView
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'assistant', text: 'Ask me anything.' })
-    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Sure, go ahead.' })
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Sure, go ahead.' })
 
     render(<ChatPane sessionId={session.id} />)
     scrollIntoView.mockClear() // ignore the initial-render scroll; only care about growth from here
@@ -393,8 +396,8 @@ describe('ChatPane', () => {
 
   it('shows a "thinking" indicator while a response is pending, then removes it', async () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
-    let resolvePost!: (value: Awaited<ReturnType<typeof chatApi.postChat>>) => void
-    vi.spyOn(chatApi, 'postChat').mockImplementation(
+    let resolvePost!: (value: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void
+    vi.spyOn(chatApi, 'postChatStream').mockImplementation(
       () => new Promise((resolve) => { resolvePost = resolve })
     )
 
@@ -412,7 +415,7 @@ describe('ChatPane', () => {
 
   it('stores the response trace on the assistant message', async () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
-    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({
       type: 'chat', message: 'answer',
       trace: { turnId: 'tt', requestPath: '/chat', steps: [], outcome: { type: 'chat', route: null, error: null } },
     } as never)
@@ -430,12 +433,15 @@ describe('ChatPane', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, { id: 'u0', role: 'user', text: '💬 Ask Anything' })
     useSessionsStore.getState().appendMessage(session.id, { id: 'a0', role: 'assistant', text: 'What would you like to explore?' })
-    const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Selah likely marks a musical pause.' })
+    const postChatStream = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Selah likely marks a musical pause.' })
 
     render(<ChatPane sessionId={session.id} />)
     await userEvent.click(screen.getByRole('button', { name: /what does .selah. mean/i }))
 
-    expect(postChat).toHaveBeenCalledWith(expect.objectContaining({ mode: 'freeform', message: expect.stringMatching(/selah/i) }))
+    expect(postChatStream).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'freeform', message: expect.stringMatching(/selah/i) }),
+      expect.anything()
+    )
     expect(await screen.findByText('Selah likely marks a musical pause.')).toBeInTheDocument()
     // Once a real question has been asked, the starters are gone.
     expect(screen.queryByRole('button', { name: /trace the theme of covenant/i })).not.toBeInTheDocument()
@@ -469,14 +475,17 @@ describe('ChatPane', () => {
       text: 'Grace is unmerited favour.',
       followUpQuestions: ['How is grace different from mercy?', 'Where does Paul discuss grace?'],
     })
-    const postChat = vi
-      .spyOn(chatApi, 'postChat')
+    const postChatStream = vi
+      .spyOn(chatApi, 'postChatStream')
       .mockResolvedValue({ type: 'chat', message: 'Mercy withholds punishment; grace gives blessing.' })
 
     render(<ChatPane sessionId={session.id} />)
     await userEvent.click(screen.getByRole('button', { name: 'How is grace different from mercy?' }))
 
-    expect(postChat).toHaveBeenCalledWith(expect.objectContaining({ message: 'How is grace different from mercy?', mode: 'freeform' }))
+    expect(postChatStream).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'How is grace different from mercy?', mode: 'freeform' }),
+      expect.anything()
+    )
     expect(await screen.findByText('Mercy withholds punishment; grace gives blessing.')).toBeInTheDocument()
   })
 

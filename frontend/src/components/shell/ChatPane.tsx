@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
-import { fetchWikiConcept, postChat } from '@/lib/chatApi'
+import { fetchWikiConcept, postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -102,6 +102,39 @@ export function ChatPane({ sessionId }: Props) {
     }
   }, [session?.messages, isBusy])
 
+  // Streams an assistant reply into place: the message isn't created until
+  // the first token chunk lands, so a turn that never streams at all (a
+  // deterministic match, a mode primer, Topical Study's wiki Q&A — none of
+  // those involve a live LLM generation) still just pops in complete, the
+  // same as the old plain postChat() flow.
+  const streamAssistantReply = useCallback(
+    async (assistantId: string, payload: Parameters<typeof postChatStream>[0]) => {
+      let started = false
+      const put = (patch: Partial<SessionMessage>) => {
+        if (!started) {
+          started = true
+          appendMessage(sessionId, { id: assistantId, role: 'assistant', text: '', ...patch })
+        } else {
+          updateMessage(sessionId, assistantId, patch)
+        }
+      }
+      try {
+        const response = await postChatStream(payload, { onChunk: (text) => put({ text }) })
+        put({
+          text: response.message,
+          type: response.type,
+          data: response.data ?? undefined,
+          artifacts: response.artifacts,
+          followUpQuestions: response.follow_up_questions,
+          trace: response.trace,
+        })
+      } catch (err) {
+        put({ text: 'Sorry, something went wrong: ' + errorMessage(err) })
+      }
+    },
+    [sessionId, appendMessage, updateMessage]
+  )
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || !session) return
@@ -111,33 +144,17 @@ export function ChatPane({ sessionId }: Props) {
       setInput('')
       setLoading(true)
       try {
-        const response = await postChat({
+        await streamAssistantReply(genId(), {
           message: text,
           history,
           mode: session.mode,
           mode_params: { ...session.modeParams },
         })
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: response.message,
-          type: response.type,
-          data: response.data ?? undefined,
-          artifacts: response.artifacts,
-          followUpQuestions: response.follow_up_questions,
-          trace: response.trace,
-        })
-      } catch (err) {
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: 'Sorry, something went wrong: ' + errorMessage(err),
-        })
       } finally {
         setLoading(false)
       }
     },
-    [session, sessionId, appendMessage]
+    [session, sessionId, appendMessage, streamAssistantReply]
   )
 
   // Re-asks the user message that produced this response, discarding the
@@ -153,33 +170,17 @@ export function ChatPane({ sessionId }: Props) {
       setRegeneratingId(assistantMessageId)
       truncateMessagesFrom(sessionId, assistantMessageId)
       try {
-        const response = await postChat({
+        await streamAssistantReply(genId(), {
           message: userMessage.text,
           history,
           mode: session.mode,
           mode_params: { ...session.modeParams },
         })
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: response.message,
-          type: response.type,
-          data: response.data ?? undefined,
-          artifacts: response.artifacts,
-          followUpQuestions: response.follow_up_questions,
-          trace: response.trace,
-        })
-      } catch (err) {
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: 'Sorry, something went wrong: ' + errorMessage(err),
-        })
       } finally {
         setRegeneratingId(null)
       }
     },
-    [session, sessionId, regeneratingId, truncateMessagesFrom, appendMessage]
+    [session, sessionId, regeneratingId, truncateMessagesFrom, streamAssistantReply]
   )
 
   // Finalizes a "which option?" prompt: merges the picked modeParams into

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowUp, BookOpen, CalendarDays, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
-import { postChat } from '@/lib/chatApi'
+import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
@@ -96,7 +96,13 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     const session = createSession('freeform', {})
     appendMessage(session.id, { id: genId(), role: 'user', text: trimmed })
     try {
-      const response = await postChat({ message: trimmed, mode: 'freeform', mode_params: {} })
+      // A real question (unlike the mode primers above, which post an
+      // empty message) — goes through the streaming endpoint so a slow AI
+      // fallback answer never sits on one silent buffered request. The
+      // session is created up front and the caller navigates into it
+      // right after, so there's no live bubble to grow here; only the
+      // finished response is rendered.
+      const response = await postChatStream({ message: trimmed, mode: 'freeform', mode_params: {} })
       appendMessage(session.id, {
         id: genId(),
         role: 'assistant',

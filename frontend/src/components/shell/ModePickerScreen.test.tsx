@@ -148,8 +148,8 @@ describe('ModePickerScreen', () => {
   })
 
   it('typing directly into the landing input starts a freeform session with that message', async () => {
-    const postChatSpy = vi
-      .spyOn(chatApi, 'postChat')
+    const postChatStreamSpy = vi
+      .spyOn(chatApi, 'postChatStream')
       .mockResolvedValue({ type: 'chat', message: 'Great question — here is what I found.' })
     const onSessionStarted = vi.fn()
     render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
@@ -158,7 +158,7 @@ describe('ModePickerScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
 
     expect(onSessionStarted).toHaveBeenCalled()
-    expect(postChatSpy).toHaveBeenCalledWith(
+    expect(postChatStreamSpy).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'What does John 3:16 mean?', mode: 'freeform' })
     )
     const session = firstSession()

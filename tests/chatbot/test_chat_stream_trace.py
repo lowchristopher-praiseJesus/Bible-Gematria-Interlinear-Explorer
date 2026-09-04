@@ -2,26 +2,14 @@ import json
 
 
 def _events(raw: str):
-    """Parse the SSE body into the list of chat events.
-
-    `sse_stream` wraps every string `_stream_chat_response` yields in an outer
-    ``data: {"chunk": <str>, "done": <bool>}`` frame, so each real chat event
-    (`deterministic`, `stream`, `done`, `error`, `trace`) arrives as the
-    ``chunk`` payload of an outer frame — itself a ``data: {...}`` line. Unwrap
-    both layers here so assertions can read the inner event directly, the same
-    two-step parse the browser SSE reader performs.
-    """
+    """Parse the SSE body into the list of chat events — one `data: {...}`
+    line per event (`final`, `stream`, `trace`)."""
     out = []
     for chunk in raw.strip().split("\n\n"):
         line = chunk.strip()
         if not line.startswith("data: "):
             continue
-        outer = json.loads(line[len("data: "):])
-        inner = outer.get("chunk", "") if isinstance(outer, dict) else ""
-        if isinstance(inner, str) and inner.startswith("data: "):
-            out.append(json.loads(inner[len("data: "):].strip()))
-        elif isinstance(outer, dict) and "type" in outer:
-            out.append(outer)
+        out.append(json.loads(line[len("data: "):]))
     return out
 
 
@@ -37,6 +25,10 @@ def test_stream_ends_with_a_trace_event_for_a_deterministic_turn(client, monkeyp
     resp = client.post("/chat/stream", json={"message": "quote John 11:35"})
     assert resp.status_code == 200
     events = _events(resp.text)
+
+    final = next(e for e in events if e["type"] == "final")
+    assert final["result"]["type"] == "verse"
+
     assert events[-1]["type"] == "trace"
     trace = events[-1]["trace"]
     assert trace["requestPath"] == "/chat/stream"
