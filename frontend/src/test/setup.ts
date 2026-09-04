@@ -76,3 +76,21 @@ function ensureStorage(name: 'localStorage' | 'sessionStorage'): void {
 
 ensureStorage('localStorage')
 ensureStorage('sessionStorage')
+
+// jsdom ships no `matchMedia`; the shell's viewport-adaptive behaviour
+// (mobile drawer / sheet vs. desktop columns) needs it. Default to the
+// desktop branch (`matches: false`); a test that needs the compact branch
+// can override `window.matchMedia` for its duration.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}

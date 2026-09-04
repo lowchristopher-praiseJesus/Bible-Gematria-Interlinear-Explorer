@@ -49,8 +49,10 @@ export function SettingsPanel() {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
-          className="bg-[var(--color-surface)] border border-[var(--color-theme-border)] rounded-lg shadow-lg p-2 flex flex-col gap-1 w-56"
+          align="end"
           sideOffset={6}
+          collisionPadding={8}
+          className="z-50 bg-[var(--color-surface)] border border-[var(--color-theme-border)] rounded-lg shadow-lg p-2 flex flex-col gap-1 w-56"
         >
           <div className="text-xs font-medium text-[var(--color-text-secondary)] px-2 py-1">Theme</div>
           {THEMES.map((t) => (

@@ -176,6 +176,39 @@ body {
   color: var(--color-text-primary);
 }
 
+/* The mobile Conversations drawer parks off-screen with a transform; stop
+   that from spawning a horizontal scrollbar while it's closed. */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Mobile: hold form controls at >=16px so iOS Safari doesn't zoom the page
+   when one is focused. The denser 14px sizing stays on desktop. */
+@media (max-width: 1023.98px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* A visible focus ring for keyboard users on clickable controls. Form
+   fields are deliberately excluded: the composer inputs show their
+   affordance through a parent `focus-within` ring, and bare inputs keep
+   the browser's own focus outline — a ring here would just draw a second
+   box inside them. The admin console defines its own inside `.admin-scope`. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='menuitem']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-theme-accent);
+  outline-offset: 2px;
+}
+
 /* Hebrew/Greek word element */
 w {
   display: inline;
