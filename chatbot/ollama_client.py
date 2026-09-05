@@ -413,6 +413,74 @@ async def chat_with_ollama(
     )
 
 
+_FOLLOW_UP_SYSTEM_PROMPT = """Given the exchange below, suggest 3 short follow-up questions the user might naturally ask next about this Bible topic.
+
+Return ONLY a JSON array of strings — no markdown, no numbering, no commentary. Each question should be concise (under 12 words) and specific to what was just discussed, not generic."""
+
+
+def _parse_follow_up_questions(content: str) -> List[str]:
+    """Best-effort extraction of a JSON string array from LLM output that
+    may be wrapped in a markdown fence or padded with stray prose. Returns
+    [] for anything that isn't a JSON array of (at least some) strings —
+    callers treat that as "the LLM didn't give us anything usable" and fall
+    back to the generic templates."""
+    text = content.strip()
+    fence_match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+    if fence_match:
+        text = fence_match.group(1).strip()
+    if not text.startswith("[") and not text.startswith("{"):
+        # Stray prose around the array ("Sure, here you go:\n[...]\nEnjoy!")
+        # — but leave a genuine JSON object alone rather than reaching into
+        # it for a nested array; that's a shape we don't understand, not
+        # padding to strip.
+        bracket_match = re.search(r"\[.*\]", text, re.DOTALL)
+        if bracket_match:
+            text = bracket_match.group(0)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [q.strip() for q in parsed if isinstance(q, str) and q.strip()][:4]
+
+
+async def generate_llm_follow_ups(
+    user_message: str,
+    assistant_message: str,
+    page_context: Optional[str] = None,
+) -> List[str]:
+    """Ask the active LLM for follow-up questions grounded in the exchange
+    that just happened, instead of the generic per-type templates
+    (_generate_follow_ups() in router.py). This is a nice-to-have
+    enhancement, never a hard dependency — any failure (provider not
+    configured, HTTP error, unparseable reply) returns [] so callers can
+    fall back to the templates."""
+    if llm_unconfigured_error():
+        return []
+
+    context_line = f"\n(The user was viewing {page_context} in the Bible Explorer.)" if page_context else ""
+    prompt = f"User asked: {user_message}\n\nAssistant answered: {assistant_message}{context_line}"
+    messages = [
+        {"role": "system", "content": _FOLLOW_UP_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    provider, url, headers, payload = _build_request(messages, stream=False)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=30.0)
+            response.raise_for_status()
+            result = response.json()
+        except Exception:  # noqa: BLE001 — best-effort; templates are the fallback
+            return []
+
+    content, error = _extract_content(provider, result)
+    if not content or error:
+        return []
+    return _parse_follow_up_questions(content)
+
+
 async def stream_chat_with_ollama(
     message: str,
     conversation_history: Optional[List[Dict]] = None,

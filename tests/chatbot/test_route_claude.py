@@ -160,3 +160,71 @@ async def test_ai_error_response_is_left_untouched(monkeypatch):
     result = await route_claude("anything")
 
     assert result["type"] == "error"
+
+
+# --- LLM-generated follow-ups (vs. the generic per-type templates) --------
+
+
+@pytest.mark.asyncio
+async def test_llm_follow_ups_win_over_the_template_when_available(monkeypatch):
+    async def fake_ollama(message, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "The Bible was written over roughly 1,500 years.", "data": None}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        assert user_message == "How long did it take to write the Bible?"
+        assert assistant_message == "The Bible was written over roughly 1,500 years."
+        return ["Who were the human authors?", "What language was the Old Testament written in?"]
+
+    monkeypatch.setattr("chatbot.router.chat_with_ollama", fake_ollama)
+    monkeypatch.setattr("chatbot.router.generate_llm_follow_ups", fake_llm_follow_ups)
+
+    result = await route_claude("How long did it take to write the Bible?")
+
+    assert result["follow_up_questions"] == [
+        "Who were the human authors?",
+        "What language was the Old Testament written in?",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_leaves_follow_ups_unset_when_the_llm_gives_none(monkeypatch):
+    # route_claude() itself makes no template decision — it's api.py's job
+    # to backfill the generic template when the LLM call gives nothing
+    # usable (see test_chat_endpoint_trace.py-style coverage at that layer).
+    async def fake_ollama(message, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "The Bible was written over roughly 1,500 years.", "data": None}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        return []
+
+    monkeypatch.setattr("chatbot.router.chat_with_ollama", fake_ollama)
+    monkeypatch.setattr("chatbot.router.generate_llm_follow_ups", fake_llm_follow_ups)
+
+    result = await route_claude("How long did it take to write the Bible?")
+
+    assert not result.get("follow_up_questions")
+
+
+@pytest.mark.asyncio
+async def test_llm_follow_ups_also_override_the_boxed_cited_verse_template(monkeypatch):
+    async def fake_ollama(message, conversation_history=None, page_context=None):
+        return {
+            "type": "chat",
+            "message": 'The shortest verse is John 11:35:\n\n> "Jesus wept."',
+            "data": None,
+        }
+
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": "Jesus wept."}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        return ["Why did Jesus weep here?"]
+
+    monkeypatch.setattr("chatbot.router.chat_with_ollama", fake_ollama)
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr("chatbot.router.generate_llm_follow_ups", fake_llm_follow_ups)
+
+    result = await route_claude("What's the shortest verse in the Bible?")
+
+    assert result["type"] == "verse"
+    assert result["follow_up_questions"] == ["Why did Jesus weep here?"]
