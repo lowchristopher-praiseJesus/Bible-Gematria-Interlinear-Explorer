@@ -33,6 +33,7 @@ from chatbot.router import (
     route_deterministic,
     route_claude,
     _enhance_with_cited_verse,
+    _attach_llm_follow_ups,
     _generate_follow_ups,
     _usfm_from_name,
 )
@@ -396,9 +397,11 @@ async def _stream_chat_response(
                 "route": f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()",
             }
             # Same post-processing post_chat() runs on route_claude()'s
-            # result: box up any verses the answer cites, then backfill
-            # follow-up questions if the LLM didn't suggest its own.
+            # result: box up any verses the answer cites, ask the LLM for
+            # follow-ups grounded in this exchange, then backfill the
+            # generic template if that gave us nothing usable.
             result = await _enhance_with_cited_verse(result)
+            result = await _attach_llm_follow_ups(result, request.message, request.page_context)
             if not result.get("follow_up_questions"):
                 result["follow_up_questions"] = _generate_follow_ups(
                     result.get("type", "chat"), result.get("data"), ""

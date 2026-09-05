@@ -844,7 +844,7 @@ async def route_deterministic(
 # Ollama cloud AI fallback
 # ---------------------------------------------------------------------------
 
-from chatbot.ollama_client import chat_with_ollama, stream_chat_with_ollama
+from chatbot.ollama_client import chat_with_ollama, stream_chat_with_ollama, generate_llm_follow_ups
 
 
 _MAX_CITED_VERSES = 5
@@ -937,6 +937,23 @@ async def _enhance_with_cited_verse(result: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+async def _attach_llm_follow_ups(
+    result: Dict[str, Any], message: str, page_context: Optional[str] = None
+) -> Dict[str, Any]:
+    """Give the AI-fallback path LLM-authored follow-up questions grounded
+    in the actual exchange, in place of the generic per-type templates
+    every deterministic route uses (_generate_follow_ups() above). Falls
+    through silently — leaving whatever follow-ups (if any) `result`
+    already has — when the LLM call fails or returns nothing usable;
+    callers still have the template backfill in api.py as a safety net."""
+    if result.get("type") not in ("chat", "verse", "verses") or not result.get("message"):
+        return result
+    follow_ups = await generate_llm_follow_ups(message, result["message"], page_context)
+    if follow_ups:
+        result["follow_up_questions"] = follow_ups
+    return result
+
+
 async def route_claude(
     message: str,
     history: Optional[List[Dict]] = None,
@@ -954,7 +971,8 @@ async def route_claude(
     result = await chat_with_ollama(
         message, conversation_history=ollama_history, page_context=page_context
     )
-    return await _enhance_with_cited_verse(result)
+    result = await _enhance_with_cited_verse(result)
+    return await _attach_llm_follow_ups(result, message, page_context)
 
 
 # ---------------------------------------------------------------------------
