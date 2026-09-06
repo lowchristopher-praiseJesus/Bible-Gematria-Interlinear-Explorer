@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { VerseFullscreen } from './VerseFullscreen'
 
 export interface VerseBubbleData {
   reference?: string
@@ -21,6 +22,7 @@ export function VerseBubble({ data }: Props) {
   const codes = Object.keys(translations)
   const defaultCode = codes.find((c) => c.endsWith('-KJV')) ?? codes[0]
   const [selected, setSelected] = useState(defaultCode)
+  const [fullscreen, setFullscreen] = useState(false)
   const openArtifact = useArtifactStore((s) => s.openArtifact)
 
   if (codes.length === 0) return null
@@ -36,21 +38,38 @@ export function VerseBubble({ data }: Props) {
     <div className="mt-1 border border-[var(--color-theme-border)] rounded-lg p-2 max-w-md">
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-xs">{reference}</span>
-        {codes.length > 1 && (
-          <select
-            value={activeCode}
-            onChange={(e) => setSelected(e.target.value)}
-            aria-label="Translation"
-            className="text-xs border border-[var(--color-theme-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)]"
+        <div className="flex items-center gap-1.5">
+          {codes.length > 1 && (
+            <select
+              value={activeCode}
+              onChange={(e) => setSelected(e.target.value)}
+              aria-label="Translation"
+              className="text-xs border border-[var(--color-theme-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)]"
+            >
+              {codes.map((code) => (
+                <option key={code} value={code}>
+                  {translationLabel(code)}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            aria-label="Maximize verse"
+            className="text-xs px-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
           >
-            {codes.map((code) => (
-              <option key={code} value={code}>
-                {translationLabel(code)}
-              </option>
-            ))}
-          </select>
-        )}
+            ⛶
+          </button>
+        </div>
       </div>
+      <VerseFullscreen
+        reference={reference}
+        translations={translations}
+        initialTranslationCode={activeCode}
+        open={fullscreen}
+        onClose={() => setFullscreen(false)}
+      />
       <div className="mt-1.5 flex items-baseline gap-1.5 text-sm">
         {reference && (
           <button

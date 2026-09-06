@@ -85,6 +85,27 @@ describe('VerseBubble', () => {
     })
   })
 
+  it('maximizes the verse into a fullscreen view and back', async () => {
+    vi.spyOn(chatApi, 'fetchInterlinear').mockResolvedValue({
+      verse: { id: 1, ref: 'John 3:16', bnum: 43, cnum: 3, vnum: 16, Ch: '', wordnum: 0, letternum: 0, total: 0, text1769: '', textAV1611: '', language: 'Greek', originalText: '', stephanusText: null, stephanusTotal: null, lcFiles: [], hasQere: false, code: null, alert: null },
+      navigation: { previous: 1, next: 2 },
+      kjvWords: [],
+      originalWords: [],
+      strongsDefinitions: {},
+    })
+    render(
+      <VerseBubble
+        data={{ reference: 'JHN 3:16', translations: { 'eng-KJV': 'KJV text', 'eng-NIV': 'NIV text' } }}
+      />
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /maximize verse/i }))
+    expect(screen.getByRole('group', { name: /original view/i })).toHaveTextContent('KJV text')
+
+    await userEvent.click(screen.getByRole('button', { name: /exit fullscreen/i }))
+    expect(screen.queryByRole('group', { name: /original view/i })).not.toBeInTheDocument()
+  })
+
   it('shows the reference in a bordered box, matching the reading-plan verse box', () => {
     const { container } = render(
       <VerseBubble data={{ reference: 'JHN 3:16', translations: { 'eng-KJV': 'For God so loved the world...' } }} />
