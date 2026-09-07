@@ -53,6 +53,16 @@ def test_spoofed_forwarded_host_is_ignored_in_url(app_client):
     assert "evil.example" not in resp.get_json()["url"]
 
 
+def test_public_base_url_env_wins_over_host_header(app_client, monkeypatch):
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:5173/")
+    resp = app_client.post(
+        "/api/share", json=_body(), headers={"Host": "localhost:5000"}
+    )
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert data["url"] == f"http://localhost:5173/?import={data['token']}"
+
+
 def test_stored_row_strips_trace_and_derives_counts(app_client, tmp_path):
     token = app_client.post("/api/share", json=_body()).get_json()["token"]
     db = ss.get_db(f"sqlite:///{tmp_path / 'shares.db'}")
