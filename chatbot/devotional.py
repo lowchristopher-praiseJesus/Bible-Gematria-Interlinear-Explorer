@@ -198,3 +198,26 @@ async def resolve_seed_verse(raw: Optional[str], source: str) -> Tuple[str, Dict
     if not translations:
         raise DevotionalError(f"No verse text for {ref}")
     return ref, translations
+
+
+async def stream_devotional(
+    raw: Optional[str], source: str, page_context: Optional[str] = None
+) -> AsyncIterator[Dict[str, object]]:
+    """Resolve the seed verse, then stream the devotional. Yields
+    {"type": "stream", "chunk": str} while generating, then one terminal
+    event: {"type": "error", "message": str} on an LLM stream failure, or
+    {"type": "done", "text", "reference", "translations"} on success.
+    A DevotionalError from seed-verse resolution propagates to the caller."""
+    reference, translations = await resolve_seed_verse(raw, source)
+    verse_text = _kjv_text(translations)
+    prompt = build_devotional_prompt(reference, verse_text)
+
+    full = ""
+    async for ev in stream_devotional_completion(DEVOTIONAL_SYSTEM_PROMPT, prompt, max_tokens=3600):
+        if ev["type"] == "stream":
+            full += ev["chunk"]
+            yield {"type": "stream", "chunk": ev["chunk"]}
+        elif ev["type"] == "error":
+            yield {"type": "error", "message": ev["message"]}
+            return
+    yield {"type": "done", "text": full, "reference": reference, "translations": translations}
