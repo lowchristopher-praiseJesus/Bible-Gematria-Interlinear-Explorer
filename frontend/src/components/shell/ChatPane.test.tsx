@@ -523,4 +523,99 @@ describe('ChatPane', () => {
     render(<ChatPane sessionId={session.id} />)
     expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument()
   })
+
+  function devotionalFinal() {
+    return {
+      type: 'verse',
+      message: "Here's a devotional on **JHN 14:27**.",
+      data: {
+        reference: 'JHN 14:27',
+        translations: { 'eng-KJV': 'Peace I leave with you...' },
+        book_context: null,
+        devotional: '# On Peace\n\nSome words.',
+      },
+      artifacts: [{
+        type: 'devotional',
+        label: 'Read the devotional ▸',
+        params: { reference: 'JHN 14:27', text: '# On Peace\n\nSome words.' },
+      }],
+    }
+  }
+
+  it('auto-fires the devotional generation for a system-source session', async () => {
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'pick', choicesStatus: 'ready',
+      choices: [{ label: "I'll choose", modeParams: { source: 'user' } }],
+    })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'a2', role: 'assistant', text: 'Let me find a verse for you…' })
+
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
+      handlers?.onChunk?.('LEAKED BODY TEXT')
+      return devotionalFinal() as never
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '', mode: 'devotional', mode_params: expect.objectContaining({ source: 'system' }) }),
+      expect.anything()
+    )
+    // body text streamed by the mock must NOT appear in the bubble
+    expect(screen.queryByText('LEAKED BODY TEXT')).not.toBeInTheDocument()
+    // the devotional link (artifact pill) is shown
+    expect(screen.getByRole('button', { name: /read the devotional/i })).toBeInTheDocument()
+    // delivered flag set
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
+  it('does not auto-fire for a user-source session; the typed message is the generation', async () => {
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'user' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant',
+      text: "Tell me a verse reference (e.g. John 3:16) or a theme (e.g. 'facing anxiety'), and I'll write you a devotional.",
+    })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue(devotionalFinal() as never)
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(spy).not.toHaveBeenCalled()
+
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'Psalm 23')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Psalm 23', mode: 'devotional' }),
+      expect.anything()
+    )
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
+  it('after delivery, a follow-up is an ordinary streamed chat turn', async () => {
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'user', delivered: true })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: "Here's a devotional on **JHN 14:27**.", type: 'verse',
+      data: { reference: 'JHN 14:27', translations: { 'eng-KJV': '...' } },
+      artifacts: [{ type: 'devotional', label: 'Read the devotional ▸', params: { reference: 'JHN 14:27', text: '# d' } }],
+    })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
+      handlers?.onChunk?.('streaming answer…')
+      return { type: 'chat', message: 'The Greek word here is eirēnē.' } as never
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'what is the Greek word?')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(await screen.findByText('The Greek word here is eirēnē.')).toBeInTheDocument()
+    // onChunk output IS rendered for a normal turn (devotional flag not set)
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'what is the Greek word?', mode: 'devotional' }),
+      expect.objectContaining({ onChunk: expect.any(Function) })
+    )
+  })
 })

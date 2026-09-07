@@ -82,6 +82,7 @@ export function ChatPane({ sessionId }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const devotionalAutoFired = useRef(false)
 
   // Any in-flight backend round-trip that leaves the message area idle —
   // a new question, a regenerate, a choice being resolved, or a day being
@@ -105,7 +106,11 @@ export function ChatPane({ sessionId }: Props) {
   // those involve a live LLM generation) still just pops in complete, the
   // same as the old plain postChat() flow.
   const streamAssistantReply = useCallback(
-    async (assistantId: string, payload: Parameters<typeof postChatStream>[0]) => {
+    async (
+      assistantId: string,
+      payload: Parameters<typeof postChatStream>[0],
+      opts?: { devotional?: boolean }
+    ) => {
       let started = false
       const put = (patch: Partial<SessionMessage>) => {
         if (!started) {
@@ -116,7 +121,16 @@ export function ChatPane({ sessionId }: Props) {
         }
       }
       try {
-        const response = await postChatStream(payload, { onChunk: (text) => put({ text }) })
+        // A devotional generating turn streams over SSE only to keep the
+        // connection alive through a multi-minute generation — the body
+        // text must not land in the chat bubble (it opens from a link in
+        // the artifact pane). So no onChunk: the message is created once,
+        // complete, from the final payload; the typing indicator covers
+        // the wait.
+        const response = await postChatStream(
+          payload,
+          opts?.devotional ? {} : { onChunk: (text) => put({ text }) }
+        )
         put({
           text: response.message,
           type: response.type,
@@ -125,20 +139,53 @@ export function ChatPane({ sessionId }: Props) {
           followUpQuestions: response.follow_up_questions,
           trace: response.trace,
         })
+        return response
       } catch (err) {
         put({ text: 'Sorry, something went wrong: ' + errorMessage(err) })
+        return null
       }
     },
     [sessionId, appendMessage, updateMessage]
   )
 
+  // The devotional generating turn. Used both by the auto-fire effect
+  // (source: 'system', empty message) and — via sendMessage — by a typed
+  // verse/theme (source: 'user'). `delivered` is set only on a successful
+  // result so an error leaves the session retryable.
+  const runDevotionalTurn = useCallback(
+    async (message: string) => {
+      if (!session) return
+      const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
+      setLoading(true)
+      try {
+        const response = await streamAssistantReply(
+          genId(),
+          { message, history, mode: 'devotional', mode_params: { ...session.modeParams } },
+          { devotional: true }
+        )
+        if (response && response.type !== 'error') {
+          updateModeParams(sessionId, { delivered: true })
+        }
+      } finally {
+        setLoading(false)
+      }
+    },
+    [session, sessionId, streamAssistantReply, updateModeParams]
+  )
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || !session) return
-      const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
       const userMessage: SessionMessage = { id: genId(), role: 'user', text }
       appendMessage(sessionId, userMessage)
       setInput('')
+
+      if (session.mode === 'devotional' && !session.modeParams.delivered) {
+        await runDevotionalTurn(text)
+        return
+      }
+
+      const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
       setLoading(true)
       try {
         await streamAssistantReply(genId(), {
@@ -151,8 +198,26 @@ export function ChatPane({ sessionId }: Props) {
         setLoading(false)
       }
     },
-    [session, sessionId, appendMessage, streamAssistantReply]
+    [session, sessionId, appendMessage, streamAssistantReply, runDevotionalTurn]
   )
+
+  // "Pick one for me" devotional: once the pill has resolved (its ack is
+  // the last message and the user hasn't typed anything), kick off the
+  // generation automatically so there's no extra "generate" tap. Fires at
+  // most once per mount; an errored generation is retried from the input,
+  // not re-fired.
+  useEffect(() => {
+    if (!session || session.mode !== 'devotional') return
+    if (session.modeParams.source !== 'system' || session.modeParams.delivered) return
+    if (devotionalAutoFired.current || isBusy) return
+    const hasUserQuestion = session.messages.some(
+      (m) => m.role === 'user' && !m.text.startsWith('📖')
+    )
+    const last = session.messages[session.messages.length - 1]
+    if (hasUserQuestion || !last || last.role !== 'assistant' || last.choicesStatus) return
+    devotionalAutoFired.current = true
+    void runDevotionalTurn('')
+  }, [session, isBusy, runDevotionalTurn])
 
   // Re-asks the user message that produced this response, discarding the
   // old response first so the regenerated one takes its place rather than
