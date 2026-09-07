@@ -22,6 +22,10 @@ volumes:
   # into `flask-api` at /app/feedback-db. Survives container recreation.
   feedback-db:
 
+  # Persistent store for shared-conversation snapshots (shares.db), mounted
+  # into `flask-api` at /app/shares-db. Survives container recreation.
+  shares-db:
+
 services:
   # --------------------------------------------------------------------------
   # (2) FastAPI chatbot — ASGI/uvicorn, SSE on /chat/stream.
@@ -93,6 +97,8 @@ services:
       # `docker compose config` even though .env carries a local-dev default.
       # Directory-scoped: the named volume mounts a directory, not a file.
       FEEDBACK_DB_URL: sqlite:////app/feedback-db/feedback.db
+      # Writable conversation-sharing DB — directory-scoped named volume.
+      SHARE_DB_URL: sqlite:////app/shares-db/shares.db
     volumes:
       # Read-write for the same reason as the chatbot service (dataset forces
       # PRAGMA journal_mode=WAL on connect). SELECT-only workload otherwise.
@@ -101,6 +107,8 @@ services:
       - ./CACHED_PAGES:/app/CACHED_PAGES
       # Writable troubleshooting-feedback DB — survives container recreation.
       - feedback-db:/app/feedback-db
+      # Writable conversation-sharing DB — survives container recreation.
+      - shares-db:/app/shares-db
     expose:
       - "5000"
     # /api/books returns in-memory constants only — no DB hit, no proxy hop.
