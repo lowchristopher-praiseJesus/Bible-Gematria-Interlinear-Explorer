@@ -313,6 +313,34 @@ describe('useSessionsStore', () => {
       const s = useSessionsStore.getState().importSession({ ...payload, title: '   ' })
       expect(s.title).toBe('Devotional')
     })
+
+    it('strips misshapen artifacts/data/choices but keeps well-formed ones', () => {
+      const s = useSessionsStore.getState().importSession({
+        ...payload,
+        messages: [
+          {
+            id: 'junk',
+            role: 'assistant' as const,
+            text: 'crafted extras',
+            choices: 'xxx',
+            artifacts: 'nope',
+            data: 5,
+          } as never,
+          {
+            id: 'real',
+            role: 'assistant' as const,
+            text: 'a real artifact',
+            artifacts: [{ type: 'strongs', label: 'x', params: { id: 'H1' } }],
+          } as never,
+        ],
+      })
+      expect(s.messages).toHaveLength(2)
+      const [junk, real] = s.messages
+      expect(junk).not.toHaveProperty('choices')
+      expect(junk).not.toHaveProperty('artifacts')
+      expect(junk).not.toHaveProperty('data')
+      expect(real.artifacts).toEqual([{ type: 'strongs', label: 'x', params: { id: 'H1' } }])
+    })
   })
 
   it('rehydrates a valid imported marker and drops a malformed one', async () => {

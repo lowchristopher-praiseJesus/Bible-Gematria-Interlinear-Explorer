@@ -113,18 +113,67 @@ function isValidMessage(value: unknown): boolean {
   )
 }
 
+function isArtifactLinkShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const c = value as Record<string, unknown>
+  return typeof c.type === 'string' && !!c.params && typeof c.params === 'object'
+}
+
+function isChoiceShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  return typeof (value as Record<string, unknown>).label === 'string'
+}
+
+/**
+ * Rebuild a single imported message from an already-`isValidMessage`
+ * entry, copying only the fields we recognise and can vouch for the
+ * shape of. The payload was serialized by another browser and crossed
+ * the network — a `...rest` passthrough would let a crafted key (e.g.
+ * `choices: "xxx"`) reach `ChatPane` and throw on every render of the
+ * session, a poison pill only a delete can clear. `trace` is never
+ * copied.
+ */
+function sanitizeMessage(value: unknown): SessionMessage {
+  const c = value as Record<string, unknown>
+  const out: SessionMessage = {
+    id: c.id as string,
+    role: c.role as SessionMessage['role'],
+    text: c.text as string,
+  }
+  if (typeof c.type === 'string') out.type = c.type
+  if (typeof c.route === 'string') out.route = c.route
+  if (typeof c.isStreaming === 'boolean') out.isStreaming = c.isStreaming
+  if (Array.isArray(c.followUpQuestions) && c.followUpQuestions.every((q) => typeof q === 'string')) {
+    out.followUpQuestions = c.followUpQuestions as string[]
+  }
+  if (Array.isArray(c.artifacts) && c.artifacts.every(isArtifactLinkShape)) {
+    out.artifacts = c.artifacts as SessionMessage['artifacts']
+  }
+  if (c.data && typeof c.data === 'object') {
+    out.data = c.data as SessionMessage['data']
+  }
+  if (Array.isArray(c.choices) && c.choices.every(isChoiceShape)) {
+    out.choices = c.choices as SessionMessage['choices']
+  }
+  if (c.choicesStatus === 'loading' || c.choicesStatus === 'ready' || c.choicesStatus === 'error') {
+    out.choicesStatus = c.choicesStatus
+  }
+  if (typeof c.choicesError === 'string') out.choicesError = c.choicesError
+  if (typeof c.resolvedChoiceLabel === 'string') out.resolvedChoiceLabel = c.resolvedChoiceLabel
+  return out
+}
+
 /**
  * Messages from a share link were serialized by another browser and
  * crossed the network — treat them as untrusted. Keep only well-formed
- * entries and strip the heavy per-turn `trace` blob.
+ * entries, rebuilt field-by-field (see `sanitizeMessage`).
  */
 function sanitizeMessages(messages: unknown): SessionMessage[] {
   if (!Array.isArray(messages)) return []
   const out: SessionMessage[] = []
   for (const value of messages) {
     if (!isValidMessage(value)) continue
-    const { trace: _trace, ...rest } = value as SessionMessage & { trace?: unknown }
-    out.push(rest as SessionMessage)
+    out.push(sanitizeMessage(value))
   }
   return out
 }

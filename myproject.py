@@ -2076,9 +2076,11 @@ def _share_rate_ok(ip, *, capacity=10, refill_seconds=30.0):
 
 
 def _request_origin():
-	"""Scheme+host the browser used, honoring nginx's forwarded headers."""
+	"""Scheme+host the browser used. Host comes from the Host header only:
+	nginx never sets X-Forwarded-Host, so honoring it would let a client
+	spoof the domain baked into the returned share URL."""
 	proto = request.headers.get('X-Forwarded-Proto') or request.scheme
-	host = request.headers.get('X-Forwarded-Host') or request.headers.get('Host')
+	host = request.headers.get('Host')
 	if host:
 		return f"{proto}://{host}"
 	return request.host_url.rstrip('/')
@@ -2375,14 +2377,17 @@ def read_share(token):
 	if row is None or row.get('payload') is None:
 		return jsonify({'error': 'not_found'}), 404
 	p = row['payload']
-	return jsonify({
+	resp = jsonify({
 		'title': p.get('title'),
 		'mode': p.get('mode'),
 		'modeParams': p.get('modeParams') or {},
 		'messages': p.get('messages') or [],
 		'notes': p.get('notes') or [],
 		'shared_at': row.get('created_at'),
-	}), 200
+	})
+	# A snapshot is per-recipient and immutable; keep it out of shared caches.
+	resp.headers['Cache-Control'] = 'private, no-store'
+	return resp, 200
 
 
 if __name__ == '__main__':

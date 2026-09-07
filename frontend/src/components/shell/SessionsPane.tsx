@@ -217,7 +217,9 @@ export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }:
                 <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
               )}
               <Inbox className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">Imported</span>{' '}
+              <span className="truncate">Imported</span>
+              {/* explicit space — keeps the accessible name "Imported (N)"; a JSX-tidy pass would otherwise merge it to "Imported(N)" and break the SessionsPane test */}
+              {' '}
               <span className="ml-auto normal-case font-normal text-[10px] text-[var(--color-text-secondary)]">
                 ({importedSessions.length})
               </span>

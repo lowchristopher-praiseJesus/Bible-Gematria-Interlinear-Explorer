@@ -1,5 +1,5 @@
 import { fetchShare } from '@/lib/shareApi'
-import { useSessionsStore } from '@/store/useSessionsStore'
+import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 
 const IMPORTED_TOKENS_KEY = 'bible-explorer-imported-tokens'
 
@@ -34,6 +34,16 @@ function rememberImportedToken(token: string): void {
   }
 }
 
+function forgetImportedToken(token: string): void {
+  try {
+    const tokens = readImportedTokens()
+    if (!tokens.delete(token)) return
+    localStorage.setItem(IMPORTED_TOKENS_KEY, JSON.stringify([...tokens]))
+  } catch {
+    /* private-mode storage — nothing was persisted to forget */
+  }
+}
+
 export async function consumeImportParam(): Promise<ImportResult> {
   const token = new URLSearchParams(window.location.search).get('import')
   if (!token) return { status: 'none' }
@@ -43,10 +53,12 @@ export async function consumeImportParam(): Promise<ImportResult> {
   )
   if (existing) return { status: 'duplicate', sessionId: existing.id }
 
-  // Imported before on this browser, but the session was since deleted —
-  // nothing to jump to, and we won't silently re-add it.
+  // Imported before on this browser (persisted set, or already handled
+  // this page load) but no live session carries the token — the user
+  // deleted that session. Forget the stale marker and fall through to a
+  // fresh fetch + import instead of dead-ending the link on `none`.
   if (handledThisLoad.has(token) || readImportedTokens().has(token)) {
-    return { status: 'none' }
+    forgetImportedToken(token)
   }
   handledThisLoad.add(token)
 
@@ -62,10 +74,15 @@ export async function consumeImportParam(): Promise<ImportResult> {
     return { status: 'error', reason: 'bad_data' }
   }
 
+  // The share was serialized by another browser: an unknown mode string
+  // would post a bogus mode to /api/bible-chat on the next turn. Coerce
+  // anything the app doesn't recognise to freeform.
+  const mode = payload.mode in MODE_LABELS ? payload.mode : 'freeform'
+
   const session = useSessionsStore.getState().importSession({
     token,
     sharedAt: payload.shared_at,
-    mode: payload.mode,
+    mode,
     modeParams: payload.modeParams ?? {},
     title: payload.title ?? '',
     messages: payload.messages,

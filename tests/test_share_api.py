@@ -45,6 +45,14 @@ def test_create_returns_token_and_import_url(app_client):
     assert data["url"].endswith(f"/?import={data['token']}")
 
 
+def test_spoofed_forwarded_host_is_ignored_in_url(app_client):
+    resp = app_client.post(
+        "/api/share", json=_body(), headers={"X-Forwarded-Host": "evil.example"}
+    )
+    assert resp.status_code == 201
+    assert "evil.example" not in resp.get_json()["url"]
+
+
 def test_stored_row_strips_trace_and_derives_counts(app_client, tmp_path):
     token = app_client.post("/api/share", json=_body()).get_json()["token"]
     db = ss.get_db(f"sqlite:///{tmp_path / 'shares.db'}")
@@ -67,6 +75,7 @@ def test_get_returns_snapshot_without_client_id(app_client):
     assert data["messages"][1].get("trace") is None
     assert "client_id" not in data
     assert data["shared_at"].endswith("Z")
+    assert "no-store" in resp.headers.get("Cache-Control", "")
 
 
 def test_get_unknown_token_is_404(app_client):

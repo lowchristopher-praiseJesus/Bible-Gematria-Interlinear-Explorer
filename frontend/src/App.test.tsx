@@ -176,4 +176,12 @@ describe('App', () => {
     render(<App />)
     expect(await screen.findByText(/no longer available/i)).toBeInTheDocument()
   })
+
+  it('keeps ?import= in the URL on a network failure so a reload retries', async () => {
+    vi.spyOn(shareApi, 'fetchShare').mockRejectedValue(new Error('Failed to fetch'))
+    window.history.pushState({}, '', '/?import=net-fail')
+    render(<App />)
+    expect(await screen.findByText(/couldn.t load the shared conversation/i)).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('import')).toBe('net-fail')
+  })
 })

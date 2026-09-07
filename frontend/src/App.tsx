@@ -115,9 +115,19 @@ export default function App() {
 
     setImportNotice({ tone: 'info', text: 'Importing shared conversation…' })
     consumeImportParam().then((result) => {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('import')
-      window.history.replaceState({}, '', url)
+      // Keep ?import= in the URL only when a plain reload could still
+      // succeed — a transient network failure, or a payload this client
+      // couldn't parse. For every settled outcome (imported, duplicate,
+      // none, or a 404 a reload can't fix) strip it so a refresh doesn't
+      // re-run the import.
+      const keepParam =
+        result.status === 'error' &&
+        (result.reason === 'network' || result.reason === 'bad_data')
+      if (!keepParam) {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('import')
+        window.history.replaceState({}, '', url)
+      }
 
       if (result.status === 'imported' || result.status === 'duplicate') {
         setSessionId(result.sessionId)

@@ -48,12 +48,29 @@ it('does not re-import a token whose session still exists — jumps to it', asyn
   expect(fetchSpy).not.toHaveBeenCalled()
 })
 
-it('returns none when the token was imported before but its session is gone', async () => {
+it('re-imports when the token was imported before but its session was deleted', async () => {
   setImportParam('tok-3')
-  vi.spyOn(shareApi, 'fetchShare').mockResolvedValue(snap)
+  const fetchSpy = vi.spyOn(shareApi, 'fetchShare').mockResolvedValue(snap)
   const first = await consumeImportParam()
-  useSessionsStore.getState().deleteSession((first as { sessionId: string }).sessionId)
-  expect(await consumeImportParam()).toEqual({ status: 'none' })
+  const firstId = (first as { sessionId: string }).sessionId
+  useSessionsStore.getState().deleteSession(firstId)
+  fetchSpy.mockClear()
+
+  const second = await consumeImportParam()
+  expect(second.status).toBe('imported')
+  const secondId = (second as { sessionId: string }).sessionId
+  expect(secondId).not.toBe(firstId)
+  expect(fetchSpy).toHaveBeenCalled()
+  expect(useSessionsStore.getState().sessions[secondId].imported?.token).toBe('tok-3')
+})
+
+it('coerces an unknown mode to freeform', async () => {
+  setImportParam('tok-bogus')
+  vi.spyOn(shareApi, 'fetchShare').mockResolvedValue({ ...snap, mode: 'bogus' as never })
+  const result = await consumeImportParam()
+  expect(result.status).toBe('imported')
+  const id = (result as { sessionId: string }).sessionId
+  expect(useSessionsStore.getState().sessions[id].mode).toBe('freeform')
 })
 
 it('maps a 404 to a not_found error', async () => {

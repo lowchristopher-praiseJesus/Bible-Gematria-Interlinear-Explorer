@@ -16,13 +16,15 @@ export function ShareDialog({ session, open, onOpenChange }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [url, setUrl] = useState('')
   const [copied, setCopied] = useState(false)
-  // One link per session id — re-opening the dialog reuses it instead of
-  // minting a fresh row every time.
+  // One link per (session id + message count) — re-opening the dialog on
+  // an unchanged conversation reuses the link, but sharing again after
+  // more messages mints a fresh snapshot instead of returning a stale one.
   const cache = useRef<Record<string, string>>({})
 
   const runCreate = useCallback(() => {
     setCopied(false)
-    const cached = cache.current[session.id]
+    const cacheKey = `${session.id}:${session.messages.length}`
+    const cached = cache.current[cacheKey]
     if (cached) {
       setUrl(cached)
       setStatus('ready')
@@ -31,7 +33,7 @@ export function ShareDialog({ session, open, onOpenChange }: Props) {
     setStatus('creating')
     createShare(session)
       .then((res) => {
-        cache.current[session.id] = res.url
+        cache.current[cacheKey] = res.url
         setUrl(res.url)
         setStatus('ready')
       })
@@ -53,7 +55,7 @@ export function ShareDialog({ session, open, onOpenChange }: Props) {
   }
 
   function retry() {
-    delete cache.current[session.id]
+    delete cache.current[`${session.id}:${session.messages.length}`]
     runCreate()
   }
 

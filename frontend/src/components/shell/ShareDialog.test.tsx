@@ -41,6 +41,29 @@ describe('ShareDialog', () => {
     expect(await screen.findByRole('button', { name: /copied/i })).toBeInTheDocument()
   })
 
+  it('re-requests a link when the conversation has grown since the last share', async () => {
+    createImpl = () => Promise.resolve({ token: 'a', url: 'http://localhost/?import=a' })
+    const twoMsg: Session = {
+      ...session,
+      messages: [
+        { id: 'm1', role: 'user', text: 'hi' },
+        { id: 'm2', role: 'assistant', text: 'hello' },
+      ],
+    }
+    const { rerender } = render(<ShareDialog session={twoMsg} open onOpenChange={() => {}} />)
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=a')
+    expect(createShare).toHaveBeenCalledTimes(1)
+
+    createImpl = () => Promise.resolve({ token: 'b', url: 'http://localhost/?import=b' })
+    const threeMsg: Session = {
+      ...twoMsg,
+      messages: [...twoMsg.messages, { id: 'm3', role: 'user', text: 'more' }],
+    }
+    rerender(<ShareDialog session={threeMsg} open onOpenChange={() => {}} />)
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=b')
+    expect(createShare).toHaveBeenCalledTimes(2)
+  })
+
   it('shows a retry on failure and re-requests on click', async () => {
     createImpl = () => Promise.reject(new Error('Request failed: 500'))
     render(<ShareDialog session={session} open onOpenChange={() => {}} />)
