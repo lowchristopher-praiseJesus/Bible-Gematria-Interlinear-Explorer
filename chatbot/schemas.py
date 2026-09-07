@@ -10,7 +10,7 @@ class HistoryMessage(BaseModel):
 
 
 class ArtifactLink(BaseModel):
-    type: str = Field(..., description="interlinear | chapter | strongs | book_context | gematria | english_search")
+    type: str = Field(..., description="interlinear | chapter | strongs | book_context | gematria | english_search | devotional")
     label: str = Field(..., description="Human-readable link text shown in the chat bubble")
     params: Dict[str, Any] = Field(default_factory=dict, description="Fetch parameters for the artifact panel")
 

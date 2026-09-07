@@ -166,11 +166,20 @@ async def pick_verse_for_theme(theme: Optional[str]) -> str:
 async def _range_text(usfm: str, chapter: int, start: int, end: int) -> str:
     """KJV text for a verse range, fetched one verse at a time (every caller
     of fetch_verse_translations in this codebase passes it a USFM ref, so no
-    book-name lookup is needed) and space-joined."""
+    book-name lookup is needed) and space-joined. A verse that comes back
+    empty *or* raises (fetch_verse_translations → the biblehub fetcher can
+    raise VerseFetchError on a bad reference / HTTP error / no translations)
+    is skipped, so one bad verse in a long span like `Psalm 23:1-99` yields
+    the verses that did resolve rather than aborting the whole range."""
     last = min(end, start + _MAX_RANGE_SPAN)
     parts = []
     for v in range(start, last + 1):
-        got = _kjv_text(await fetch_verse_translations(f"{usfm} {chapter}:{v}", languages=["eng"]))
+        try:
+            got = _kjv_text(
+                await fetch_verse_translations(f"{usfm} {chapter}:{v}", languages=["eng"])
+            )
+        except Exception:  # noqa: BLE001 — one bad verse must not kill the range
+            continue
         if got:
             parts.append(got)
     return " ".join(parts)
@@ -189,13 +198,31 @@ async def resolve_seed_verse(raw: Optional[str], source: str) -> Tuple[str, Dict
     is_range = bool(m and m.group(4) and int(m.group(4)) != int(m.group(3)))
 
     if is_range:
-        text = await _range_text(m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)))
+        usfm, chapter = m.group(1), int(m.group(2))
+        start, end = int(m.group(3)), int(m.group(4))
+        # A span capped at _MAX_RANGE_SPAN only fetches start..start+cap, so
+        # the reference the caller shows (the VerseBubble header and the
+        # devotional prompt) must name that same span — not the user's
+        # oversized end, which would silently disagree with the text.
+        if end > start + _MAX_RANGE_SPAN:
+            end = start + _MAX_RANGE_SPAN
+            ref = f"{usfm} {chapter}:{start}-{end}"
+        text = await _range_text(usfm, chapter, start, end)
         if not text:
             raise DevotionalError(f"No verse text for {ref}")
         return ref, {"eng-KJV": text}
 
-    translations = await fetch_verse_translations(ref, languages=["eng"])
-    if not translations:
+    # fetch_verse_translations → the biblehub fetcher raises VerseFetchError
+    # on timeout / HTTP error / parse failure / a reference that yields no
+    # translations (common when an LLM-cited reference is slightly off).
+    # Any such failure — like an empty dict or blank KJV text — is an
+    # unresolved seed verse, so it becomes DevotionalError here rather than
+    # escaping past `except DevotionalError` in chatbot/api.py.
+    try:
+        translations = await fetch_verse_translations(ref, languages=["eng"])
+    except Exception as exc:  # noqa: BLE001 — matches router.py's broad style
+        raise DevotionalError(f"No verse text for {ref}") from exc
+    if not translations or not _kjv_text(translations):
         raise DevotionalError(f"No verse text for {ref}")
     return ref, translations
 

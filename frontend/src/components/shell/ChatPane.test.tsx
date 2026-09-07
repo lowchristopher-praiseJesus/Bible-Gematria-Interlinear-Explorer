@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ChatPane } from './ChatPane'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -593,6 +593,75 @@ describe('ChatPane', () => {
       expect.anything()
     )
     expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
+  it('auto-fires once for each session when the same ChatPane instance is reused (no key prop)', async () => {
+    const makeSystemDevotionalSession = () => {
+      const s = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+      useSessionsStore.getState().appendMessage(s.id, { id: `${s.id}-u1`, role: 'user', text: '📖 Devotional' })
+      useSessionsStore.getState().appendMessage(s.id, {
+        id: `${s.id}-a1`, role: 'assistant', text: 'pick', choicesStatus: 'ready',
+        choices: [{ label: "I'll choose", modeParams: { source: 'user' } }],
+      })
+      useSessionsStore.getState().appendMessage(s.id, {
+        id: `${s.id}-a2`, role: 'assistant', text: 'Let me find a verse for you…',
+      })
+      return s
+    }
+    const s1 = makeSystemDevotionalSession()
+    const s2 = makeSystemDevotionalSession()
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue(devotionalFinal() as never)
+
+    const { rerender } = render(<ChatPane sessionId={s1.id} />)
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    // Switch sessions on the SAME mounted instance — the second
+    // system-source devotional must still auto-fire.
+    rerender(<ChatPane sessionId={s2.id} />)
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+    expect(spy).toHaveBeenCalledTimes(2)
+
+    expect(useSessionsStore.getState().sessions[s1.id].modeParams.delivered).toBe(true)
+    expect(useSessionsStore.getState().sessions[s2.id].modeParams.delivered).toBe(true)
+  })
+
+  it('does not render a Regenerate button on a delivered devotional message', () => {
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'user', delivered: true })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: "Here's a devotional on **JHN 14:27**.", type: 'verse',
+      data: { reference: 'JHN 14:27', translations: { 'eng-KJV': 'Peace I leave with you...' } },
+      artifacts: [{ type: 'devotional', label: 'Read the devotional ▸', params: { reference: 'JHN 14:27', text: '# d' } }],
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+
+    // Regenerate would replace the ~1,400-word devotional with a
+    // one-paragraph chat answer, unrecoverably — it must not be offered.
+    expect(screen.queryByRole('button', { name: /regenerate response/i })).not.toBeInTheDocument()
+    // The devotional artifact pill is still there.
+    expect(screen.getByRole('button', { name: /read the devotional/i })).toBeInTheDocument()
+  })
+
+  it('ignores a second form submit fired while a generation is already in flight (Enter bypasses the disabled Send button)', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    let resolvePost!: (value: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockImplementation(
+      () => new Promise((resolve) => { resolvePost = resolve })
+    )
+
+    render(<ChatPane sessionId={session.id} />)
+    const input = screen.getByPlaceholderText(/ask about a verse/i)
+    const form = input.closest('form')!
+
+    await userEvent.type(input, 'first question')
+    fireEvent.submit(form) // first turn starts; loading = true
+    await userEvent.type(input, 'second question')
+    fireEvent.submit(form) // must be a no-op while the first turn is in flight
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    resolvePost({ type: 'chat', message: 'done' })
+    expect(await screen.findByText('done')).toBeInTheDocument()
   })
 
   it('after delivery, a follow-up is an ordinary streamed chat turn', async () => {

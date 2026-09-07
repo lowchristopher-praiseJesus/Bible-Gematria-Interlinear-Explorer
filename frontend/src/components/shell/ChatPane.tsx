@@ -82,7 +82,12 @@ export function ChatPane({ sessionId }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const devotionalAutoFired = useRef(false)
+  // Which session the devotional generation has already auto-fired for.
+  // A single <ChatPane> instance is reused across sessions (no `key` in
+  // App.tsx), so this must be keyed by session id, not a bare boolean —
+  // otherwise a second system-source devotional opened from the sidebar
+  // never auto-fires.
+  const devotionalAutoFired = useRef<string | null>(null)
 
   // Any in-flight backend round-trip that leaves the message area idle —
   // a new question, a regenerate, a choice being resolved, or a day being
@@ -176,6 +181,11 @@ export function ChatPane({ sessionId }: Props) {
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || !session) return
+      // Enter submits the form directly, bypassing the disabled Send
+      // button — without this guard, pressing it during an in-flight
+      // generation (the multi-minute devotional turn especially) starts a
+      // second one.
+      if (loading) return
       const userMessage: SessionMessage = { id: genId(), role: 'user', text }
       appendMessage(sessionId, userMessage)
       setInput('')
@@ -198,26 +208,28 @@ export function ChatPane({ sessionId }: Props) {
         setLoading(false)
       }
     },
-    [session, sessionId, appendMessage, streamAssistantReply, runDevotionalTurn]
+    [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn]
   )
 
   // "Pick one for me" devotional: once the pill has resolved (its ack is
   // the last message and the user hasn't typed anything), kick off the
   // generation automatically so there's no extra "generate" tap. Fires at
-  // most once per mount; an errored generation is retried from the input,
-  // not re-fired.
+  // most once per session (not per mount — the instance is shared across
+  // sessions); an errored generation is retried from the input, not
+  // re-fired, because `devotionalAutoFired.current` stays set to this
+  // session's id once it has fired.
   useEffect(() => {
     if (!session || session.mode !== 'devotional') return
     if (session.modeParams.source !== 'system' || session.modeParams.delivered) return
-    if (devotionalAutoFired.current || isBusy) return
+    if (devotionalAutoFired.current === sessionId || isBusy) return
     const hasUserQuestion = session.messages.some(
       (m) => m.role === 'user' && !m.text.startsWith('📖')
     )
     const last = session.messages[session.messages.length - 1]
     if (hasUserQuestion || !last || last.role !== 'assistant' || last.choicesStatus) return
-    devotionalAutoFired.current = true
+    devotionalAutoFired.current = sessionId
     void runDevotionalTurn('')
-  }, [session, isBusy, runDevotionalTurn])
+  }, [session, sessionId, isBusy, runDevotionalTurn])
 
   // Re-asks the user message that produced this response, discarding the
   // old response first so the regenerated one takes its place rather than
@@ -567,7 +579,8 @@ export function ChatPane({ sessionId }: Props) {
                         <Copy className="w-3.5 h-3.5" aria-hidden="true" />
                       )}
                     </button>
-                    {msg.id === lastAssistantId && (
+                    {msg.id === lastAssistantId &&
+                      !msg.artifacts?.some((a) => a.type === 'devotional') && (
                       <button
                         onClick={() => regenerate(msg.id)}
                         disabled={regeneratingId === msg.id}

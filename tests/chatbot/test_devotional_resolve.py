@@ -81,6 +81,64 @@ async def test_resolve_seed_verse_raises_when_no_text(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_resolve_seed_verse_raises_when_fetch_raises(monkeypatch):
+    # The biblehub fetcher raises (timeout / HTTP error / no translations for
+    # a slightly-wrong LLM-cited reference) rather than returning {} — that
+    # exception must become DevotionalError, not escape to the API layer.
+    async def fake_fetch(reference, languages=None):
+        raise RuntimeError("VerseFetchError: no translations for JHN 14:27")
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    with pytest.raises(devotional.DevotionalError):
+        await devotional.resolve_seed_verse("John 14:27", "user")
+
+
+@pytest.mark.asyncio
+async def test_resolve_seed_verse_raises_when_kjv_text_is_blank(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": ""}
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    with pytest.raises(devotional.DevotionalError):
+        await devotional.resolve_seed_verse("John 14:27", "user")
+
+
+@pytest.mark.asyncio
+async def test_resolve_seed_verse_range_survives_one_bad_verse(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        if reference == "PSA 23:2":
+            raise RuntimeError("VerseFetchError: transient biblehub failure")
+        return {
+            "PSA 23:1": {"eng-KJV": "The LORD is my shepherd; I shall not want."},
+            "PSA 23:3": {"eng-KJV": "He restoreth my soul:"},
+        }[reference]
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    ref, translations = await devotional.resolve_seed_verse("Psalm 23:1-3", "user")
+    assert ref == "PSA 23:1-3"
+    assert translations["eng-KJV"] == (
+        "The LORD is my shepherd; I shall not want. He restoreth my soul:"
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_seed_verse_range_clamps_reference_to_fetched_span(monkeypatch):
+    fetched = []
+
+    async def fake_fetch(reference, languages=None):
+        fetched.append(reference)
+        return {"eng-KJV": "verse text"}
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    ref, translations = await devotional.resolve_seed_verse("Psalm 23:1-999", "user")
+    # Only start..start+_MAX_RANGE_SPAN were fetched, so the returned
+    # reference must name that span, not "PSA 23:1-999".
+    cap = devotional._MAX_RANGE_SPAN
+    assert ref == f"PSA 23:1-{1 + cap}"
+    assert len(fetched) == cap + 1
+
+
+@pytest.mark.asyncio
 async def test_pick_verse_for_theme_parses_llm_reference(monkeypatch):
     async def fake_simple(system, user, *, max_tokens=2048):
         return "Try John 14:27 — a good one."

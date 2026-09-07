@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 
 def _events(raw: str):
     out = []
@@ -13,7 +11,6 @@ def _events(raw: str):
 
 
 def _patch_stream_devotional(monkeypatch, gen):
-    import chatbot.api as api_module
     # api.py imports stream_devotional lazily inside the branch, so patch the
     # source module.
     import chatbot.devotional as devo
