@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShareDialog } from './ShareDialog'
@@ -20,9 +20,18 @@ const session: Session = {
 }
 
 describe('ShareDialog', () => {
+  const origClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const origExec = (document as unknown as { execCommand?: unknown }).execCommand
+
   beforeEach(() => {
     createShare.mockReset()
     createImpl = () => Promise.resolve({ token: 'tok', url: 'http://localhost/?import=tok' })
+  })
+
+  afterEach(() => {
+    if (origClipboard) Object.defineProperty(navigator, 'clipboard', origClipboard)
+    else Object.assign(navigator, { clipboard: undefined })
+    Object.assign(document, { execCommand: origExec })
   })
 
   it('creates a link on open and shows it', async () => {
@@ -39,6 +48,27 @@ describe('ShareDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: /copy/i }))
     expect(writeText).toHaveBeenCalledWith('http://localhost/?import=tok')
     expect(await screen.findByRole('button', { name: /copied/i })).toBeInTheDocument()
+  })
+
+  it('falls back to execCommand when the async clipboard API is unavailable', async () => {
+    // Plain-http LAN context: navigator.clipboard is undefined.
+    Object.assign(navigator, { clipboard: undefined })
+    const execCommand = vi.fn().mockReturnValue(true)
+    Object.assign(document, { execCommand })
+    render(<ShareDialog session={session} open onOpenChange={() => {}} />)
+    await screen.findByLabelText('Share link')
+    await userEvent.click(screen.getByRole('button', { name: /copy/i }))
+    expect(execCommand).toHaveBeenCalledWith('copy')
+    expect(await screen.findByRole('button', { name: /copied/i })).toBeInTheDocument()
+  })
+
+  it('shows a manual-copy hint when every copy path fails', async () => {
+    Object.assign(navigator, { clipboard: undefined })
+    Object.assign(document, { execCommand: vi.fn().mockReturnValue(false) })
+    render(<ShareDialog session={session} open onOpenChange={() => {}} />)
+    await screen.findByLabelText('Share link')
+    await userEvent.click(screen.getByRole('button', { name: /copy/i }))
+    expect(await screen.findByText(/couldn.t copy automatically/i)).toBeInTheDocument()
   })
 
   it('re-requests a link when the conversation has grown since the last share', async () => {
