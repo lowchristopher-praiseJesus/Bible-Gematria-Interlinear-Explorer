@@ -6,6 +6,7 @@ import { ArtifactPane } from '@/components/shell/ArtifactPane'
 import { SessionsPane } from '@/components/shell/SessionsPane'
 import { SettingsPanel } from '@/components/shell/SettingsPanel'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { consumeImportParam } from '@/lib/importShare'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useThemeStore } from '@/store/useThemeStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -56,6 +57,8 @@ export default function App() {
   // columns and these flags are inert.
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [artifactOpen, setArtifactOpen] = useState(false)
+  const [importNotice, setImportNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null)
+  const importHandled = useRef(false)
   const compact = useIsCompact()
 
   const menuBtnRef = useRef<HTMLButtonElement>(null)
@@ -102,6 +105,36 @@ export default function App() {
   useEffect(() => {
     if (hasDetail) setArtifactOpen(true)
   }, [hasDetail])
+
+  // A ?import=<token> link: pull the shared conversation into local
+  // history once, then clean the param out of the URL.
+  useEffect(() => {
+    if (importHandled.current) return
+    importHandled.current = true
+    if (!new URLSearchParams(window.location.search).get('import')) return
+
+    setImportNotice({ tone: 'info', text: 'Importing shared conversation…' })
+    consumeImportParam().then((result) => {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('import')
+      window.history.replaceState({}, '', url)
+
+      if (result.status === 'imported' || result.status === 'duplicate') {
+        setSessionId(result.sessionId)
+        setImportNotice(null)
+      } else if (result.status === 'error') {
+        setImportNotice({
+          tone: 'error',
+          text:
+            result.reason === 'not_found'
+              ? 'That shared link is no longer available.'
+              : 'Couldn’t load the shared conversation.',
+        })
+      } else {
+        setImportNotice(null)
+      }
+    })
+  }, [setSessionId])
 
   const closeSheet = useCallback(() => {
     closeArtifact()
@@ -170,6 +203,28 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)]">
+      {importNotice && (
+        <div
+          role="status"
+          className={`flex shrink-0 items-center justify-between gap-3 px-4 py-2 text-sm ${
+            importNotice.tone === 'error'
+              ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+              : 'bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]'
+          }`}
+        >
+          <span>{importNotice.text}</span>
+          {importNotice.tone === 'error' && (
+            <button
+              type="button"
+              onClick={() => setImportNotice(null)}
+              aria-label="Dismiss"
+              className="shrink-0 rounded p-0.5 hover:opacity-70"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
       {/* Mobile top bar — replaces the old bottom Sessions/Chat/Artifact tabs */}
       <header className="flex shrink-0 items-center gap-1 border-b border-[var(--color-theme-border)] px-1 py-1 pt-[max(0.25rem,env(safe-area-inset-top))] lg:hidden">
         <button

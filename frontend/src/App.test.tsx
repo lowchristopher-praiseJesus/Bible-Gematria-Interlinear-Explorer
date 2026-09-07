@@ -6,6 +6,7 @@ import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { describeSession } from '@/lib/sessionDescription'
 import * as chatApi from '@/lib/chatApi'
+import * as shareApi from '@/lib/shareApi'
 
 describe('App', () => {
   beforeEach(() => {
@@ -150,5 +151,29 @@ describe('App', () => {
     expect(useArtifactStore.getState().status).toBe('idle')
     expect(useArtifactStore.getState().activeArtifact).toBeNull()
     expect(useArtifactStore.getState().activeNote).toBeNull()
+  })
+
+  it('imports a shared conversation from ?import= and opens it', async () => {
+    vi.spyOn(shareApi, 'fetchShare').mockResolvedValue({
+      title: 'Devotional', mode: 'devotional', modeParams: { source: 'system' },
+      messages: [{ id: 'x', role: 'user', text: 'a shared devotional' }], notes: [],
+      shared_at: '2026-09-07T00:00:00.000Z',
+    })
+    window.history.pushState({}, '', '/?import=tok-app-1')
+
+    render(<App />)
+
+    expect(await screen.findByText('a shared devotional')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('import')).toBeNull()
+    const sessions = Object.values(useSessionsStore.getState().sessions)
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].imported?.token).toBe('tok-app-1')
+  })
+
+  it('shows an error banner when the shared link is unknown', async () => {
+    vi.spyOn(shareApi, 'fetchShare').mockRejectedValue(new Error('Request failed: 404 Not Found'))
+    window.history.pushState({}, '', '/?import=missing-app')
+    render(<App />)
+    expect(await screen.findByText(/no longer available/i)).toBeInTheDocument()
   })
 })
