@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw } from 'lucide-react'
+import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw, Share2 } from 'lucide-react'
 import { fetchWikiConcept, postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -14,6 +14,7 @@ import { WikiPageBubble } from './WikiPageBubble'
 import { PromptChips } from './PromptChips'
 import { ChatNotesMenu } from './ChatNotesMenu'
 import { ReportIssueDialog } from './ReportIssueDialog'
+import { ShareDialog } from './ShareDialog'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
 import type { WikiPageResponse } from '@/types/api'
 import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
@@ -81,6 +82,7 @@ export function ChatPane({ sessionId }: Props) {
   const [resolvingChoiceId, setResolvingChoiceId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   // Which session the devotional generation has already auto-fired for.
   // A single <ChatPane> instance is reused across sessions (no `key` in
@@ -457,6 +459,13 @@ export function ChatPane({ sessionId }: Props) {
         <div className="flex shrink-0 items-center gap-2">
           <ChatNotesMenu sessionId={session.id} />
           <button
+            onClick={() => setShareOpen(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            <Share2 className="w-3 h-3" aria-hidden="true" />
+            Share
+          </button>
+          <button
             onClick={() => setReportOpen(true)}
             className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
           >
@@ -464,7 +473,7 @@ export function ChatPane({ sessionId }: Props) {
             Report an issue
           </button>
           <span className="hidden lg:inline-block shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]">
-            {MODE_LABELS[session.mode]}
+            {session.imported ? 'Imported' : MODE_LABELS[session.mode]}
           </span>
         </div>
       </div>
@@ -670,6 +679,7 @@ export function ChatPane({ sessionId }: Props) {
       </form>
 
       <ReportIssueDialog session={session} open={reportOpen} onOpenChange={setReportOpen} />
+      <ShareDialog session={session} open={shareOpen} onOpenChange={setShareOpen} />
     </div>
   )
 }
