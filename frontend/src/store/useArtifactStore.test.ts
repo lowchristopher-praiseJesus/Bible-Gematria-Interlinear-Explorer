@@ -35,6 +35,22 @@ describe('useArtifactStore', () => {
     expect(useArtifactStore.getState().error).toBe('network down')
   })
 
+  it('openArtifact for a devotional link resolves from params with no fetch', async () => {
+    const interlinearSpy = vi.spyOn(chatApi, 'fetchInterlinear')
+    const strongsSpy = vi.spyOn(chatApi, 'fetchStrongsEntry')
+    const link = {
+      type: 'devotional' as const,
+      label: 'Read the devotional ▸',
+      params: { reference: 'JHN 14:27', text: '# A devotional\n\nSome words.' },
+    }
+    await useArtifactStore.getState().openArtifact(link)
+    const s = useArtifactStore.getState()
+    expect(s.status).toBe('ready')
+    expect(s.data).toEqual(link.params)
+    expect(interlinearSpy).not.toHaveBeenCalled()
+    expect(strongsSpy).not.toHaveBeenCalled()
+  })
+
   it('openArtifact fetches by reference for an interlinear link with a reference param', async () => {
     const explorerFixture = { verse: {}, navigation: { previous: 1, next: 2 }, kjvWords: [], originalWords: [], strongsDefinitions: {} } as never
     vi.spyOn(chatApi, 'fetchInterlinear').mockResolvedValue(explorerFixture)

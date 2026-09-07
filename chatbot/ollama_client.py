@@ -216,7 +216,7 @@ def active_model_label():
     return f"{'NVIDIA' if provider == 'nvidia' else 'Ollama'} ({model})"
 
 
-def _build_request(messages, *, stream):
+def _build_request(messages, *, stream, max_tokens: int = 2048):
     """(provider, url, headers, payload) for a chat call to the active provider."""
     provider, base_url, model, api_key = _llm_config()
     headers = {"Content-Type": "application/json"}
@@ -231,7 +231,7 @@ def _build_request(messages, *, stream):
             "messages": messages,
             "stream": stream,
             "temperature": 0.7,
-            "max_tokens": 2048,
+            "max_tokens": max_tokens,
         }
     else:
         url = f"{base_url}/api/chat"
@@ -241,7 +241,7 @@ def _build_request(messages, *, stream):
             "stream": stream,
             "options": {
                 "temperature": 0.7,
-                "max_tokens": 2048,
+                "max_tokens": max_tokens,
             },
         }
     return provider, url, headers, payload
@@ -541,6 +541,100 @@ async def stream_chat_with_ollama(
                     if not done_sent:
                         _step.set_response(accumulated)
                         yield {"type": "done", "message": ""}
+            except httpx.HTTPError as e:
+                detail = str(e) or type(e).__name__
+                _step.set_error(f"LLM API error: {detail}")
+                yield {"type": "error", "message": f"LLM API error: {detail}"}
+            except Exception as e:  # noqa: BLE001
+                _step.set_error(f"{type(e).__name__}: {e}")
+                yield {"type": "error", "message": f"LLM error: {type(e).__name__}: {e}"}
+
+
+# ---------------------------------------------------------------------------
+# Explicit-prompt helpers (no research-data assembly, no history) — used by
+# Devotional mode. `simple_completion` for the short theme→verse pick,
+# `stream_devotional_completion` for the long devotional itself.
+# ---------------------------------------------------------------------------
+
+async def simple_completion(
+    system_prompt: str, user_prompt: str, *, max_tokens: int = 2048
+) -> str:
+    """One non-streamed completion from an explicit system + user prompt.
+    Returns the model's text, or "" on an unconfigured provider or any HTTP
+    / parse error (callers treat "" as "no usable answer")."""
+    if llm_unconfigured_error():
+        return ""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    provider, url, headers, payload = _build_request(
+        messages, stream=False, max_tokens=max_tokens
+    )
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=60.0)
+            response.raise_for_status()
+            result = response.json()
+        except Exception:  # noqa: BLE001 — any failure means "no answer"
+            return ""
+    content, error = _extract_content(provider, result)
+    if error or not content:
+        return ""
+    return content
+
+
+async def stream_devotional_completion(
+    system_prompt: str, user_prompt: str, *, max_tokens: int = 3600
+) -> AsyncIterator[Dict[str, Any]]:
+    """Stream a long-form completion from an explicit system + user prompt.
+    Yields {"type": "stream", "chunk": str} zero or more times, then
+    {"type": "done"}; or yields exactly one {"type": "error", "message": str}
+    and stops. Bytes flow the whole time so a proxy / idle-connection
+    timeout can't drop a multi-minute generation."""
+    err = llm_unconfigured_error()
+    if err:
+        yield {"type": "error", "message": err}
+        return
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    provider, url, headers, payload = _build_request(
+        messages, stream=True, max_tokens=max_tokens
+    )
+    llm_request = {
+        "system": system_prompt,
+        "messages": messages,
+        "params": {k: v for k, v in payload.items() if k != "messages"},
+    }
+
+    with record_llm(active_model_label(), llm_request) as _step:
+        accumulated = ""
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream(
+                    "POST", url, headers=headers, json=payload, timeout=300.0
+                ) as response:
+                    response.raise_for_status()
+                    done_sent = False
+                    async for line in response.aiter_lines():
+                        parsed = _stream_delta(provider, line)
+                        if parsed is None:
+                            continue
+                        kind, text = parsed
+                        if kind == "done":
+                            done_sent = True
+                            _step.set_response(accumulated)
+                            yield {"type": "done"}
+                            break
+                        if text:
+                            accumulated += text
+                            yield {"type": "stream", "chunk": text}
+                    if not done_sent:
+                        _step.set_response(accumulated)
+                        yield {"type": "done"}
             except httpx.HTTPError as e:
                 detail = str(e) or type(e).__name__
                 _step.set_error(f"LLM API error: {detail}")

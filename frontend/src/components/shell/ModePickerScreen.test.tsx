@@ -147,6 +147,21 @@ describe('ModePickerScreen', () => {
     ])
   })
 
+  it('selecting Devotional offers the "your verse vs mine" choice inline', async () => {
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /devotional/i }))
+
+    const session = firstSession()
+    expect(session.mode).toBe('devotional')
+    expect(session.messages[0]).toMatchObject({ role: 'user', text: '📖 Devotional' })
+    expect(session.messages[1].role).toBe('assistant')
+    expect(session.messages[1].choicesStatus).toBe('ready')
+    expect(session.messages[1].choices).toEqual([
+      { label: "I'll choose", modeParams: { source: 'user' } },
+      { label: 'Pick one for me', modeParams: { source: 'system' } },
+    ])
+  })
+
   it('typing directly into the landing input starts a freeform session with that message', async () => {
     const postChatStreamSpy = vi
       .spyOn(chatApi, 'postChatStream')

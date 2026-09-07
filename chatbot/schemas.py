@@ -10,7 +10,7 @@ class HistoryMessage(BaseModel):
 
 
 class ArtifactLink(BaseModel):
-    type: str = Field(..., description="interlinear | chapter | strongs | book_context | gematria | english_search")
+    type: str = Field(..., description="interlinear | chapter | strongs | book_context | gematria | english_search | devotional")
     label: str = Field(..., description="Human-readable link text shown in the chat bubble")
     params: Dict[str, Any] = Field(default_factory=dict, description="Fetch parameters for the artifact panel")
 
@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Optional conversation ID for context")
     history: Optional[List["HistoryMessage"]] = Field(None, description="Recent conversation turns for context")
     page_context: Optional[str] = Field(None, description="Verse reference currently displayed on the Explorer page (e.g. 'John 3:16')")
-    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, freeform")
+    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, freeform")
     mode_params: Optional[Dict[str, Any]] = Field(None, description="Mode-specific parameters, e.g. {'plan': 'chronological', 'day_index': 0}")
 
 

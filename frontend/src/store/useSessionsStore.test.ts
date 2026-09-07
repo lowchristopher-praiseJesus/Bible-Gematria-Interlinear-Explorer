@@ -23,6 +23,13 @@ describe('useSessionsStore', () => {
     expect(useSessionsStore.getState().sessions[session.id]).toEqual(session)
   })
 
+  it('creates a devotional session titled "Devotional"', () => {
+    const s = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+    expect(s.mode).toBe('devotional')
+    expect(s.title).toBe('Devotional')
+    expect(s.modeParams).toEqual({ source: 'system' })
+  })
+
   it('derives a topic session title from conceptSlug, hyphens included', () => {
     const session = useSessionsStore.getState().createSession('topic', {
       seriesId: 'present-day-ministry-of-jesus',

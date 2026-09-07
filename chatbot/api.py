@@ -327,6 +327,70 @@ async def _stream_chat_response(
             if request.history else None
         )
 
+        # ── Devotional mode: the generating turn ──────────────────────────
+        # Every non-generating devotional call (the pill-selection primer)
+        # goes through the buffered /chat endpoint, so on /chat/stream a
+        # devotional request that isn't already `delivered` is always a
+        # request to generate — whether the message is a typed verse/theme
+        # (source=user) or empty (source=system, auto-fired by the client).
+        md = request.mode_params or {}
+        if request.mode == "devotional" and not md.get("delivered"):
+            from chatbot.devotional import stream_devotional, DevotionalError
+            from chatbot.ollama_client import active_model_label
+
+            raw = request.message.strip()
+            source = md.get("source", "user")
+            full_text, reference, translations, stream_error = "", None, {}, None
+            try:
+                async for ev in stream_devotional(raw or None, source, request.page_context):
+                    if ev["type"] == "stream":
+                        yield await sse_event("stream", {"chunk": ev["chunk"], "text": ""})
+                    elif ev["type"] == "error":
+                        stream_error = ev["message"]
+                    elif ev["type"] == "done":
+                        full_text = ev["text"]
+                        reference = ev["reference"]
+                        translations = ev["translations"]
+            except DevotionalError:
+                result = {
+                    "type": "error",
+                    "message": "I couldn't find text for that reference — try another verse or a theme.",
+                    "data": None,
+                    "route": "Mode → devotional → unresolved",
+                }
+                _note_outcome(result)
+                yield await sse_event("final", {"result": result})
+                return
+
+            if stream_error or not full_text or not reference:
+                result = {
+                    "type": "error",
+                    "message": stream_error or "The devotional could not be generated.",
+                    "data": None,
+                    "route": "Error path",
+                }
+            else:
+                book_context = get_book_context(reference.split(" ")[0].upper())
+                result = {
+                    "type": "verse",
+                    "message": f"Here's a devotional on **{reference}**.",
+                    "data": {
+                        "reference": reference,
+                        "translations": translations,
+                        "book_context": book_context,
+                        "devotional": full_text,
+                    },
+                    "artifacts": [{
+                        "type": "devotional",
+                        "label": "Read the devotional ▸",
+                        "params": {"reference": reference, "text": full_text},
+                    }],
+                    "route": f"Mode → devotional → {active_model_label()}",
+                }
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
         if request.mode and not request.message.strip():
             result = await build_mode_primer(request.mode, request.mode_params)
             _note_outcome(result)

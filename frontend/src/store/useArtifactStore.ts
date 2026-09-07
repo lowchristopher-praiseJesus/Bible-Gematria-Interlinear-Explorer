@@ -46,6 +46,10 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
       return fetchGematria(link.params.value as number)
     case 'english_search':
       return fetchEnglishSearch(link.params.query as string)
+    case 'devotional':
+      // The finished devotional text travels inline on the link params
+      // (set by the chat message that produced it) — nothing to fetch.
+      return link.params
     default:
       throw new Error(`Unknown artifact type: ${link.type}`)
   }

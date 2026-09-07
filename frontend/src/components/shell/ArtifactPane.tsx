@@ -1,6 +1,7 @@
 import { ChevronLeft, X } from 'lucide-react'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { BookContextArtifact } from '@/components/artifacts/BookContextArtifact'
+import { DevotionalArtifact } from '@/components/artifacts/DevotionalArtifact'
 import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtifact'
 import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
@@ -13,6 +14,7 @@ import type {
   GematriaResponse,
   StrongsResponse,
 } from '@/types/api'
+import type { DevotionalArtifactParams } from '@/types/session'
 
 interface Props {
   onClose?: () => void
@@ -74,6 +76,9 @@ export function ArtifactPane({ onClose }: Props) {
                 {activeArtifact.type === 'book_context' && <BookContextArtifact data={data as BookContextResponse} />}
                 {activeArtifact.type === 'gematria' && <GematriaArtifact data={data as GematriaResponse} />}
                 {activeArtifact.type === 'english_search' && <EnglishSearchArtifact data={data as EnglishResponse} />}
+                {activeArtifact.type === 'devotional' && (
+                  <DevotionalArtifact {...(data as DevotionalArtifactParams)} />
+                )}
               </>
             )}
           </>
