@@ -14,6 +14,16 @@ from functools import wraps
 import feedback_store
 import share_store
 
+# Load the repo-root .env for non-Docker runs so local `python myproject.py`
+# honors PUBLIC_BASE_URL / ADMIN_* / *_DB_URL the same way the chatbot does
+# (chatbot/__init__.py). Real env vars and Docker's env_file still win —
+# load_dotenv does not override anything already set.
+try:
+	from dotenv import load_dotenv
+	load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+	pass
+
 app = Flask(__name__)
 app.config.from_mapping({'CACHE_TYPE' : 'filesystem', 'CACHE_DIR' : 'CACHED_PAGES', 'CACHE_THRESHOLD' : 150000})
 cache = Cache(app)
@@ -2076,9 +2086,17 @@ def _share_rate_ok(ip, *, capacity=10, refill_seconds=30.0):
 
 
 def _request_origin():
-	"""Scheme+host the browser used. Host comes from the Host header only:
-	nginx never sets X-Forwarded-Host, so honoring it would let a client
-	spoof the domain baked into the returned share URL."""
+	"""Origin to bake into a returned share URL.
+
+	`PUBLIC_BASE_URL` (e.g. https://example.org, or http://localhost:5173 for
+	the Vite dev server) wins outright when set — it's the only reliable
+	source behind a dev proxy that rewrites Host, and it removes any trust in
+	client-controlled headers. Otherwise fall back to scheme + Host header
+	(nginx sets Host to the real vhost; X-Forwarded-Host is never honored
+	because nginx doesn't set it and a client could spoof it)."""
+	base = os.environ.get('PUBLIC_BASE_URL', '').strip()
+	if base:
+		return base.rstrip('/')
 	proto = request.headers.get('X-Forwarded-Proto') or request.scheme
 	host = request.headers.get('Host')
 	if host:
