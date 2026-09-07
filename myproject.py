@@ -12,6 +12,7 @@ import hmac
 import base64
 from functools import wraps
 import feedback_store
+import share_store
 
 app = Flask(__name__)
 app.config.from_mapping({'CACHE_TYPE' : 'filesystem', 'CACHE_DIR' : 'CACHED_PAGES', 'CACHE_THRESHOLD' : 150000})
@@ -2044,6 +2045,47 @@ def _rate_ok(ip, *, capacity=5, refill_seconds=12.0):
 	_feedback_buckets[ip] = [tokens - 1.0, now]
 	return True
 
+
+# ---------------------------------------------------------------------------
+# Conversation sharing: write-once snapshots (writable shares.db)
+# ---------------------------------------------------------------------------
+_SHARE_DB_URL = os.environ.get("SHARE_DB_URL", "sqlite:///shares.db")
+_MAX_SHARE_BYTES = 1 * 1024 * 1024
+_MAX_SHARE_MESSAGES = 500
+_share_db = None
+_share_buckets = {}            # ip -> [tokens: float, last_refill: float]
+
+
+def _get_share_db():
+	global _share_db
+	if _share_db is None:
+		_share_db = share_store.get_db(_SHARE_DB_URL)
+		share_store.init_db(_share_db)
+	return _share_db
+
+
+def _share_rate_ok(ip, *, capacity=10, refill_seconds=30.0):
+	now = time.time()
+	tokens, last = _share_buckets.get(ip, [float(capacity), now])
+	tokens = min(capacity, tokens + (now - last) / refill_seconds)
+	if tokens < 1.0:
+		_share_buckets[ip] = [tokens, now]
+		return False
+	_share_buckets[ip] = [tokens - 1.0, now]
+	return True
+
+
+def _request_origin():
+	"""Scheme+host the browser used. Host comes from the Host header only:
+	nginx never sets X-Forwarded-Host, so honoring it would let a client
+	spoof the domain baked into the returned share URL."""
+	proto = request.headers.get('X-Forwarded-Proto') or request.scheme
+	host = request.headers.get('Host')
+	if host:
+		return f"{proto}://{host}"
+	return request.host_url.rstrip('/')
+
+
 @app.route('/api/bible-chat', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @app.route('/api/bible-chat/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 def chatbot_proxy(subpath=None):
@@ -2253,6 +2295,99 @@ def admin_delete_feedback(rid):
 def admin_delete_all_feedback():
 	count = feedback_store.delete_all_reports(_get_feedback_db())
 	return jsonify({'deleted_count': count})
+
+
+@app.route('/api/share', methods=['POST'])
+def create_share():
+	raw = request.get_data(cache=False)
+	if len(raw) > _MAX_SHARE_BYTES:
+		return jsonify({'error': 'too_large'}), 413
+
+	if not _share_rate_ok(request.headers.get('X-Real-IP') or request.remote_addr or 'unknown'):
+		return jsonify({'error': 'rate_limited'}), 429
+
+	try:
+		payload = _json.loads(raw or b'{}')
+	except ValueError:
+		return jsonify({'error': 'bad_json'}), 400
+	if not isinstance(payload, dict):
+		return jsonify({'error': 'bad_json'}), 400
+
+	session = payload.get('session')
+	if not isinstance(session, dict):
+		return jsonify({'error': 'bad_session'}), 400
+
+	mode = str(session.get('mode') or '').strip()
+	messages = session.get('messages')
+	notes = session.get('notes', [])
+	if not mode or not isinstance(messages, list) or not isinstance(notes, list):
+		return jsonify({'error': 'bad_session'}), 400
+	if len(messages) > _MAX_SHARE_MESSAGES:
+		return jsonify({'error': 'too_many_messages'}), 400
+
+	mode_params = session.get('modeParams')
+	if not isinstance(mode_params, dict):
+		mode_params = {}
+
+	title = (str(session.get('title') or '').strip() or mode)[:200]
+
+	# Strip the per-turn diagnostic `trace` blob from every message — large
+	# and never needed to re-render a shared conversation.
+	clean_messages = []
+	for m in messages:
+		if not isinstance(m, dict):
+			continue
+		clean_messages.append({k: v for k, v in m.items() if k != 'trace'})
+
+	clean_notes = []
+	for n in notes:
+		if not isinstance(n, dict):
+			continue
+		clean_notes.append({**n, 'body': str(n.get('body') or '')[:20000]})
+
+	snapshot = {
+		'mode': mode,
+		'modeParams': mode_params,
+		'title': title,
+		'messages': clean_messages,
+		'notes': clean_notes,
+	}
+
+	try:
+		token = share_store.insert_share(
+			_get_share_db(),
+			client_id=str(payload.get('client_id') or '')[:64] or None,
+			title=title,
+			mode=mode,
+			message_count=len(clean_messages),
+			payload=snapshot,
+		)
+	except Exception as e:                       # noqa: BLE001
+		app.logger.exception("share insert failed: %s", e)
+		return jsonify({'error': 'store_unavailable'}), 500
+
+	return jsonify({'token': token, 'url': f"{_request_origin()}/?import={token}"}), 201
+
+
+@app.route('/api/share/<token>', methods=['GET'])
+def read_share(token):
+	if not token or len(token) > 128:
+		return jsonify({'error': 'not_found'}), 404
+	row = share_store.get_share(_get_share_db(), token)
+	if row is None or row.get('payload') is None:
+		return jsonify({'error': 'not_found'}), 404
+	p = row['payload']
+	resp = jsonify({
+		'title': p.get('title'),
+		'mode': p.get('mode'),
+		'modeParams': p.get('modeParams') or {},
+		'messages': p.get('messages') or [],
+		'notes': p.get('notes') or [],
+		'shared_at': row.get('created_at'),
+	})
+	# A snapshot is per-recipient and immutable; keep it out of shared caches.
+	resp.headers['Cache-Control'] = 'private, no-store'
+	return resp, 200
 
 
 if __name__ == '__main__':

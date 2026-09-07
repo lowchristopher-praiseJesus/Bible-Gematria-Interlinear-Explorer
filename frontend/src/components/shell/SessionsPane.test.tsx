@@ -206,6 +206,31 @@ describe('SessionsPane', () => {
     })
   })
 
+  it('groups imported sessions under an Imported section, not their mode section', async () => {
+    useSessionsStore.getState().createSession('freeform', {})
+    const imported = useSessionsStore.getState().importSession({
+      token: 't1', mode: 'devotional', modeParams: { source: 'system' }, title: 'Devotional',
+      messages: [{ id: 'x', role: 'user', text: 'shared line' }], notes: [],
+    })
+    render(<SessionsPane activeSessionId={imported.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+    expect(screen.getByRole('button', { name: /Imported \(1\)/ })).toBeInTheDocument()
+    // No "Devotional" mode header is created for the imported devotional.
+    expect(screen.queryByRole('button', { name: /^Devotional \(/ })).not.toBeInTheDocument()
+    // Its row carries the original mode as a sub-label.
+    expect(screen.getByText('Imported · Devotional')).toBeInTheDocument()
+  })
+
+  it('search matches an imported session and keeps the Imported section shown', async () => {
+    const imported = useSessionsStore.getState().importSession({
+      token: 't2', mode: 'freeform', modeParams: {}, title: 'x',
+      messages: [{ id: 'x', role: 'user', text: 'find this needle' }], notes: [],
+    })
+    render(<SessionsPane activeSessionId={imported.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+    await userEvent.type(screen.getByRole('searchbox'), 'needle')
+    expect(screen.getByRole('button', { name: /Imported \(1\)/ })).toBeInTheDocument()
+  })
+
   describe('search', () => {
     it('hides sessions that do not match what was typed, keeping matches grouped by mode', async () => {
       const parable = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import type { ModeParams, Note, Session, SessionMessage, SessionMode } from '@/types/session'
+import type { ModeParams, Note, Session, SessionMessage, SessionMode, SharePayload } from '@/types/session'
 
 interface SessionsState {
   sessions: Record<string, Session>
@@ -21,6 +21,9 @@ interface SessionsState {
   addNote: (sessionId: string, body: string) => Note | null
   updateNote: (sessionId: string, noteId: string, body: string) => void
   deleteNote: (sessionId: string, noteId: string) => void
+  /** Bring a conversation in from a share link as a new local session,
+   * flagged `imported`. Does not change the active session. */
+  importSession: (payload: SharePayload & { token: string; sharedAt?: string }) => Session
 }
 
 export const MAX_NOTES_PER_SESSION = 5
@@ -49,6 +52,11 @@ function genId(): string {
 let noteIdCounter = 0
 function genNoteId(): string {
   return `note-${Date.now()}-${++noteIdCounter}`
+}
+
+let importedMsgCounter = 0
+function genImportedMessageId(): string {
+  return `imported-msg-${Date.now()}-${++importedMsgCounter}`
 }
 
 interface PersistedSessionsShape {
@@ -95,13 +103,103 @@ function sanitizeNotes(notes: unknown): Note[] {
   return out
 }
 
+function isValidMessage(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const c = value as Record<string, unknown>
+  return (
+    typeof c.id === 'string' &&
+    (c.role === 'user' || c.role === 'assistant') &&
+    typeof c.text === 'string'
+  )
+}
+
+function isArtifactLinkShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const c = value as Record<string, unknown>
+  return typeof c.type === 'string' && !!c.params && typeof c.params === 'object'
+}
+
+function isChoiceShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  return typeof (value as Record<string, unknown>).label === 'string'
+}
+
+/**
+ * Rebuild a single imported message from an already-`isValidMessage`
+ * entry, copying only the fields we recognise and can vouch for the
+ * shape of. The payload was serialized by another browser and crossed
+ * the network — a `...rest` passthrough would let a crafted key (e.g.
+ * `choices: "xxx"`) reach `ChatPane` and throw on every render of the
+ * session, a poison pill only a delete can clear. `trace` is never
+ * copied.
+ */
+function sanitizeMessage(value: unknown): SessionMessage {
+  const c = value as Record<string, unknown>
+  const out: SessionMessage = {
+    id: c.id as string,
+    role: c.role as SessionMessage['role'],
+    text: c.text as string,
+  }
+  if (typeof c.type === 'string') out.type = c.type
+  if (typeof c.route === 'string') out.route = c.route
+  if (typeof c.isStreaming === 'boolean') out.isStreaming = c.isStreaming
+  if (Array.isArray(c.followUpQuestions) && c.followUpQuestions.every((q) => typeof q === 'string')) {
+    out.followUpQuestions = c.followUpQuestions as string[]
+  }
+  if (Array.isArray(c.artifacts) && c.artifacts.every(isArtifactLinkShape)) {
+    out.artifacts = c.artifacts as SessionMessage['artifacts']
+  }
+  if (c.data && typeof c.data === 'object') {
+    out.data = c.data as SessionMessage['data']
+  }
+  if (Array.isArray(c.choices) && c.choices.every(isChoiceShape)) {
+    out.choices = c.choices as SessionMessage['choices']
+  }
+  if (c.choicesStatus === 'loading' || c.choicesStatus === 'ready' || c.choicesStatus === 'error') {
+    out.choicesStatus = c.choicesStatus
+  }
+  if (typeof c.choicesError === 'string') out.choicesError = c.choicesError
+  if (typeof c.resolvedChoiceLabel === 'string') out.resolvedChoiceLabel = c.resolvedChoiceLabel
+  return out
+}
+
+/**
+ * Messages from a share link were serialized by another browser and
+ * crossed the network — treat them as untrusted. Keep only well-formed
+ * entries, rebuilt field-by-field (see `sanitizeMessage`).
+ */
+function sanitizeMessages(messages: unknown): SessionMessage[] {
+  if (!Array.isArray(messages)) return []
+  const out: SessionMessage[] = []
+  for (const value of messages) {
+    if (!isValidMessage(value)) continue
+    out.push(sanitizeMessage(value))
+  }
+  return out
+}
+
+function sanitizeImported(value: unknown): Session['imported'] {
+  if (!value || typeof value !== 'object') return undefined
+  const c = value as Record<string, unknown>
+  if (typeof c.token !== 'string' || typeof c.importedAt !== 'number') return undefined
+  return {
+    token: c.token,
+    importedAt: c.importedAt,
+    sharedAt: typeof c.sharedAt === 'string' ? c.sharedAt : undefined,
+  }
+}
+
 function sanitizeSessions(sessions: unknown): Record<string, Session> {
   if (!sessions || typeof sessions !== 'object') return {}
   const out: Record<string, Session> = {}
   for (const [id, value] of Object.entries(sessions as Record<string, unknown>)) {
     if (isValidSession(value)) {
-      const raw = value as Session & { notes?: unknown }
-      out[id] = { ...raw, notes: sanitizeNotes(raw.notes) }
+      const raw = value as Session & { notes?: unknown; imported?: unknown }
+      out[id] = {
+        ...raw,
+        notes: sanitizeNotes(raw.notes),
+        imported: sanitizeImported(raw.imported),
+      }
     }
   }
   return out
@@ -341,6 +439,31 @@ export const useSessionsStore = create<SessionsState>()(
         return note
       },
 
+      importSession: (payload) => {
+        const now = Date.now()
+        const mode = payload.mode
+        const modeParams = payload.modeParams ?? {}
+        const messages = sanitizeMessages(payload.messages).map((m) => ({
+          ...m,
+          id: genImportedMessageId(),
+        }))
+        const notes = sanitizeNotes(payload.notes).map((n) => ({ ...n, id: genNoteId() }))
+        const title = (payload.title ?? '').trim() || deriveTitle(mode, modeParams)
+        const session: Session = {
+          id: genId(),
+          createdAt: now,
+          updatedAt: now,
+          mode,
+          modeParams,
+          title,
+          messages,
+          notes,
+          imported: { token: payload.token, importedAt: now, sharedAt: payload.sharedAt },
+        }
+        set((state) => ({ sessions: { ...state.sessions, [session.id]: session } }))
+        return session
+      },
+
       updateNote: (sessionId, noteId, body) =>
         set((state) => {
           const existing = state.sessions[sessionId]
@@ -372,7 +495,7 @@ export const useSessionsStore = create<SessionsState>()(
     }),
     {
       name: 'bible-explorer-sessions',
-      version: 3,
+      version: 4,
       storage: guardedSessionStorage,
       // Keep `trace` blobs out of localStorage (they're the bulk of the
       // store's growth); they stay in memory for the current session.

@@ -168,8 +168,8 @@ describe('useSessionsStore', () => {
     }
   })
 
-  it('persists at version 3', () => {
-    expect(useSessionsStore.persist.getOptions().version).toBe(3)
+  it('persists at version 4', () => {
+    expect(useSessionsStore.persist.getOptions().version).toBe(4)
   })
 
   it('createSession starts with an empty notes array', () => {
@@ -265,5 +265,109 @@ describe('useSessionsStore', () => {
     }))
     await useSessionsStore.persist.rehydrate()
     expect(useSessionsStore.getState().sessions.s.notes.map((n) => n.id)).toEqual(['n0', 'n1', 'n2', 'n3', 'n4'])
+  })
+
+  describe('importSession', () => {
+    const payload = {
+      token: 'tok-123',
+      sharedAt: '2026-09-07T00:00:00.000Z',
+      mode: 'devotional' as const,
+      modeParams: { source: 'system' as const, delivered: true },
+      title: 'Devotional',
+      messages: [
+        { id: 'orig-1', role: 'user' as const, text: 'share me' },
+        { id: 'orig-2', role: 'assistant' as const, text: 'a devotional', trace: { turnId: 'x' } as never },
+        { role: 'user', text: 'no id — dropped' } as never,
+      ],
+      notes: [{ id: 'orig-n', body: 'shared note', createdAt: 1, updatedAt: 1 }],
+    }
+
+    it('creates a fresh session flagged imported without stealing focus', () => {
+      const before = useSessionsStore.getState().activeSessionId
+      const s = useSessionsStore.getState().importSession(payload)
+      expect(s.imported).toEqual({
+        token: 'tok-123', importedAt: expect.any(Number), sharedAt: '2026-09-07T00:00:00.000Z',
+      })
+      expect(s.mode).toBe('devotional')
+      expect(s.modeParams).toEqual({ source: 'system', delivered: true })
+      expect(useSessionsStore.getState().activeSessionId).toBe(before)
+      expect(useSessionsStore.getState().sessions[s.id]).toEqual(s)
+    })
+
+    it('sanitizes messages: drops malformed, strips trace, regenerates ids', () => {
+      const s = useSessionsStore.getState().importSession(payload)
+      expect(s.messages).toHaveLength(2)
+      expect(s.messages.map((m) => m.text)).toEqual(['share me', 'a devotional'])
+      expect(s.messages[0].id).not.toBe('orig-1')
+      expect(s.messages[1]).not.toHaveProperty('trace')
+    })
+
+    it('regenerates note ids and keeps note bodies', () => {
+      const s = useSessionsStore.getState().importSession(payload)
+      expect(s.notes).toHaveLength(1)
+      expect(s.notes[0].body).toBe('shared note')
+      expect(s.notes[0].id).not.toBe('orig-n')
+    })
+
+    it('falls back to a derived title when the payload title is blank', () => {
+      const s = useSessionsStore.getState().importSession({ ...payload, title: '   ' })
+      expect(s.title).toBe('Devotional')
+    })
+
+    it('strips misshapen artifacts/data/choices but keeps well-formed ones', () => {
+      const s = useSessionsStore.getState().importSession({
+        ...payload,
+        messages: [
+          {
+            id: 'junk',
+            role: 'assistant' as const,
+            text: 'crafted extras',
+            choices: 'xxx',
+            artifacts: 'nope',
+            data: 5,
+          } as never,
+          {
+            id: 'real',
+            role: 'assistant' as const,
+            text: 'a real artifact',
+            artifacts: [{ type: 'strongs', label: 'x', params: { id: 'H1' } }],
+          } as never,
+        ],
+      })
+      expect(s.messages).toHaveLength(2)
+      const [junk, real] = s.messages
+      expect(junk).not.toHaveProperty('choices')
+      expect(junk).not.toHaveProperty('artifacts')
+      expect(junk).not.toHaveProperty('data')
+      expect(real.artifacts).toEqual([{ type: 'strongs', label: 'x', params: { id: 'H1' } }])
+    })
+  })
+
+  it('rehydrates a valid imported marker and drops a malformed one', async () => {
+    localStorage.setItem(
+      'bible-explorer-sessions',
+      JSON.stringify({
+        version: 4,
+        state: {
+          activeSessionId: null,
+          sessions: {
+            good: {
+              id: 'good', mode: 'freeform', modeParams: {}, title: 'x',
+              messages: [], notes: [], createdAt: 1, updatedAt: 1,
+              imported: { token: 't', importedAt: 5 },
+            },
+            bad: {
+              id: 'bad', mode: 'freeform', modeParams: {}, title: 'y',
+              messages: [], notes: [], createdAt: 1, updatedAt: 1,
+              imported: { token: 123 },
+            },
+          },
+        },
+      })
+    )
+    await useSessionsStore.persist.rehydrate()
+    const state = useSessionsStore.getState()
+    expect(state.sessions.good.imported).toEqual({ token: 't', importedAt: 5 })
+    expect(state.sessions.bad.imported).toBeUndefined()
   })
 })

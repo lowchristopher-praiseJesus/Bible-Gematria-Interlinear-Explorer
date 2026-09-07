@@ -61,10 +61,33 @@ export interface Note {
   body: string
 }
 
+export interface ImportedMeta {
+  /** The share token this session was imported from. */
+  token: string
+  /** When the import happened (epoch ms). */
+  importedAt: number
+  /** Server `shared_at` timestamp for the original share, if known. */
+  sharedAt?: string
+}
+
 export interface Session {
   id: string
   createdAt: number
   updatedAt: number
+  mode: SessionMode
+  modeParams: ModeParams
+  title: string
+  messages: SessionMessage[]
+  notes: Note[]
+  /** Present only on a session brought in via a share link. Its `mode`
+   * stays the original mode; this marker is what the sidebar groups on. */
+  imported?: ImportedMeta
+}
+
+/** The payload carried by a share link: a session reduced to what the
+ * recipient needs to re-create it locally. Built by `shareApi.createShare`,
+ * stored server-side, returned by `shareApi.fetchShare`. */
+export interface SharePayload {
   mode: SessionMode
   modeParams: ModeParams
   title: string

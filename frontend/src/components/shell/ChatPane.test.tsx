@@ -6,6 +6,7 @@ import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import * as chatApi from '@/lib/chatApi'
+import * as shareApi from '@/lib/shareApi'
 
 describe('ChatPane', () => {
   beforeEach(() => {
@@ -516,6 +517,14 @@ describe('ChatPane', () => {
     render(<ChatPane sessionId={session.id} />)
     await userEvent.click(screen.getByRole('button', { name: /report an issue/i }))
     expect(await screen.findByText(/report an issue with this chat/i)).toBeInTheDocument()
+  })
+
+  it('opens the Share dialog and shows a generated link', async () => {
+    vi.spyOn(shareApi, 'createShare').mockResolvedValue({ token: 'tok', url: 'http://localhost/?import=tok' })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: /^share$/i }))
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=tok')
   })
 
   it('shows the notes control in the header', () => {

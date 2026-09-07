@@ -227,6 +227,16 @@ came from; it defaults to `dev`.
 No nginx change is needed — `/api/feedback`, `/api/admin/*`, and the `/admin`
 SPA route all resolve under existing `location` blocks.
 
+### shares.db (conversation sharing)
+
+`POST /api/share` writes an immutable conversation snapshot; `GET
+/api/share/<token>` reads it back for the recipient's browser. Stored in
+`shares.db` via the `dataset` library, on the `shares-db` named volume
+mounted at `/app/shares-db` (env `SHARE_DB_URL`). Same persistence and
+backup considerations as `feedback.db`. There is no admin UI and no
+expiry — rows accumulate; an operator can prune old rows directly with
+`sqlite3` if ever needed.
+
 ---
 
 ## 4. Open the firewall — in TWO places
