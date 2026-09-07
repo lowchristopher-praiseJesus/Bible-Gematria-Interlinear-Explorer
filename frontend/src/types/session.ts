@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional'
 
 export interface ModeParams {
   plan?: 'chronological' | 'canonical'
@@ -11,12 +11,26 @@ export interface ModeParams {
   seriesId?: string
   conceptSlug?: string
   reference?: string
+  /** Devotional mode: whose verse — one the user typed (a reference or a
+   * theme), or one the system/LLM picks. */
+  source?: 'user' | 'system'
+  /** Devotional mode: set once a devotional has been delivered, so later
+   * messages in the session route as ordinary chat instead of
+   * regenerating. */
+  delivered?: boolean
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional'
   label: string
   params: Record<string, unknown>
+}
+
+/** Params for a `devotional`-type ArtifactLink — the finished devotional
+ * text travels inline (no fetch when the pane opens it). */
+export interface DevotionalArtifactParams {
+  reference: string
+  text: string
 }
 
 /** One clickable option in a "choice" prompt — e.g. Chronological vs
