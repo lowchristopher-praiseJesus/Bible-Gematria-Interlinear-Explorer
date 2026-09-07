@@ -1,5 +1,6 @@
 import { fetchShare } from '@/lib/shareApi'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
+import type { SessionMode } from '@/types/session'
 
 const IMPORTED_TOKENS_KEY = 'bible-explorer-imported-tokens'
 
@@ -77,7 +78,9 @@ export async function consumeImportParam(): Promise<ImportResult> {
   // The share was serialized by another browser: an unknown mode string
   // would post a bogus mode to /api/bible-chat on the next turn. Coerce
   // anything the app doesn't recognise to freeform.
-  const mode = payload.mode in MODE_LABELS ? payload.mode : 'freeform'
+  const mode = Object.prototype.hasOwnProperty.call(MODE_LABELS, payload.mode)
+    ? (payload.mode as SessionMode)
+    : 'freeform'
 
   const session = useSessionsStore.getState().importSession({
     token,

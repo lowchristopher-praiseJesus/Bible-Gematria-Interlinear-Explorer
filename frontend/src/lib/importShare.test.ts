@@ -73,6 +73,15 @@ it('coerces an unknown mode to freeform', async () => {
   expect(useSessionsStore.getState().sessions[id].mode).toBe('freeform')
 })
 
+it('coerces a prototype-key mode ("toString") to freeform', async () => {
+  setImportParam('tok-proto')
+  vi.spyOn(shareApi, 'fetchShare').mockResolvedValue({ ...snap, mode: 'toString' as never })
+  const result = await consumeImportParam()
+  expect(result.status).toBe('imported')
+  const id = (result as { sessionId: string }).sessionId
+  expect(useSessionsStore.getState().sessions[id].mode).toBe('freeform')
+})
+
 it('maps a 404 to a not_found error', async () => {
   setImportParam('gone')
   vi.spyOn(shareApi, 'fetchShare').mockRejectedValue(new Error('Request failed: 404 Not Found'))
