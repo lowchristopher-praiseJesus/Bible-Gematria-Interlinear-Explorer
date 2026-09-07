@@ -16,6 +16,11 @@ feedback.db
 feedback.db-shm
 feedback.db-wal
 
+# Writable conversation-sharing DB (created at runtime, never committed)
+shares.db
+shares.db-shm
+shares.db-wal
+
 # flask_caching filesystem cache
 CACHED_PAGES/
 frontend/CACHED_PAGES/
