@@ -1168,6 +1168,23 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
             "follow_up_questions": _generate_follow_ups("verse", None, ref),
         }
 
+    if mode == "devotional":
+        source = mode_params.get("source", "user")
+        if source == "system":
+            message = "Let me find a verse for you…"
+        else:
+            message = (
+                "Tell me a verse reference (e.g. John 3:16) or a theme "
+                "(e.g. 'facing anxiety'), and I'll write you a devotional."
+            )
+        return {
+            "type": "chat",
+            "message": message,
+            "data": None,
+            "route": f"Mode primer → devotional ({source})",
+            "follow_up_questions": [],
+        }
+
     return {
         "type": "chat",
         "message": "Ask me anything about the Bible.",

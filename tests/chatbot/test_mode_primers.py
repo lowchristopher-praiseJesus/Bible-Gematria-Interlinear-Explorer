@@ -263,6 +263,29 @@ async def test_verse_primer_abbreviated_verse_range(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_devotional_primer_user_source_asks_for_a_verse_or_theme():
+    result = await build_mode_primer("devotional", {"source": "user"})
+    assert result["type"] == "chat"
+    assert "verse reference" in result["message"].lower()
+    assert "theme" in result["message"].lower()
+    assert result["follow_up_questions"] == []
+
+
+@pytest.mark.asyncio
+async def test_devotional_primer_system_source_is_a_short_ack():
+    result = await build_mode_primer("devotional", {"source": "system"})
+    assert result["type"] == "chat"
+    assert "find a verse" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_devotional_primer_defaults_to_user_source():
+    result = await build_mode_primer("devotional", {})
+    assert result["type"] == "chat"
+    assert "verse reference" in result["message"].lower()
+
+
+@pytest.mark.asyncio
 async def test_freeform_primer():
     result = await build_mode_primer("freeform", {})
     assert result["type"] == "chat"
