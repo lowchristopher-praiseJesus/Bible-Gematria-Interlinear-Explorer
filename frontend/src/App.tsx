@@ -6,7 +6,7 @@ import { ArtifactPane } from '@/components/shell/ArtifactPane'
 import { SessionsPane } from '@/components/shell/SessionsPane'
 import { SettingsPanel } from '@/components/shell/SettingsPanel'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { consumeImportParam } from '@/lib/importShare'
+import { consumeImportParam, readImportTokenFromHash } from '@/lib/importShare'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useThemeStore } from '@/store/useThemeStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -106,16 +106,16 @@ export default function App() {
     if (hasDetail) setArtifactOpen(true)
   }, [hasDetail])
 
-  // A ?import=<token> link: pull the shared conversation into local
-  // history once, then clean the param out of the URL.
+  // A #import=<token> link: pull the shared conversation into local
+  // history once, then clean the token out of the URL fragment.
   useEffect(() => {
     if (importHandled.current) return
     importHandled.current = true
-    if (!new URLSearchParams(window.location.search).get('import')) return
+    if (!readImportTokenFromHash()) return
 
     setImportNotice({ tone: 'info', text: 'Importing shared conversation…' })
     consumeImportParam().then((result) => {
-      // Keep ?import= in the URL only when a plain reload could still
+      // Keep #import= in the URL only when a plain reload could still
       // succeed — a transient network failure, or a payload this client
       // couldn't parse. For every settled outcome (imported, duplicate,
       // none, or a 404 a reload can't fix) strip it so a refresh doesn't
@@ -124,9 +124,9 @@ export default function App() {
         result.status === 'error' &&
         (result.reason === 'network' || result.reason === 'bad_data')
       if (!keepParam) {
-        const url = new URL(window.location.href)
-        url.searchParams.delete('import')
-        window.history.replaceState({}, '', url)
+        // #import= is the only thing we ever put in the fragment, so drop
+        // the whole fragment (keep path + query).
+        window.history.replaceState({}, '', window.location.pathname + window.location.search)
       }
 
       if (result.status === 'imported' || result.status === 'duplicate') {

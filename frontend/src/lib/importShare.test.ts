@@ -4,10 +4,12 @@ import { useSessionsStore } from '@/store/useSessionsStore'
 import * as shareApi from './shareApi'
 
 function setImportParam(token: string | null) {
-  const url = new URL(window.location.href)
-  if (token) url.searchParams.set('import', token)
-  else url.searchParams.delete('import')
-  window.history.replaceState({}, '', url)
+  // The token lives in the URL fragment now, not a query param.
+  window.history.replaceState(
+    {},
+    '',
+    window.location.pathname + (token ? `#import=${token}` : ''),
+  )
 }
 
 const snap = {
@@ -98,4 +100,39 @@ it('maps a shapeless payload to a bad_data error', async () => {
   setImportParam('weird')
   vi.spyOn(shareApi, 'fetchShare').mockResolvedValue({ nope: true } as never)
   expect(await consumeImportParam()).toEqual({ status: 'error', reason: 'bad_data' })
+})
+
+it('imports the exact JSON shape GET /api/share/<token> returns (wire contract)', async () => {
+  // This literal MUST stay in lockstep with the Flask `read_share` response
+  // asserted in tests/test_share_api.py::test_get_returns_snapshot_without_client_id:
+  //   { title, mode, modeParams, messages, notes, shared_at }  — snake_case
+  //   `shared_at`, camelCase `modeParams`, no `client_id`. If either side
+  //   renames a key, this test breaks instead of a silent drop in prod.
+  const serverResponse = {
+    title: 'Ask Anything',
+    mode: 'freeform' as const,
+    modeParams: {},
+    messages: [
+      { id: 'm1', role: 'user' as const, text: 'hi' },
+      { id: 'm2', role: 'assistant' as const, text: 'hello', artifacts: [] },
+    ],
+    notes: [{ id: 'n1', body: 'my note', createdAt: 1, updatedAt: 1 }],
+    shared_at: '2026-09-08T00:00:00.000Z',
+  }
+  setImportParam('tok-contract')
+  vi.spyOn(shareApi, 'fetchShare').mockResolvedValue(serverResponse)
+
+  const result = await consumeImportParam()
+  expect(result.status).toBe('imported')
+  const s = useSessionsStore.getState().sessions[(result as { sessionId: string }).sessionId]
+  expect(s.title).toBe('Ask Anything')
+  expect(s.mode).toBe('freeform')
+  expect(s.modeParams).toEqual({})
+  expect(s.messages.map((m) => m.text)).toEqual(['hi', 'hello'])
+  expect(s.notes.map((n) => n.body)).toEqual(['my note'])
+  expect(s.imported).toEqual({
+    token: 'tok-contract',
+    importedAt: expect.any(Number),
+    sharedAt: '2026-09-08T00:00:00.000Z',
+  })
 })

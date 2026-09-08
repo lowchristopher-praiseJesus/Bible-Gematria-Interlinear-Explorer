@@ -6,7 +6,7 @@ import type { Session } from '@/types/session'
 
 const createShare = vi.fn()
 let createImpl: (...a: unknown[]) => Promise<unknown> = () =>
-  Promise.resolve({ token: 'tok', url: 'http://localhost/?import=tok' })
+  Promise.resolve({ token: 'tok', url: 'http://localhost/#import=tok' })
 vi.mock('@/lib/shareApi', () => ({
   createShare: (...a: unknown[]) => {
     createShare(...a)
@@ -25,7 +25,7 @@ describe('ShareDialog', () => {
 
   beforeEach(() => {
     createShare.mockReset()
-    createImpl = () => Promise.resolve({ token: 'tok', url: 'http://localhost/?import=tok' })
+    createImpl = () => Promise.resolve({ token: 'tok', url: 'http://localhost/#import=tok' })
   })
 
   afterEach(() => {
@@ -36,7 +36,7 @@ describe('ShareDialog', () => {
 
   it('creates a link on open and shows it', async () => {
     render(<ShareDialog session={session} open onOpenChange={() => {}} />)
-    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=tok')
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/#import=tok')
     expect(createShare).toHaveBeenCalledTimes(1)
   })
 
@@ -46,7 +46,7 @@ describe('ShareDialog', () => {
     render(<ShareDialog session={session} open onOpenChange={() => {}} />)
     await screen.findByLabelText('Share link')
     await userEvent.click(screen.getByRole('button', { name: /copy/i }))
-    expect(writeText).toHaveBeenCalledWith('http://localhost/?import=tok')
+    expect(writeText).toHaveBeenCalledWith('http://localhost/#import=tok')
     expect(await screen.findByRole('button', { name: /copied/i })).toBeInTheDocument()
   })
 
@@ -72,7 +72,7 @@ describe('ShareDialog', () => {
   })
 
   it('re-requests a link when the conversation has grown since the last share', async () => {
-    createImpl = () => Promise.resolve({ token: 'a', url: 'http://localhost/?import=a' })
+    createImpl = () => Promise.resolve({ token: 'a', url: 'http://localhost/#import=a' })
     const twoMsg: Session = {
       ...session,
       messages: [
@@ -81,16 +81,16 @@ describe('ShareDialog', () => {
       ],
     }
     const { rerender } = render(<ShareDialog session={twoMsg} open onOpenChange={() => {}} />)
-    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=a')
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/#import=a')
     expect(createShare).toHaveBeenCalledTimes(1)
 
-    createImpl = () => Promise.resolve({ token: 'b', url: 'http://localhost/?import=b' })
+    createImpl = () => Promise.resolve({ token: 'b', url: 'http://localhost/#import=b' })
     const threeMsg: Session = {
       ...twoMsg,
       messages: [...twoMsg.messages, { id: 'm3', role: 'user', text: 'more' }],
     }
     rerender(<ShareDialog session={threeMsg} open onOpenChange={() => {}} />)
-    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=b')
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/#import=b')
     expect(createShare).toHaveBeenCalledTimes(2)
   })
 
@@ -98,8 +98,8 @@ describe('ShareDialog', () => {
     createImpl = () => Promise.reject(new Error('Request failed: 500'))
     render(<ShareDialog session={session} open onOpenChange={() => {}} />)
     expect(await screen.findByText(/couldn.t create a share link/i)).toBeInTheDocument()
-    createImpl = () => Promise.resolve({ token: 't2', url: 'http://localhost/?import=t2' })
+    createImpl = () => Promise.resolve({ token: 't2', url: 'http://localhost/#import=t2' })
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
-    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=t2')
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/#import=t2')
   })
 })
