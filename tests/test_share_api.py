@@ -42,7 +42,9 @@ def test_create_returns_token_and_import_url(app_client):
     assert resp.status_code == 201
     data = resp.get_json()
     assert data["token"]
-    assert data["url"].endswith(f"/?import={data['token']}")
+    # Token rides in the URL fragment, not a query param.
+    assert data["url"].endswith(f"/#import={data['token']}")
+    assert "?import=" not in data["url"]
 
 
 def test_spoofed_forwarded_host_is_ignored_in_url(app_client):
@@ -60,7 +62,7 @@ def test_public_base_url_env_wins_over_host_header(app_client, monkeypatch):
     )
     assert resp.status_code == 201
     data = resp.get_json()
-    assert data["url"] == f"http://localhost:5173/?import={data['token']}"
+    assert data["url"] == f"http://localhost:5173/#import={data['token']}"
 
 
 def test_stored_row_strips_trace_and_derives_counts(app_client, tmp_path):
@@ -117,6 +119,24 @@ def test_rejects_oversize_body(app_client):
         content_type="application/json",
     )
     assert resp.status_code == 413
+
+
+def test_rejects_oversize_by_declared_content_length(app_client):
+    # A declared Content-Length over the cap is refused from the header,
+    # ahead of the rate check and before the body is read — so a flood of
+    # large POSTs can't make each worker materialize megabytes first. Here
+    # the IP's bucket is also exhausted; the size check must still win.
+    myproject._share_buckets.clear()
+    for _ in range(15):
+        app_client.post("/api/share", json=_body())  # drain the rate bucket
+    resp = app_client.post(
+        "/api/share",
+        data=b"",
+        content_length=1 * 1024 * 1024 + 1,
+        content_type="application/json",
+    )
+    assert resp.status_code == 413
+    assert resp.get_json()["error"] == "too_large"
 
 
 def test_rate_limited_after_bucket_exhausted(app_client):
