@@ -230,3 +230,34 @@ async def test_random_verse_phrasing_yields_to_an_explicit_reference_in_the_same
     monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
     result = await route_deterministic("give me another verse, John 3:16")
     assert result["data"]["reference"] == "JHN 3:16"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "What does the fear of the Lord actually mean?",
+        "what does 'the fear of the LORD' mean",
+        "What does that even mean?",
+    ],
+)
+async def test_what_does_x_mean_with_a_history_verse_defers_to_the_ai(monkeypatch, message):
+    # A reference-less "what does X mean" follow-up, while a verse sits in
+    # conversation history, must fall through to the LLM (return None) — not
+    # get answered with a bare re-quote of the history verse. The
+    # STUDY_KEYWORDS entry "what does .* mean" is a regex; a plain `in` check
+    # silently drops it, which let _QUOTE_KW_RE's "what does" hijack the
+    # message into `_quote_response(context_ref, ...)`. The fake fetch below
+    # succeeds, so a non-None result here means the deterministic quote path
+    # fired when it should not have.
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": "The proverbs of Solomon..."}
+
+    async def fake_study(reference, depth="medium"):
+        return {"reference": reference}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr("chatbot.router.fetch_scripture_study", fake_study)
+    history = [{"role": "assistant", "text": "Here is **PRO 1:1**."}]
+
+    assert await route_deterministic(message, history=history) is None
