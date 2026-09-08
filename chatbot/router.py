@@ -103,6 +103,22 @@ _QUOTE_KW_RE = re.compile(
     re.IGNORECASE,
 )
 
+
+def _matches_study_keyword(text_lower: str) -> bool:
+    """STUDY_KEYWORDS mixes plain substrings with one regex entry
+    ("what does .* mean"). Match each the right way. A plain
+    `any(kw in text_lower ...)` silently drops the regex, which is how a
+    reference-less "what does X mean" question used to slip past this guard
+    and get hijacked by _QUOTE_KW_RE's "what does" into a bare verse
+    re-quote instead of an LLM answer."""
+    for kw in STUDY_KEYWORDS:
+        if ".*" in kw:
+            if re.search(kw, text_lower):
+                return True
+        elif kw in text_lower:
+            return True
+    return False
+
 # Matches an NT book name standing alone (without chapter:verse)
 from chatbot.book_context import NT_NAME_TO_USFM as _NT_NAME_TO_USFM
 _BOOK_NAME_ONLY_RE = re.compile(
@@ -767,7 +783,7 @@ async def route_deterministic(
 
         # ── No verse ref — try keyword routing using history context ref ──────
         if context_ref:
-            if any(kw in text_lower for kw in STUDY_KEYWORDS):
+            if _matches_study_keyword(text_lower):
                 # Commentary / "explain this verse" requests are answered by
                 # the LLM (which still pulls the TBTA/Macula analysis in as a
                 # tool, and the boxed verse is re-attached by route_claude) —
@@ -821,7 +837,7 @@ async def route_deterministic(
     # LLM (given the verse and its analysis data as tool context), not a raw
     # commentary card — the verse-level commentary dataset is uneven and the
     # card was never readable prose. route_claude() re-attaches the boxed verse.
-    if any(kw in text_lower for kw in STUDY_KEYWORDS):
+    if _matches_study_keyword(text_lower):
         record_routing("fell through to LLM (study keyword)")
         return None
 
