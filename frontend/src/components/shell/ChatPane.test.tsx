@@ -520,11 +520,18 @@ describe('ChatPane', () => {
   })
 
   it('opens the Share dialog and shows a generated link', async () => {
-    vi.spyOn(shareApi, 'createShare').mockResolvedValue({ token: 'tok', url: 'http://localhost/?import=tok' })
+    vi.spyOn(shareApi, 'createShare').mockResolvedValue({ token: 'tok', url: 'http://localhost/#import=tok' })
     const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'user', text: 'hi' })
     render(<ChatPane sessionId={session.id} />)
     await userEvent.click(screen.getByRole('button', { name: /^share$/i }))
-    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/?import=tok')
+    expect(await screen.findByLabelText('Share link')).toHaveValue('http://localhost/#import=tok')
+  })
+
+  it('disables Share on an empty (zero-message) conversation', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+    expect(screen.getByRole('button', { name: /^share$/i })).toBeDisabled()
   })
 
   it('shows the notes control in the header', () => {

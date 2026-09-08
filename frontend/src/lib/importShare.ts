@@ -45,8 +45,15 @@ function forgetImportedToken(token: string): void {
   }
 }
 
+/** The share token rides in the URL fragment (`#import=<token>`), not a
+ * query param — a fragment is never sent to the server (Referer, access
+ * logs) and is easy to scrub from history. Read it from `location.hash`. */
+export function readImportTokenFromHash(): string | null {
+  return new URLSearchParams(window.location.hash.replace(/^#/, '')).get('import')
+}
+
 export async function consumeImportParam(): Promise<ImportResult> {
-  const token = new URLSearchParams(window.location.search).get('import')
+  const token = readImportTokenFromHash()
   if (!token) return { status: 'none' }
 
   const existing = Object.values(useSessionsStore.getState().sessions).find(

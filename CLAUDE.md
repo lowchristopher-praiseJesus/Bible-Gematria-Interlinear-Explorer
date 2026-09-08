@@ -35,7 +35,7 @@ For production deployment, see `Installation.txt` — it uses uWSGI + nginx on U
 - `/strongs` — Strong's number lookup (e.g., `H622`, `G726`)
 - `/gematria` — search by numeric value (words and verse totals)
 - `/english` — full-text search of KJV verse text
-- `/api/share` — `POST` a session snapshot, returns `{ token, url }` (`url` = `<origin>/?import=<token>`)
+- `/api/share` — `POST` a session snapshot, returns `{ token, url }` (`url` = `<origin>/#import=<token>` — the token is in the URL *fragment*, so it never reaches the server / access logs)
 - `/api/share/<token>` — `GET` the snapshot for import; `404` if unknown
 - `/LC_/<path>` — served statically from `/var/www/html/LC_/` (Leningrad Codex manuscript images, not in repo)
 
@@ -48,7 +48,8 @@ For production deployment, see `Installation.txt` — it uses uWSGI + nginx on U
 Conversations ("sessions") live only in the browser (`localStorage`,
 Zustand `persist`, key `bible-explorer-sessions`). The Share button in
 the chat header POSTs a snapshot to `shares.db` and yields a
-`/?import=<token>` link. Opening that link imports the conversation into
+`/#import=<token>` link (token in the fragment — kept out of Referer
+headers and server logs). Opening that link imports the conversation into
 the recipient's local history as a new session carrying an `imported`
 marker; `SessionsPane` shows those under a dedicated **Imported**
 section (their real `mode` is preserved). Snapshots are immutable — no

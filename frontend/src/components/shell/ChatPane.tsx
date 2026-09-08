@@ -460,7 +460,9 @@ export function ChatPane({ sessionId }: Props) {
           <ChatNotesMenu sessionId={session.id} />
           <button
             onClick={() => setShareOpen(true)}
-            className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
+            disabled={session.messages.length === 0}
+            title={session.messages.length === 0 ? 'Nothing to share yet' : undefined}
+            className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40 disabled:pointer-events-none"
           >
             <Share2 className="w-3 h-3" aria-hidden="true" />
             Share

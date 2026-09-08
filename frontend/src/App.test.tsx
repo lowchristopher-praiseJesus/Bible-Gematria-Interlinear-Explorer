@@ -153,18 +153,18 @@ describe('App', () => {
     expect(useArtifactStore.getState().activeNote).toBeNull()
   })
 
-  it('imports a shared conversation from ?import= and opens it', async () => {
+  it('imports a shared conversation from #import= and opens it', async () => {
     vi.spyOn(shareApi, 'fetchShare').mockResolvedValue({
       title: 'Devotional', mode: 'devotional', modeParams: { source: 'system' },
       messages: [{ id: 'x', role: 'user', text: 'a shared devotional' }], notes: [],
       shared_at: '2026-09-07T00:00:00.000Z',
     })
-    window.history.pushState({}, '', '/?import=tok-app-1')
+    window.history.pushState({}, '', '/#import=tok-app-1')
 
     render(<App />)
 
     expect(await screen.findByText('a shared devotional')).toBeInTheDocument()
-    expect(new URLSearchParams(window.location.search).get('import')).toBeNull()
+    expect(window.location.hash).toBe('')
     const sessions = Object.values(useSessionsStore.getState().sessions)
     expect(sessions).toHaveLength(1)
     expect(sessions[0].imported?.token).toBe('tok-app-1')
@@ -172,16 +172,16 @@ describe('App', () => {
 
   it('shows an error banner when the shared link is unknown', async () => {
     vi.spyOn(shareApi, 'fetchShare').mockRejectedValue(new Error('Request failed: 404 Not Found'))
-    window.history.pushState({}, '', '/?import=missing-app')
+    window.history.pushState({}, '', '/#import=missing-app')
     render(<App />)
     expect(await screen.findByText(/no longer available/i)).toBeInTheDocument()
   })
 
-  it('keeps ?import= in the URL on a network failure so a reload retries', async () => {
+  it('keeps #import= in the URL on a network failure so a reload retries', async () => {
     vi.spyOn(shareApi, 'fetchShare').mockRejectedValue(new Error('Failed to fetch'))
-    window.history.pushState({}, '', '/?import=net-fail')
+    window.history.pushState({}, '', '/#import=net-fail')
     render(<App />)
     expect(await screen.findByText(/couldn.t load the shared conversation/i)).toBeInTheDocument()
-    expect(new URLSearchParams(window.location.search).get('import')).toBe('net-fail')
+    expect(window.location.hash).toBe('#import=net-fail')
   })
 })

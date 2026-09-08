@@ -2317,12 +2317,20 @@ def admin_delete_all_feedback():
 
 @app.route('/api/share', methods=['POST'])
 def create_share():
-	raw = request.get_data(cache=False)
-	if len(raw) > _MAX_SHARE_BYTES:
+	# Reject an oversized body from its declared Content-Length before
+	# reading it, and rate-limit before the read too — so a flood of large
+	# unauthenticated POSTs can't make each worker materialize up to
+	# nginx's 12 MB cap first.
+	declared = request.content_length
+	if declared is not None and declared > _MAX_SHARE_BYTES:
 		return jsonify({'error': 'too_large'}), 413
 
 	if not _share_rate_ok(request.headers.get('X-Real-IP') or request.remote_addr or 'unknown'):
 		return jsonify({'error': 'rate_limited'}), 429
+
+	raw = request.get_data(cache=False)
+	if len(raw) > _MAX_SHARE_BYTES:  # Content-Length can be absent or wrong
+		return jsonify({'error': 'too_large'}), 413
 
 	try:
 		payload = _json.loads(raw or b'{}')
@@ -2384,7 +2392,11 @@ def create_share():
 		app.logger.exception("share insert failed: %s", e)
 		return jsonify({'error': 'store_unavailable'}), 500
 
-	return jsonify({'token': token, 'url': f"{_request_origin()}/?import={token}"}), 201
+	# The token rides in the URL *fragment*, not a query param: a fragment is
+	# never sent in the Referer header, never reaches nginx access logs, and
+	# is easier to scrub from browser history. The SPA reads it from
+	# window.location.hash (see importShare.ts).
+	return jsonify({'token': token, 'url': f"{_request_origin()}/#import={token}"}), 201
 
 
 @app.route('/api/share/<token>', methods=['GET'])

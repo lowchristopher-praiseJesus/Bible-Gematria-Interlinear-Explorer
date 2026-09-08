@@ -116,6 +116,40 @@ describe('useSessionsStore', () => {
     expect(state.activeSessionId).toBeNull()
   })
 
+  it('re-sanitizes stored message fields on rehydration', async () => {
+    // A session persisted before the field allowlist existed carries a
+    // crafted `choices: "xxx"` that ChatPane would throw on. Rehydration
+    // must scrub it, not just import.
+    localStorage.setItem(
+      'bible-explorer-sessions',
+      JSON.stringify({
+        version: 4,
+        state: {
+          activeSessionId: null,
+          sessions: {
+            poisoned: {
+              id: 'poisoned', mode: 'freeform', modeParams: {}, title: 'x',
+              createdAt: 1, updatedAt: 1, notes: [],
+              messages: [
+                { id: 'm1', role: 'assistant', text: 'hi', choices: 'xxx', artifacts: 'nope', data: 5 },
+                { role: 'user', text: 'no id — dropped' },
+              ],
+            },
+          },
+        },
+      }),
+    )
+
+    await useSessionsStore.persist.rehydrate()
+
+    const msgs = useSessionsStore.getState().sessions.poisoned.messages
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].id).toBe('m1')
+    expect(msgs[0]).not.toHaveProperty('choices')
+    expect(msgs[0]).not.toHaveProperty('artifacts')
+    expect(msgs[0]).not.toHaveProperty('data')
+  })
+
   it('round-trips an assistant message trace through append', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {
@@ -307,6 +341,15 @@ describe('useSessionsStore', () => {
       expect(s.notes).toHaveLength(1)
       expect(s.notes[0].body).toBe('shared note')
       expect(s.notes[0].id).not.toBe('orig-n')
+    })
+
+    it('keeps more than MAX_NOTES_PER_SESSION notes from a share', () => {
+      const many = Array.from({ length: 8 }, (_, i) => ({
+        id: `n${i}`, body: `note ${i}`, createdAt: 1, updatedAt: 1,
+      }))
+      const s = useSessionsStore.getState().importSession({ ...payload, notes: many })
+      expect(s.notes).toHaveLength(8)
+      expect(s.notes.map((n) => n.body)).toEqual(many.map((n) => n.body))
     })
 
     it('falls back to a derived title when the payload title is blank', () => {

@@ -86,7 +86,13 @@ function isValidNote(value: unknown): boolean {
   return typeof candidate.id === 'string' && typeof candidate.body === 'string'
 }
 
-function sanitizeNotes(notes: unknown): Note[] {
+/**
+ * `cap` bounds the result to the per-session note limit (the default,
+ * used on rehydration). An import passes `cap: false` — the sharer's
+ * notes come in whole; the whole payload is already size-bounded by the
+ * server, and dropping notes silently is worse than keeping them.
+ */
+function sanitizeNotes(notes: unknown, cap = true): Note[] {
   if (!Array.isArray(notes)) return []
   const out: Note[] = []
   for (const value of notes) {
@@ -98,7 +104,7 @@ function sanitizeNotes(notes: unknown): Note[] {
       createdAt: typeof candidate.createdAt === 'number' ? candidate.createdAt : Date.now(),
       updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now(),
     })
-    if (out.length === MAX_NOTES_PER_SESSION) break
+    if (cap && out.length === MAX_NOTES_PER_SESSION) break
   }
   return out
 }
@@ -197,6 +203,11 @@ function sanitizeSessions(sessions: unknown): Record<string, Session> {
       const raw = value as Session & { notes?: unknown; imported?: unknown }
       out[id] = {
         ...raw,
+        // Re-run the message sanitizer on every rehydration, not just at
+        // import: a session stored before the field allowlist existed (or
+        // by some future bug) would otherwise stay a poison pill across
+        // reloads — only a delete would clear it.
+        messages: sanitizeMessages(raw.messages),
         notes: sanitizeNotes(raw.notes),
         imported: sanitizeImported(raw.imported),
       }
@@ -447,7 +458,9 @@ export const useSessionsStore = create<SessionsState>()(
           ...m,
           id: genImportedMessageId(),
         }))
-        const notes = sanitizeNotes(payload.notes).map((n) => ({ ...n, id: genNoteId() }))
+        // `cap: false` — keep all of the sharer's notes, not just the
+        // first MAX_NOTES_PER_SESSION (the whole payload is server-bounded).
+        const notes = sanitizeNotes(payload.notes, false).map((n) => ({ ...n, id: genNoteId() }))
         const title = (payload.title ?? '').trim() || deriveTitle(mode, modeParams)
         const session: Session = {
           id: genId(),

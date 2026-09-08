@@ -1,7 +1,14 @@
 # Conversation Sharing Design Spec
 
 **Date:** 2026-09-07
-**Status:** Approved for planning
+**Status:** Implemented
+
+**Post-implementation change:** the import token moved from a query param
+(`/?import=<token>`) to the URL **fragment** (`/#import=<token>`) so it is
+never sent in a `Referer` header or written to server access logs.
+`_request_origin` builds the URL, `importShare.ts` reads
+`window.location.hash`, and `App.tsx` strips the fragment after consuming
+it. All `?import=` references below should read `#import=`.
 
 ## Purpose
 

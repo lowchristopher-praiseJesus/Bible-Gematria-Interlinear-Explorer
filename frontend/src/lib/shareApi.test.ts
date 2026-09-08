@@ -16,12 +16,12 @@ afterEach(() => vi.unstubAllGlobals())
 
 it('createShare POSTs a trace-stripped session and returns the link', async () => {
   const fetchMock = vi.fn().mockResolvedValue({
-    ok: true, json: async () => ({ token: 'tok', url: 'http://x/?import=tok' }),
+    ok: true, json: async () => ({ token: 'tok', url: 'http://x/#import=tok' }),
   })
   vi.stubGlobal('fetch', fetchMock)
 
   const out = await createShare(session)
-  expect(out).toEqual({ token: 'tok', url: 'http://x/?import=tok' })
+  expect(out).toEqual({ token: 'tok', url: 'http://x/#import=tok' })
 
   const [url, init] = fetchMock.mock.calls[0]
   expect(url).toBe('/api/share')
