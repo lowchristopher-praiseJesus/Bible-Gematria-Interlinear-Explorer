@@ -21,7 +21,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # App code + the static assets the server-rendered pages reference at /static/.
-COPY myproject.py .
+# myproject.py imports feedback_store and share_store at module load — all three
+# root modules must be in the image or gunicorn crash-loops on ModuleNotFoundError.
+COPY myproject.py feedback_store.py share_store.py ./
 COPY static/ ./static/
 
 # Complete.db (read-only) and CACHED_PAGES/ (writable) are bind-mounted by
