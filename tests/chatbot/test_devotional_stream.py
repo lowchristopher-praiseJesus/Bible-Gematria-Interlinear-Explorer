@@ -5,7 +5,7 @@ from chatbot import devotional
 
 @pytest.mark.asyncio
 async def test_stream_devotional_happy_path(monkeypatch):
-    async def fake_resolve(raw, source):
+    async def fake_resolve(raw, source, rotation=None):
         return "JHN 14:27", {"eng-KJV": "Peace I leave with you..."}
 
     async def fake_completion(system, user, *, max_tokens=3600):
@@ -28,7 +28,7 @@ async def test_stream_devotional_happy_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_devotional_llm_error_is_forwarded(monkeypatch):
-    async def fake_resolve(raw, source):
+    async def fake_resolve(raw, source, rotation=None):
         return "JHN 14:27", {"eng-KJV": "..."}
 
     async def fake_completion(system, user, *, max_tokens=3600):
@@ -43,7 +43,7 @@ async def test_stream_devotional_llm_error_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_devotional_propagates_devotional_error(monkeypatch):
-    async def fake_resolve(raw, source):
+    async def fake_resolve(raw, source, rotation=None):
         raise devotional.DevotionalError("nope")
 
     monkeypatch.setattr(devotional, "resolve_seed_verse", fake_resolve)

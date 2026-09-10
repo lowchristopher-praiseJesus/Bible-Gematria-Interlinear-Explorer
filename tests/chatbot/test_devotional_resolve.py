@@ -170,3 +170,61 @@ async def test_pick_verse_for_theme_unconfigured_uses_fallback(monkeypatch):
     monkeypatch.setattr(devotional.random, "choice", lambda seq: seq[2])
     out = await devotional.pick_verse_for_theme(None)
     assert out == devotional.FALLBACK_VERSES[2]
+
+
+@pytest.mark.asyncio
+async def test_rotation_pick_used_when_no_ref_and_no_theme(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": f"text for {reference}"}
+
+    called = False
+
+    async def boom(_theme):
+        nonlocal called
+        called = True
+        return "JHN 3:16"
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr(devotional, "pick_verse_for_theme", boom)
+
+    from chatbot.devotional_rotation import pick_from_rotation
+
+    expected = pick_from_rotation(555, 4)
+
+    ref, translations = await devotional.resolve_seed_verse("", "system", rotation=(555, 4))
+
+    assert ref == expected
+    assert called is False  # the LLM theme-pick path was not used
+    assert translations["eng-KJV"] == f"text for {expected}"
+
+
+@pytest.mark.asyncio
+async def test_rotation_ignored_when_a_theme_is_given(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": f"text for {reference}"}
+
+    async def theme_pick(theme):
+        assert theme == "facing anxiety"
+        return "ISA 41:10"
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr(devotional, "pick_verse_for_theme", theme_pick)
+
+    ref, _ = await devotional.resolve_seed_verse("facing anxiety", "user", rotation=(555, 4))
+    assert ref == "ISA 41:10"
+
+
+@pytest.mark.asyncio
+async def test_no_rotation_keeps_the_old_theme_pick_path(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": f"text for {reference}"}
+
+    async def theme_pick(theme):
+        assert theme is None
+        return "PSA 23:1"
+
+    monkeypatch.setattr(devotional, "fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr(devotional, "pick_verse_for_theme", theme_pick)
+
+    ref, _ = await devotional.resolve_seed_verse("", "system", rotation=None)
+    assert ref == "PSA 23:1"

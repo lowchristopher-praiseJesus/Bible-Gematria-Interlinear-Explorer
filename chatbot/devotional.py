@@ -23,6 +23,7 @@ from chatbot.ollama_client import (
     simple_completion,
     stream_devotional_completion,
 )
+from chatbot.devotional_rotation import pick_from_rotation
 
 
 class DevotionalError(Exception):
@@ -185,14 +186,27 @@ async def _range_text(usfm: str, chapter: int, start: int, end: int) -> str:
     return " ".join(parts)
 
 
-async def resolve_seed_verse(raw: Optional[str], source: str) -> Tuple[str, Dict[str, str]]:
+async def resolve_seed_verse(
+    raw: Optional[str],
+    source: str,
+    rotation: Optional[Tuple[int, int]] = None,
+) -> Tuple[str, Dict[str, str]]:
     """(usfm_reference, translations_dict). For a single verse the dict is the
     real multi-translation payload; for a range it's {"eng-KJV": joined text}.
-    Raises DevotionalError when no verse text can be fetched."""
+    Raises DevotionalError when no verse text can be fetched.
+
+    `rotation` is the client's (seed, cursor) for the "Pick one for me"
+    path: when there's no user reference and no theme, the seed verse comes
+    from pick_from_rotation() instead of a stateless LLM call (which used to
+    return Psalm 23:1 almost every time). Themed and typed-reference picks
+    ignore `rotation`."""
     ref = _resolve_verse_reference(raw) if (source == "user" and raw) else None
     if ref is None:
         theme = raw.strip() if (raw and raw.strip()) else None
-        ref = await pick_verse_for_theme(theme)
+        if theme is None and rotation is not None:
+            ref = pick_from_rotation(*rotation)
+        else:
+            ref = await pick_verse_for_theme(theme)
 
     m = _USFM_REF_RE.match(ref)
     is_range = bool(m and m.group(4) and int(m.group(4)) != int(m.group(3)))
@@ -228,14 +242,17 @@ async def resolve_seed_verse(raw: Optional[str], source: str) -> Tuple[str, Dict
 
 
 async def stream_devotional(
-    raw: Optional[str], source: str, page_context: Optional[str] = None
+    raw: Optional[str],
+    source: str,
+    page_context: Optional[str] = None,
+    rotation: Optional[Tuple[int, int]] = None,
 ) -> AsyncIterator[Dict[str, object]]:
     """Resolve the seed verse, then stream the devotional. Yields
     {"type": "stream", "chunk": str} while generating, then one terminal
     event: {"type": "error", "message": str} on an LLM stream failure, or
     {"type": "done", "text", "reference", "translations"} on success.
     A DevotionalError from seed-verse resolution propagates to the caller."""
-    reference, translations = await resolve_seed_verse(raw, source)
+    reference, translations = await resolve_seed_verse(raw, source, rotation)
     verse_text = _kjv_text(translations)
     prompt = build_devotional_prompt(reference, verse_text)
 
