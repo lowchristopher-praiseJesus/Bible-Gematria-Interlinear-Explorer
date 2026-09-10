@@ -56,6 +56,20 @@ section (their real `mode` is preserved). Snapshots are immutable — no
 expiry, no revocation. See
 `docs/superpowers/specs/2026-09-07-conversation-sharing-design.md`.
 
+## Devotional "Pick one for me"
+
+The system-picked seed verse is a deterministic draw from
+`chatbot/data/devotional_verses.py` (`DEVOTIONAL_POOL`, ≥366 USFM refs),
+dealt as a per-browser seeded shuffled deck by
+`chatbot/devotional_rotation.py::pick_from_rotation(seed, cursor)`. The
+client (`useDevotionalRotationStore`) holds the random per-browser `seed`
+and a monotonic `cursor` and passes them in `mode_params`
+(`rotation_seed` / `rotation_cursor`). Themed and typed-reference picks
+still go through `pick_verse_for_theme` / `_resolve_verse_reference`.
+Regenerate/extend the pool with `scripts/validate_devotional_pool.py`
+against `Complete.db`. See
+`docs/superpowers/specs/2026-09-10-devotional-annual-rotation-design.md`.
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.
