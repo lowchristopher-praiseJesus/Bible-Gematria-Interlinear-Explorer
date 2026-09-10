@@ -14,6 +14,11 @@ function stripTrace(messages: SessionMessage[]): SessionMessage[] {
 }
 
 export async function createShare(session: Session): Promise<{ token: string; url: string }> {
+  // `rotationSeed` is a stable per-browser random id; shipping it in a
+  // public snapshot would let anyone holding two share links from the same
+  // browser correlate them. Strip it (and its cursor) — the recipient's
+  // own rotation store deals their deck.
+  const { rotationSeed: _rs, rotationCursor: _rc, ...cleanModeParams } = session.modeParams
   const res = await fetch('/api/share', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -21,7 +26,7 @@ export async function createShare(session: Session): Promise<{ token: string; ur
       client_id: getClientId(),
       session: {
         mode: session.mode,
-        modeParams: session.modeParams,
+        modeParams: cleanModeParams,
         title: session.title,
         messages: stripTrace(session.messages),
         notes: session.notes,

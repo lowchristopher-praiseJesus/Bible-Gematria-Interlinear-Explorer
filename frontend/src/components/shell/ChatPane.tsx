@@ -179,6 +179,10 @@ export function ChatPane({ sessionId }: Props) {
       const isRotationPick =
         session.modeParams.source === 'system' && message.trim() === ''
       let modeParams = { ...session.modeParams }
+      // An abandoned pick (errored and never retried) leaves its cursor
+      // unclaimed — `advance()` only runs on success — so a fresh session
+      // simply re-deals that same card. Intentional: no verse is burned on
+      // an error.
       if (isRotationPick && modeParams.rotationSeed == null) {
         const rotationSeed = useDevotionalRotationStore.getState().ensureSeed()
         const rotationCursor = useDevotionalRotationStore.getState().cursor

@@ -453,7 +453,10 @@ export const useSessionsStore = create<SessionsState>()(
       importSession: (payload) => {
         const now = Date.now()
         const mode = payload.mode
-        const modeParams = payload.modeParams ?? {}
+        // Drop the sharer's per-browser rotation slot (defence-in-depth —
+        // createShare already strips it): the recipient must never inherit
+        // it, their own useDevotionalRotationStore deals their deck.
+        const { rotationSeed: _rs, rotationCursor: _rc, ...modeParams } = payload.modeParams ?? {}
         const messages = sanitizeMessages(payload.messages).map((m) => ({
           ...m,
           id: genImportedMessageId(),
