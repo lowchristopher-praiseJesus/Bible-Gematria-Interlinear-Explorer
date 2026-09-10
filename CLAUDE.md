@@ -66,8 +66,12 @@ client (`useDevotionalRotationStore`) holds the random per-browser `seed`
 and a monotonic `cursor` and passes them in `mode_params`
 (`rotation_seed` / `rotation_cursor`). Themed and typed-reference picks
 still go through `pick_verse_for_theme` / `_resolve_verse_reference`.
-Regenerate/extend the pool with `scripts/validate_devotional_pool.py`
-against `Complete.db`. See
+Validate the pool with `scripts/validate_devotional_pool.py` (`--runtime`
+checks the live fetch path, not just `Complete.db`). Editing the pool
+(adding, removing, or reordering entries) is a rotation-continuity break —
+it reshuffles every existing browser's deck and can re-serve verses
+clients already saw — so pool changes must be rare and deliberate and will
+trip `test_devotional_rotation.py::test_rotation_sequence_is_pinned`. See
 `docs/superpowers/specs/2026-09-10-devotional-annual-rotation-design.md`.
 
 ## Key Conventions
