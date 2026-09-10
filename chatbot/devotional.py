@@ -4,8 +4,15 @@ devotional, and stream that devotional from the configured LLM.
 The seed verse comes from one of three places:
   * an explicit reference the user typed ("John 3:16", "Psalm 23:1-3");
   * a theme the user typed ("facing anxiety") → one short LLM pick;
-  * the "pick one for me" path → the same LLM pick with no theme.
-Anything the LLM pick can't produce falls back to FALLBACK_VERSES.
+  * the "pick one for me" path (no reference, no theme) → a deterministic
+    draw from the per-browser rotation deck (chatbot.devotional_rotation
+    .pick_from_rotation, fed the client's (seed, cursor)); the LLM is only
+    used for themed picks.
+The rotation path also carries a fetch-failure fallback chain: an
+unresolvable pool ref falls through to the next card in the deck, then to
+pick_verse_for_theme(None), which itself lands on FALLBACK_VERSES. Themed
+and typed-reference picks have no such fallback — a DevotionalError there
+propagates to the caller unchanged.
 """
 
 import random
@@ -186,28 +193,20 @@ async def _range_text(usfm: str, chapter: int, start: int, end: int) -> str:
     return " ".join(parts)
 
 
-async def resolve_seed_verse(
-    raw: Optional[str],
-    source: str,
-    rotation: Optional[Tuple[int, int]] = None,
-) -> Tuple[str, Dict[str, str]]:
-    """(usfm_reference, translations_dict). For a single verse the dict is the
-    real multi-translation payload; for a range it's {"eng-KJV": joined text}.
-    Raises DevotionalError when no verse text can be fetched.
+async def _resolve_ref_to_text(
+    ref: str,
+) -> Optional[Tuple[str, Dict[str, str]]]:
+    """Fetch verse text for a single USFM ref or a verse range.
 
-    `rotation` is the client's (seed, cursor) for the "Pick one for me"
-    path: when there's no user reference and no theme, the seed verse comes
-    from pick_from_rotation() instead of a stateless LLM call (which used to
-    return Psalm 23:1 almost every time). Themed and typed-reference picks
-    ignore `rotation`."""
-    ref = _resolve_verse_reference(raw) if (source == "user" and raw) else None
-    if ref is None:
-        theme = raw.strip() if (raw and raw.strip()) else None
-        if theme is None and rotation is not None:
-            ref = pick_from_rotation(*rotation)
-        else:
-            ref = await pick_verse_for_theme(theme)
+    Returns (possibly-clamped reference, translations dict), or None when no
+    text could be fetched. It never raises for a fetch failure — the
+    non-rotation callers turn a None into DevotionalError themselves (so
+    their behaviour is unchanged), while the rotation path uses the None to
+    try the next candidate ref in order.
 
+    For a range the returned dict is {"eng-KJV": joined text}; for a single
+    verse it's the real multi-translation payload. A range whose end exceeds
+    _MAX_RANGE_SPAN is clamped and the returned reference names that span."""
     m = _USFM_REF_RE.match(ref)
     is_range = bool(m and m.group(4) and int(m.group(4)) != int(m.group(3)))
 
@@ -223,22 +222,74 @@ async def resolve_seed_verse(
             ref = f"{usfm} {chapter}:{start}-{end}"
         text = await _range_text(usfm, chapter, start, end)
         if not text:
-            raise DevotionalError(f"No verse text for {ref}")
+            return None
         return ref, {"eng-KJV": text}
 
     # fetch_verse_translations → the biblehub fetcher raises VerseFetchError
     # on timeout / HTTP error / parse failure / a reference that yields no
     # translations (common when an LLM-cited reference is slightly off).
-    # Any such failure — like an empty dict or blank KJV text — is an
-    # unresolved seed verse, so it becomes DevotionalError here rather than
-    # escaping past `except DevotionalError` in chatbot/api.py.
+    # Any such failure — like an empty dict or blank KJV text — means the
+    # seed verse is unresolved; the caller decides whether that's fatal.
     try:
         translations = await fetch_verse_translations(ref, languages=["eng"])
-    except Exception as exc:  # noqa: BLE001 — matches router.py's broad style
-        raise DevotionalError(f"No verse text for {ref}") from exc
+    except Exception:  # noqa: BLE001 — matches router.py's broad style
+        return None
     if not translations or not _kjv_text(translations):
-        raise DevotionalError(f"No verse text for {ref}")
+        return None
     return ref, translations
+
+
+async def _resolve_rotation_seed_verse(
+    seed: int, cursor: int
+) -> Tuple[str, Dict[str, str]]:
+    """The "Pick one for me" rotation path, with a fetch-failure safety net.
+
+    DEVOTIONAL_POOL was validated against Complete.db, but the runtime
+    fetches verse text from a different corpus (chatbot.tools →
+    MYBIBLETOOLBOX_PATH / the biblehub fetcher), so a pool ref that corpus
+    can't serve must not be a hard error. Try this card; if it yields no
+    text try the next card in the deck (cursor + 1) once; if that also
+    fails fall back to pick_verse_for_theme(None), which has FALLBACK_VERSES
+    behind it and is always resolvable. Only this path gets the retry —
+    typed-reference and theme picks still raise DevotionalError on failure."""
+    for cur in (cursor, cursor + 1):
+        resolved = await _resolve_ref_to_text(pick_from_rotation(seed, cur))
+        if resolved is not None:
+            return resolved
+    ref = await pick_verse_for_theme(None)
+    resolved = await _resolve_ref_to_text(ref)
+    if resolved is None:
+        raise DevotionalError(f"No verse text for {ref}")
+    return resolved
+
+
+async def resolve_seed_verse(
+    raw: Optional[str],
+    source: str,
+    rotation: Optional[Tuple[int, int]] = None,
+) -> Tuple[str, Dict[str, str]]:
+    """(usfm_reference, translations_dict). For a single verse the dict is the
+    real multi-translation payload; for a range it's {"eng-KJV": joined text}.
+    Raises DevotionalError when no verse text can be fetched.
+
+    `rotation` is the client's (seed, cursor) for the "Pick one for me"
+    path: when there's no user reference and no theme, the seed verse comes
+    from pick_from_rotation() instead of a stateless LLM call (which used to
+    return Psalm 23:1 almost every time). That path also carries a fetch
+    fallback (next card → theme pick → FALLBACK_VERSES) so an unresolvable
+    pool entry isn't fatal. Themed and typed-reference picks ignore
+    `rotation` and still propagate a DevotionalError unchanged."""
+    ref = _resolve_verse_reference(raw) if (source == "user" and raw) else None
+    if ref is None:
+        theme = raw.strip() if (raw and raw.strip()) else None
+        if theme is None and rotation is not None:
+            return await _resolve_rotation_seed_verse(*rotation)
+        ref = await pick_verse_for_theme(theme)
+
+    resolved = await _resolve_ref_to_text(ref)
+    if resolved is None:
+        raise DevotionalError(f"No verse text for {ref}")
+    return resolved
 
 
 async def stream_devotional(

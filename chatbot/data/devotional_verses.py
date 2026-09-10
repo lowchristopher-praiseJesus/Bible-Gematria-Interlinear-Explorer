@@ -9,6 +9,13 @@ Each entry is a USFM reference (book code, chapter:verse, optional -end)
 matching chatbot.devotional._USFM_REF_RE. Keep the list duplicate-free and
 >= 366 entries; tests/chatbot/test_devotional_pool.py enforces both, and
 scripts/validate_devotional_pool.py checks every entry against Complete.db.
+
+Editing this list — adding, removing, or reordering entries — reshuffles
+every existing browser's rotation deck and can re-serve verses clients
+already saw, so pool changes should be rare, batched, and deliberate; they
+will also trip tests/chatbot/test_devotional_rotation.py::
+test_rotation_sequence_is_pinned, which must only be re-pinned for an
+intentional rotation reset.
 """
 
 DEVOTIONAL_POOL: tuple[str, ...] = (

@@ -33,3 +33,15 @@ def test_cursor_past_the_pool_starts_a_new_epoch_without_raising():
 
 def test_negative_cursor_clamps_to_zero():
     assert pick_from_rotation(77, -5) == pick_from_rotation(77, 0)
+
+
+# A failure here means the (seed,cursor)->verse mapping changed — existing
+# clients' decks were silently reshuffled and will re-serve verses. Only
+# update these literals for a DELIBERATE rotation reset. The mapping depends
+# on the seed-string format f"{seed}:{epoch}", DEVOTIONAL_POOL's exact
+# contents/order, and random.shuffle's algorithm — all otherwise untested.
+def test_rotation_sequence_is_pinned():
+    assert pick_from_rotation(42, 0) == "GEN 8:22"
+    assert pick_from_rotation(42, 1) == "PRO 3:12"
+    # Epoch 1 (cursor == len(pool)) — a fresh permutation, offset 0.
+    assert pick_from_rotation(7, N) == "DEU 8:3"
