@@ -168,6 +168,13 @@ describe('chatApi', () => {
     })
   })
 
+  it('toWireModeParams maps rotationSeed and rotationCursor to snake_case', () => {
+    expect(toWireModeParams({ rotationSeed: 7, rotationCursor: 2 })).toEqual({
+      rotation_seed: 7,
+      rotation_cursor: 2,
+    })
+  })
+
   it('fetchWikiConcept requests the study-wiki page endpoint', async () => {
     const mockResponse = {
       series_id: 's1',

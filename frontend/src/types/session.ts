@@ -18,6 +18,11 @@ export interface ModeParams {
    * messages in the session route as ordinary chat instead of
    * regenerating. */
   delivered?: boolean
+  /** Devotional "Pick one for me": the (seed, cursor) slot this session's
+   *  rotation pick used. Persisted so a retry after an errored turn reuses
+   *  the same slot instead of skipping a verse. */
+  rotationSeed?: number
+  rotationCursor?: number
 }
 
 export interface ArtifactLink {

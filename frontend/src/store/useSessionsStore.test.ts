@@ -328,6 +328,21 @@ describe('useSessionsStore', () => {
       expect(useSessionsStore.getState().sessions[s.id]).toEqual(s)
     })
 
+    it('strips the sharer per-browser rotation slot from imported modeParams', () => {
+      const s = useSessionsStore.getState().importSession({
+        ...payload,
+        modeParams: {
+          source: 'system' as const,
+          delivered: true,
+          rotationSeed: 918273,
+          rotationCursor: 5,
+        },
+      })
+      expect(s.modeParams).not.toHaveProperty('rotationSeed')
+      expect(s.modeParams).not.toHaveProperty('rotationCursor')
+      expect(s.modeParams).toEqual({ source: 'system', delivered: true })
+    })
+
     it('sanitizes messages: drops malformed, strips trace, regenerates ids', () => {
       const s = useSessionsStore.getState().importSession(payload)
       expect(s.messages).toHaveLength(2)

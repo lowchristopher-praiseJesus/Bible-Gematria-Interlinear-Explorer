@@ -33,6 +33,25 @@ it('createShare POSTs a trace-stripped session and returns the link', async () =
   expect(body.session.messages[1]).not.toHaveProperty('trace')
 })
 
+it('createShare strips the per-browser rotation slot from modeParams', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true, json: async () => ({ token: 'tok', url: 'http://x/#import=tok' }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  const devotionalSession: Session = {
+    ...session,
+    mode: 'devotional',
+    modeParams: { source: 'system', delivered: true, rotationSeed: 918273, rotationCursor: 5 },
+  }
+  await createShare(devotionalSession)
+
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+  expect(body.session.modeParams).not.toHaveProperty('rotationSeed')
+  expect(body.session.modeParams).not.toHaveProperty('rotationCursor')
+  expect(body.session.modeParams).toEqual({ source: 'system', delivered: true })
+})
+
 it('createShare throws on a non-ok response', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 413, statusText: 'Payload Too Large' }))
   await expect(createShare(session)).rejects.toThrow(/413/)

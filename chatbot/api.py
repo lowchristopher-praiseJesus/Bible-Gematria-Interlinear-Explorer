@@ -340,9 +340,14 @@ async def _stream_chat_response(
 
             raw = request.message.strip()
             source = md.get("source", "user")
+            _rs, _rc = md.get("rotation_seed"), md.get("rotation_cursor")
+            try:
+                rotation = (int(_rs), int(_rc)) if _rs is not None and _rc is not None else None
+            except (TypeError, ValueError):
+                rotation = None
             full_text, reference, translations, stream_error = "", None, {}, None
             try:
-                async for ev in stream_devotional(raw or None, source, request.page_context):
+                async for ev in stream_devotional(raw or None, source, request.page_context, rotation):
                     if ev["type"] == "stream":
                         yield await sse_event("stream", {"chunk": ev["chunk"], "text": ""})
                     elif ev["type"] == "error":

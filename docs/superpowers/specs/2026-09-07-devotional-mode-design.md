@@ -69,6 +69,10 @@ chat path.
   chat message in `localStorage`, like every other chat artifact.
 - A curated devotional-verse data file. The system-picked verse comes from
   a single LLM call with a small hardcoded fallback list.
+  *(Superseded 2026-09-10 — see
+  `2026-09-10-devotional-annual-rotation-design.md`. The system pick is now
+  a seeded shuffled deck over a curated ≥366-verse pool; the single LLM
+  call remains only for themed picks.)*
 - Scheduling / "devotional of the day" / notifications / email.
 - Multi-verse devotionals assembled from several unrelated references. A
   single reference or a single contiguous range is the unit; free-text that

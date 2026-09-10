@@ -25,7 +25,8 @@ interface ChatPayload {
  * Translate the camelCase ModeParams session model into the snake_case
  * keys the FastAPI backend expects on the wire
  * (dayIndex -> day_index, completedDays -> completed_days,
- *  parableId -> parable_id, seriesId -> series_id, conceptSlug -> concept_slug).
+ *  parableId -> parable_id, seriesId -> series_id, conceptSlug -> concept_slug,
+ *  rotationSeed -> rotation_seed, rotationCursor -> rotation_cursor).
  * Unknown keys pass through unchanged so the mapper stays forward-compatible.
  */
 export function toWireModeParams(params: ModeParams): Record<string, unknown> {
@@ -47,6 +48,12 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
         break
       case 'conceptSlug':
         out.concept_slug = value
+        break
+      case 'rotationSeed':
+        out.rotation_seed = value
+        break
+      case 'rotationCursor':
+        out.rotation_cursor = value
         break
       default:
         out[key] = value

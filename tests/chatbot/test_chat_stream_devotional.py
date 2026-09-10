@@ -18,7 +18,7 @@ def _patch_stream_devotional(monkeypatch, gen):
 
 
 def test_devotional_stream_emits_verse_final_with_artifact(client, monkeypatch):
-    async def fake_stream(raw, source, page_context):
+    async def fake_stream(raw, source, page_context=None, rotation=None):
         assert raw == "peace"
         assert source == "user"
         yield {"type": "stream", "chunk": "Some morning "}
@@ -51,7 +51,7 @@ def test_devotional_stream_emits_verse_final_with_artifact(client, monkeypatch):
 
 
 def test_devotional_stream_empty_message_system_source_still_generates(client, monkeypatch):
-    async def fake_stream(raw, source, page_context):
+    async def fake_stream(raw, source, page_context=None, rotation=None):
         assert raw is None
         assert source == "system"
         yield {"type": "done", "text": "A devotional.", "reference": "ROM 8:28",
@@ -70,7 +70,7 @@ def test_devotional_stream_empty_message_system_source_still_generates(client, m
 def test_devotional_stream_devotional_error_becomes_error_result(client, monkeypatch):
     import chatbot.devotional as devo
 
-    async def fake_stream(raw, source, page_context):
+    async def fake_stream(raw, source, page_context=None, rotation=None):
         raise devo.DevotionalError("no text")
         yield  # noqa: unreachable — makes this an async generator
 
@@ -85,7 +85,7 @@ def test_devotional_stream_devotional_error_becomes_error_result(client, monkeyp
 
 
 def test_devotional_stream_llm_error_becomes_error_result(client, monkeypatch):
-    async def fake_stream(raw, source, page_context):
+    async def fake_stream(raw, source, page_context=None, rotation=None):
         yield {"type": "error", "message": "LLM API error: boom"}
 
     _patch_stream_devotional(monkeypatch, fake_stream)
@@ -96,6 +96,44 @@ def test_devotional_stream_llm_error_becomes_error_result(client, monkeypatch):
     final = next(e for e in _events(resp.text) if e["type"] == "final")["result"]
     assert final["type"] == "error"
     assert "boom" in final["message"]
+
+
+def test_rotation_params_reach_stream_devotional(client, monkeypatch):
+    seen = {}
+
+    async def fake_stream(raw, source, page_context=None, rotation=None):
+        seen["raw"] = raw
+        seen["source"] = source
+        seen["rotation"] = rotation
+        yield {"type": "done", "text": "d", "reference": "PSA 100:4",
+               "translations": {"eng-KJV": "Enter into his gates"}}
+
+    _patch_stream_devotional(monkeypatch, fake_stream)
+
+    resp = client.post("/chat/stream", json={
+        "message": "",
+        "mode": "devotional",
+        "mode_params": {"source": "system", "rotation_seed": 555, "rotation_cursor": 4},
+    })
+    assert resp.status_code == 200
+    assert seen["rotation"] == (555, 4)
+
+
+def test_missing_rotation_params_pass_none(client, monkeypatch):
+    seen = {}
+
+    async def fake_stream(raw, source, page_context=None, rotation=None):
+        seen["rotation"] = rotation
+        yield {"type": "done", "text": "d", "reference": "PSA 100:4",
+               "translations": {"eng-KJV": "Enter into his gates"}}
+
+    _patch_stream_devotional(monkeypatch, fake_stream)
+
+    resp = client.post("/chat/stream", json={
+        "message": "", "mode": "devotional", "mode_params": {"source": "system"},
+    })
+    assert resp.status_code == 200
+    assert seen["rotation"] is None
 
 
 def test_devotional_stream_delivered_true_falls_through_to_normal_routing(client, monkeypatch):
