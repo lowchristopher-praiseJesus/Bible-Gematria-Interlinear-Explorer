@@ -165,20 +165,21 @@ export function ChatPane({ sessionId }: Props) {
       if (!session) return
       const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
 
-      // "Pick one for me" = system source + no typed verse/theme, and no
-      // rotation slot already claimed. Deal the next verse from the
-      // per-browser rotation deck: inject the (seed, cursor) slot here
-      // (covers both the choice-prompt flow and a sidebar-opened session),
-      // persist it so an errored retry reuses the same slot instead of
-      // skipping a verse, and only advance the cursor once the turn
-      // succeeds. The `rotationSeed == null` guard keeps a retry from
-      // re-injecting or double-advancing.
+      // "Pick one for me" = system source + no typed verse/theme. Deal the
+      // next verse from the per-browser rotation deck. Inject the (seed,
+      // cursor) slot here (covers both the choice-prompt flow and a
+      // sidebar-opened session), persist it so an errored retry reuses the
+      // same slot instead of skipping a verse, and only advance the cursor
+      // once the turn succeeds. The injection is guarded by
+      // `rotationSeed == null` so a retry after an errored turn reuses the
+      // already-persisted slot (carried on the wire from the session) rather
+      // than re-claiming a new one — but `advance()` still keys off the
+      // unguarded `isRotationPick`, so a successful retry after an error
+      // (which never advanced) advances the cursor exactly once.
       const isRotationPick =
-        session.modeParams.source === 'system' &&
-        message.trim() === '' &&
-        session.modeParams.rotationSeed == null
+        session.modeParams.source === 'system' && message.trim() === ''
       let modeParams = { ...session.modeParams }
-      if (isRotationPick) {
+      if (isRotationPick && modeParams.rotationSeed == null) {
         const rotationSeed = useDevotionalRotationStore.getState().ensureSeed()
         const rotationCursor = useDevotionalRotationStore.getState().cursor
         modeParams = { ...modeParams, rotationSeed, rotationCursor }

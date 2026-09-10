@@ -690,6 +690,56 @@ describe('ChatPane', () => {
     expect(useDevotionalRotationStore.getState().cursor).toBe(0)
   })
 
+  it('errored first turn keeps the cursor + persists the slot; a successful re-fire advances exactly once', async () => {
+    localStorage.clear()
+    useDevotionalRotationStore.setState({ seed: null, cursor: 0 })
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'Let me find a verse for you…',
+    })
+
+    // First auto-fire errors: `delivered` is not set and the store cursor
+    // must NOT advance — but the (seed, cursor) slot is persisted on the
+    // session so a retry reuses it instead of re-claiming a new one.
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue(devotionalFinal() as never)
+    spy.mockResolvedValueOnce({ type: 'error', message: 'Sorry, the model is unavailable.' } as never)
+
+    const { unmount } = render(<ChatPane sessionId={session.id} />)
+    expect(await screen.findByText('the model is unavailable', { exact: false })).toBeInTheDocument()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(useDevotionalRotationStore.getState().cursor).toBe(0)
+    const persistedSeed = useSessionsStore.getState().sessions[session.id].modeParams.rotationSeed
+    expect(typeof persistedSeed).toBe('number')
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.rotationCursor).toBe(0)
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBeFalsy()
+
+    // The auto-fire ref is per-mount, so a fresh ChatPane instance (a
+    // remount, or another devotional session auto-firing) re-runs the
+    // effect. `delivered` is still unset, so it re-fires runDevotionalTurn('').
+    // This attempt succeeds.
+    unmount()
+    render(<ChatPane sessionId={session.id} />)
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+
+    // The retry reused the SAME slot (no re-injection) …
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        message: '',
+        mode: 'devotional',
+        mode_params: expect.objectContaining({
+          rotationSeed: persistedSeed,
+          rotationCursor: 0,
+        }),
+      }),
+      expect.anything()
+    )
+    // … and the cursor advances exactly once for the delivered pick.
+    expect(useDevotionalRotationStore.getState().cursor).toBe(1)
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
   it('auto-fires once for each session when the same ChatPane instance is reused (no key prop)', async () => {
     const makeSystemDevotionalSession = () => {
       const s = useSessionsStore.getState().createSession('devotional', { source: 'system' })
