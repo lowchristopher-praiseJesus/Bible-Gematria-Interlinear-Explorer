@@ -6,6 +6,7 @@ import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
+import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
 import { VerseBubble, type VerseBubbleData } from './VerseBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { StudyBubble } from './StudyBubble'
@@ -163,15 +164,39 @@ export function ChatPane({ sessionId }: Props) {
     async (message: string) => {
       if (!session) return
       const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
+
+      // "Pick one for me" = system source + no typed verse/theme, and no
+      // rotation slot already claimed. Deal the next verse from the
+      // per-browser rotation deck: inject the (seed, cursor) slot here
+      // (covers both the choice-prompt flow and a sidebar-opened session),
+      // persist it so an errored retry reuses the same slot instead of
+      // skipping a verse, and only advance the cursor once the turn
+      // succeeds. The `rotationSeed == null` guard keeps a retry from
+      // re-injecting or double-advancing.
+      const isRotationPick =
+        session.modeParams.source === 'system' &&
+        message.trim() === '' &&
+        session.modeParams.rotationSeed == null
+      let modeParams = { ...session.modeParams }
+      if (isRotationPick) {
+        const rotationSeed = useDevotionalRotationStore.getState().ensureSeed()
+        const rotationCursor = useDevotionalRotationStore.getState().cursor
+        modeParams = { ...modeParams, rotationSeed, rotationCursor }
+        updateModeParams(sessionId, { rotationSeed, rotationCursor })
+      }
+
       setLoading(true)
       try {
         const response = await streamAssistantReply(
           genId(),
-          { message, history, mode: 'devotional', mode_params: { ...session.modeParams } },
+          { message, history, mode: 'devotional', mode_params: modeParams },
           { devotional: true }
         )
         if (response && response.type !== 'error') {
           updateModeParams(sessionId, { delivered: true })
+          if (isRotationPick) {
+            useDevotionalRotationStore.getState().advance()
+          }
         }
       } finally {
         setLoading(false)

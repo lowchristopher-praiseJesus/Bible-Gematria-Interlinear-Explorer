@@ -5,6 +5,7 @@ import { ChatPane } from './ChatPane'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
+import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
 import * as chatApi from '@/lib/chatApi'
 import * as shareApi from '@/lib/shareApi'
 
@@ -14,6 +15,7 @@ describe('ChatPane', () => {
     useSessionsStore.setState({ sessions: {}, activeSessionId: null })
     useArtifactStore.setState({ activeArtifact: null, status: 'idle', data: null, error: null })
     useReadingPlanStore.setState({ progress: null })
+    useDevotionalRotationStore.setState({ seed: null, cursor: 0 })
   })
 
   afterEach(() => {
@@ -609,6 +611,83 @@ describe('ChatPane', () => {
       expect.anything()
     )
     expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
+  it('a system-source devotional sends rotation seed+cursor and advances the cursor', async () => {
+    localStorage.clear()
+    useDevotionalRotationStore.setState({ seed: null, cursor: 0 })
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'Let me find a verse for you…',
+    })
+
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
+      handlers?.onChunk?.('')
+      return devotionalFinal() as never
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: '',
+        mode: 'devotional',
+        mode_params: expect.objectContaining({
+          source: 'system',
+          rotationSeed: expect.any(Number),
+          rotationCursor: 0,
+        }),
+      }),
+      expect.anything()
+    )
+    expect(useDevotionalRotationStore.getState().cursor).toBe(1)
+    // the slot is persisted on the session so an errored retry reuses it
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.rotationCursor).toBe(0)
+  })
+
+  it('a second system-source devotional uses the advanced cursor', async () => {
+    localStorage.clear()
+    useDevotionalRotationStore.setState({ seed: 12345, cursor: 1 })
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'a1', role: 'assistant', text: 'Let me find a verse for you…' })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue(devotionalFinal() as never)
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode_params: expect.objectContaining({ rotationSeed: 12345, rotationCursor: 1 }),
+      }),
+      expect.anything()
+    )
+    expect(useDevotionalRotationStore.getState().cursor).toBe(2)
+  })
+
+  it('a user-source devotional sends no rotation params', async () => {
+    localStorage.clear()
+    useDevotionalRotationStore.setState({ seed: null, cursor: 0 })
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'user' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'p', role: 'assistant',
+      text: "Tell me a verse reference (e.g. John 3:16) or a theme (e.g. 'facing anxiety'), and I'll write you a devotional.",
+    })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue(devotionalFinal() as never)
+
+    render(<ChatPane sessionId={session.id} />)
+    const input = screen.getByPlaceholderText(/verse|theme|Ask/i)
+    fireEvent.change(input, { target: { value: 'Psalm 23' } })
+    fireEvent.submit(input.closest('form')!)
+
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+    const payload = spy.mock.calls[0][0] as { mode_params?: Record<string, unknown> }
+    expect(payload.mode_params).not.toHaveProperty('rotationSeed')
+    expect(payload.mode_params).not.toHaveProperty('rotationCursor')
+    expect(useDevotionalRotationStore.getState().cursor).toBe(0)
   })
 
   it('auto-fires once for each session when the same ChatPane instance is reused (no key prop)', async () => {
