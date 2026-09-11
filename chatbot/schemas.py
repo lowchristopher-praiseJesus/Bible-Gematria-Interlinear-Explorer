@@ -94,3 +94,12 @@ class StudyWikisResponse(BaseModel):
 class SSEChunk(BaseModel):
     chunk: str = Field(..., description="Streaming text chunk")
     done: bool = Field(False, description="Whether this is the final chunk")
+
+
+class VoiceSessionRequest(BaseModel):
+    sdp: str = Field(..., description="Browser's WebRTC SDP offer")
+
+
+class VoiceSessionResponse(BaseModel):
+    session_id: str = Field(..., description="GPT-Live session id")
+    sdp: str = Field(..., description="OpenAI's WebRTC SDP answer")

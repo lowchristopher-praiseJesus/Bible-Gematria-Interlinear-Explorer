@@ -3,7 +3,8 @@
 import asyncio
 from typing import AsyncIterator, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Query
+import httpx
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from chatbot.schemas import (
@@ -17,6 +18,8 @@ from chatbot.schemas import (
     StudyResponse,
     StudyWikisResponse,
     VerseResponse,
+    VoiceSessionRequest,
+    VoiceSessionResponse,
 )
 from chatbot.tools import (
     fetch_verse_translations,
@@ -486,3 +489,56 @@ async def post_chat_stream(request: ChatRequest):
         _stream_chat_response(recorder, request),
         media_type="text/event-stream",
     )
+
+
+# ---------------------------------------------------------------------------
+# Voice mode: GPT-Live WebRTC SDP handshake proxy
+# ---------------------------------------------------------------------------
+
+_MAX_VOICE_SDP_BYTES = 64 * 1024
+_GPT_LIVE_SESSIONS_URL = "https://api.openai.com/v1/live/sessions"
+
+
+@router.post("/voice/session", response_model=VoiceSessionResponse)
+async def create_voice_session(
+    request: VoiceSessionRequest,
+    x_openai_key: str = Header(..., alias="X-OpenAI-Key"),
+):
+    """Proxy the WebRTC SDP handshake for a GPT-Live voice session.
+
+    Uses the caller-supplied OpenAI key for exactly one outbound call and
+    never persists or logs it — see
+    docs/superpowers/specs/2026-09-11-voice-mode-design.md.
+    """
+    if len(request.sdp.encode("utf-8")) > _MAX_VOICE_SDP_BYTES:
+        raise HTTPException(status_code=413, detail="SDP offer too large")
+
+    try:
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.post(
+                _GPT_LIVE_SESSIONS_URL,
+                headers={"Authorization": f"Bearer {x_openai_key}"},
+                json={
+                    "model": "gpt-live-1",
+                    "delegation": {"type": "client"},
+                    "transport": {"type": "webrtc", "sdp": request.sdp},
+                },
+                timeout=15.0,
+            )
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=502, detail="Couldn't reach OpenAI to start a voice session."
+        )
+
+    if response.status_code == 401:
+        raise HTTPException(
+            status_code=401,
+            detail="Couldn't start a voice session — check your OpenAI API key in Settings.",
+        )
+    if response.status_code == 429:
+        raise HTTPException(status_code=429, detail="OpenAI is rate-limiting this key right now.")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="OpenAI couldn't start the voice session.")
+
+    body = response.json()
+    return VoiceSessionResponse(session_id=body["session"]["id"], sdp=body["transport"]["sdp"])
