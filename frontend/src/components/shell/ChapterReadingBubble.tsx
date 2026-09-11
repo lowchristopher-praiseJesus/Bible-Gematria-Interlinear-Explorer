@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { fetchChapter } from '@/lib/chatApi'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { VerseFullscreen, type VerseFullscreenVerse } from './VerseFullscreen'
 import type { ChapterResponse } from '@/types/api'
 import type { ArtifactLink } from '@/types/session'
 
@@ -49,6 +50,7 @@ export function ChapterReadingBubble({ link }: Props) {
   const [data, setData] = useState<ChapterResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [translation, setTranslation] = useState<string | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
   const openArtifact = useArtifactStore((s) => s.openArtifact)
 
   async function toggle() {
@@ -86,6 +88,10 @@ export function ChapterReadingBubble({ link }: Props) {
   const label = link.label.replace(/\s*▸\s*$/, '')
   const passageLabel = label.replace(/^Read\s+/, '')
   const translationCodes = useMemo(() => (data ? collectTranslationCodes(data) : []), [data])
+  const fullscreenVerses: VerseFullscreenVerse[] = useMemo(
+    () => (data ? data.verses.map((v) => ({ reference: v.ref, translations: v.translations })) : []),
+    [data]
+  )
 
   return (
     <div className="mt-1">
@@ -111,20 +117,30 @@ export function ChapterReadingBubble({ link }: Props) {
                 {backgroundStatus === 'loading' && (
                   <span className="text-[10px] text-[var(--color-text-secondary)]">More translations loading…</span>
                 )}
-                {translationCodes.length > 0 && translation && (
-                  <select
-                    value={translation}
-                    onChange={(e) => setTranslation(e.target.value)}
-                    aria-label="Translation"
-                    className="text-xs border border-[var(--color-theme-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)]"
+                <div className="flex items-center gap-1.5">
+                  {translationCodes.length > 0 && translation && (
+                    <select
+                      value={translation}
+                      onChange={(e) => setTranslation(e.target.value)}
+                      aria-label="Translation"
+                      className="text-xs border border-[var(--color-theme-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)]"
+                    >
+                      {translationCodes.map((code) => (
+                        <option key={code} value={code}>
+                          {translationLabel(code)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setFullscreen(true)}
+                    aria-label={`Compare all verses in ${passageLabel}`}
+                    className="text-xs px-1.5 py-0.5 rounded border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
                   >
-                    {translationCodes.map((code) => (
-                      <option key={code} value={code}>
-                        {translationLabel(code)}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                    ⛶
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto text-sm">
                 {data.verses.map((verse) => (
@@ -151,6 +167,14 @@ export function ChapterReadingBubble({ link }: Props) {
                   </div>
                 ))}
               </div>
+              {translation && (
+                <VerseFullscreen
+                  verses={fullscreenVerses}
+                  initialTranslationCode={translation}
+                  open={fullscreen}
+                  onClose={() => setFullscreen(false)}
+                />
+              )}
             </div>
           )}
         </div>

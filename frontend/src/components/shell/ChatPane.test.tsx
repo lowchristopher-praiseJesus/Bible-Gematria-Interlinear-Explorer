@@ -136,6 +136,29 @@ describe('ChatPane', () => {
     expect(screen.getByText('ROM 15:13')).toBeInTheDocument()
   })
 
+  it('lets the user compare every verse of a "verses"-type message in one fullscreen view', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'm1',
+      role: 'assistant',
+      text: 'One prominent example is Galatians 5:22. Others include James 1:2.',
+      type: 'verses',
+      data: {
+        verses: [
+          { reference: 'GAL 5:22', translations: { 'eng-KJV': 'But the fruit of the Spirit is love, joy...' } },
+          { reference: 'JAS 1:2', translations: { 'eng-KJV': 'Count it all joy...' } },
+        ],
+      },
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: /compare 2 verses/i }))
+
+    const fixedPane = screen.getByRole('group', { name: /original view/i })
+    expect(fixedPane).toHaveTextContent('But the fruit of the Spirit is love, joy...')
+    expect(fixedPane).toHaveTextContent('Count it all joy...')
+  })
+
   it('renders a StrongsBubble with word data for a strongs-type message', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {

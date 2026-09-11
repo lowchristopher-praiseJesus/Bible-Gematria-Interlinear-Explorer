@@ -8,6 +8,7 @@ import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
 import { VerseBubble, type VerseBubbleData } from './VerseBubble'
+import { VerseGroupBubble } from './VerseGroupBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { StudyBubble } from './StudyBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
@@ -526,11 +527,7 @@ export function ChatPane({ sessionId }: Props) {
                   {renderMarkdown(msg.text)}
                   {msg.type === 'verse' && msg.data && <VerseBubble data={msg.data} />}
                   {msg.type === 'verses' && Array.isArray(msg.data?.verses) && (
-                    <div className="flex flex-col gap-2">
-                      {msg.data.verses.map((verse: VerseBubbleData, i: number) => (
-                        <VerseBubble key={i} data={verse} />
-                      ))}
-                    </div>
+                    <VerseGroupBubble verses={msg.data.verses as VerseBubbleData[]} />
                   )}
                   {msg.type === 'strongs' && msg.data && <StrongsBubble data={msg.data} />}
                   {msg.type === 'study' && msg.data && <StudyBubble data={msg.data} />}

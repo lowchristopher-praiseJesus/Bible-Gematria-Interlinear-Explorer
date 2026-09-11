@@ -64,8 +64,7 @@ export function VerseBubble({ data }: Props) {
         </div>
       </div>
       <VerseFullscreen
-        reference={reference}
-        translations={translations}
+        verses={[{ reference: reference ?? '', translations }]}
         initialTranslationCode={activeCode}
         open={fullscreen}
         onClose={() => setFullscreen(false)}

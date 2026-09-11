@@ -179,6 +179,19 @@ describe('ChapterReadingBubble', () => {
     })
   })
 
+  it('opens a fullscreen view with every verse in the chapter when the maximize button is clicked', async () => {
+    vi.spyOn(chatApi, 'fetchChapter').mockResolvedValue(chapterFixture)
+    render(<ChapterReadingBubble link={link} />)
+    await userEvent.click(screen.getByRole('button', { name: /read job 1/i }))
+    await screen.findByText(/There was a man in the land of Uz/)
+
+    await userEvent.click(screen.getByRole('button', { name: /compare all verses/i }))
+
+    const fixedPane = screen.getByRole('group', { name: /original view/i })
+    expect(fixedPane).toHaveTextContent('There was a man in the land of Uz.')
+    expect(fixedPane).toHaveTextContent('And there were born unto him seven sons.')
+  })
+
   it('fetches the full verse range for a parable-style reference and shows it as the passage label', async () => {
     const parableFixture: ChapterResponse = {
       book: 'Luke',
