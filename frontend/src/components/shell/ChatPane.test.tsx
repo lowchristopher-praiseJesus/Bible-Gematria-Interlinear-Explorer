@@ -252,7 +252,7 @@ describe('ChatPane', () => {
     expect(updated.messages).toHaveLength(2)
   })
 
-  it('picking a choice pill finalizes modeParams and fetches the real response, disabling the other option', async () => {
+  it('picking a choice pill finalizes modeParams, fetches the real response, and collapses the other options', async () => {
     const session = useSessionsStore.getState().createSession('reading_plan', {})
     useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📅 Bible in a Year' })
     useSessionsStore.getState().appendMessage(session.id, {
@@ -279,7 +279,7 @@ describe('ChatPane', () => {
     const updated = useSessionsStore.getState().sessions[session.id]
     expect(updated.modeParams).toEqual({ plan: 'chronological', dayIndex: 0, completedDays: [] })
     expect(screen.getByRole('button', { name: 'Chronological' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Canonical (book order)' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Canonical (book order)' })).not.toBeInTheDocument()
     // The plan choice is remembered across sessions too, so reopening
     // "Bible in a Year" later doesn't ask again.
     expect(useReadingPlanStore.getState().progress).toEqual({

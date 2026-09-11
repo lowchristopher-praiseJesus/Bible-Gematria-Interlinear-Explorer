@@ -580,7 +580,10 @@ export function ChatPane({ sessionId }: Props) {
                   )}
                   {msg.choicesStatus === 'ready' && msg.choices && msg.choices.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {msg.choices.map((choice, i) => {
+                      {(msg.resolvedChoiceLabel
+                        ? msg.choices.filter((choice) => choice.label === msg.resolvedChoiceLabel)
+                        : msg.choices
+                      ).map((choice, i) => {
                         const answered = !!msg.resolvedChoiceLabel
                         const selected = msg.resolvedChoiceLabel === choice.label
                         return (
@@ -592,9 +595,7 @@ export function ChatPane({ sessionId }: Props) {
                               selected
                                 ? 'border-[var(--color-theme-accent)] bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]'
                                 : 'border-[var(--color-theme-border)] bg-[var(--color-surface)]'
-                            } ${answered && !selected ? 'opacity-40' : ''} ${
-                              !answered ? 'hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-theme-accent)]' : ''
-                            }`}
+                            } ${!answered ? 'hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-theme-accent)]' : ''}`}
                           >
                             {choice.label}
                           </button>
