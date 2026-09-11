@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarDays, Check, RotateCcw, Settings, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { CalendarDays, Check, Download, RotateCcw, Settings, Trash2, Upload, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { useThemeStore, type ThemeId } from '@/store/useThemeStore'
-import { useSessionsStore } from '@/store/useSessionsStore'
+import { stripPersistHeavyFields, useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore, type ReadingPlanProgress } from '@/store/useReadingPlanStore'
 
@@ -59,12 +59,15 @@ export function SettingsPanel() {
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
   const clearAllSessions = useSessionsStore((s) => s.clearAllSessions)
+  const restoreSessions = useSessionsStore((s) => s.restoreSessions)
   const hasSessions = useSessionsStore((s) => Object.keys(s.sessions).length > 0)
   const readingPlan = useReadingPlanStore((s) => s.progress)
   const switchPlan = useReadingPlanStore((s) => s.switchPlan)
   const restartDayCount = useReadingPlanStore((s) => s.restartDayCount)
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
+  const [restoreStatus, setRestoreStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const restoreInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -72,7 +75,43 @@ export function SettingsPanel() {
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
-    if (!next) setPending(null)
+    if (!next) {
+      setPending(null)
+      setRestoreStatus(null)
+    }
+  }
+
+  function handleBackupClick() {
+    const sessions = Object.values(useSessionsStore.getState().sessions).map((session) => ({
+      ...session,
+      messages: session.messages.map(stripPersistHeavyFields),
+    }))
+    const backup = { version: 1, exportedAt: new Date().toISOString(), sessions }
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `bible-explorer-backup-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleRestoreFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const text = await file.text()
+      const parsed: unknown = JSON.parse(text)
+      const count = restoreSessions(parsed)
+      if (count > 0) {
+        setRestoreStatus({ kind: 'ok', text: `Restored ${count} conversation${count === 1 ? '' : 's'}.` })
+      } else {
+        setRestoreStatus({ kind: 'error', text: "That file didn't contain any conversations to restore." })
+      }
+    } catch {
+      setRestoreStatus({ kind: 'error', text: "Couldn't read that file — is it a Bible Explorer backup?" })
+    }
   }
 
   function handleClearClick() {
@@ -273,6 +312,47 @@ export function SettingsPanel() {
               {/* ── Data ───────────────────────────────────────────────── */}
               <section className="flex flex-col gap-2">
                 <SectionLabel>Data</SectionLabel>
+                <div className="overflow-hidden rounded-xl border border-[var(--color-theme-border)]">
+                  <button
+                    type="button"
+                    onClick={handleBackupClick}
+                    disabled={!hasSessions}
+                    className={cn(
+                      'flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm transition-colors',
+                      'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-alt)]',
+                      'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
+                    )}
+                  >
+                    <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    Backup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => restoreInputRef.current?.click()}
+                    className="flex min-h-11 w-full items-center gap-2 border-t border-[var(--color-theme-border)] px-3 text-left text-sm text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-alt)]"
+                  >
+                    <Upload className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    Restore backup
+                  </button>
+                  <input
+                    ref={restoreInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={handleRestoreFileChange}
+                    data-testid="restore-file-input"
+                    className="hidden"
+                  />
+                </div>
+                {restoreStatus && (
+                  <p
+                    className={cn(
+                      'text-xs leading-relaxed',
+                      restoreStatus.kind === 'error' ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]',
+                    )}
+                  >
+                    {restoreStatus.text}
+                  </p>
+                )}
                 <div className="rounded-xl border border-[var(--color-theme-border)] p-1">
                   <button
                     type="button"
@@ -298,7 +378,8 @@ export function SettingsPanel() {
                   )}
                 </div>
                 <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                  Conversations live only in this browser. Clearing removes every one and can&apos;t be undone.
+                  Conversations live only in this browser. Backup and restore let you move them to
+                  another browser or device. Clearing removes every one and can&apos;t be undone.
                 </p>
               </section>
             </div>

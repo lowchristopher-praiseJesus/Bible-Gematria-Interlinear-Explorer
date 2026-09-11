@@ -129,6 +129,61 @@ describe('SettingsPanel', () => {
     expect(useReadingPlanStore.getState().progress).toEqual({ plan: 'canonical', dayIndex: 0, completedDays: [] })
   })
 
+  it('disables "Backup" when there are no sessions', async () => {
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('button', { name: /^backup$/i })).toBeDisabled()
+  })
+
+  it('enables "Backup" once a session exists', async () => {
+    useSessionsStore.getState().createSession('freeform', {})
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('button', { name: /^backup$/i })).toBeEnabled()
+  })
+
+  it('restoring a valid backup file merges its sessions into local history', async () => {
+    const backup = {
+      version: 1,
+      exportedAt: '2026-09-11T00:00:00.000Z',
+      sessions: [
+        {
+          id: 'orig',
+          createdAt: 1,
+          updatedAt: 1,
+          mode: 'freeform',
+          modeParams: {},
+          title: 'Restored Chat',
+          messages: [{ id: 'm1', role: 'user', text: 'hi' }],
+          notes: [],
+        },
+      ],
+    }
+    const file = new File([JSON.stringify(backup)], 'backup.json', { type: 'application/json' })
+
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    const input = screen.getByTestId('restore-file-input') as HTMLInputElement
+    await userEvent.upload(input, file)
+
+    expect(await screen.findByText(/restored 1 conversation/i)).toBeInTheDocument()
+    const sessions = Object.values(useSessionsStore.getState().sessions)
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].title).toBe('Restored Chat')
+  })
+
+  it('shows an error and restores nothing for an unreadable file', async () => {
+    const file = new File(['not json'], 'backup.json', { type: 'application/json' })
+
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    const input = screen.getByTestId('restore-file-input') as HTMLInputElement
+    await userEvent.upload(input, file)
+
+    expect(await screen.findByText(/couldn.t read that file/i)).toBeInTheDocument()
+    expect(useSessionsStore.getState().sessions).toEqual({})
+  })
+
   it('forgets an armed confirm once the panel is closed and reopened', async () => {
     useSessionsStore.getState().createSession('freeform', {})
     render(<SettingsPanel />)

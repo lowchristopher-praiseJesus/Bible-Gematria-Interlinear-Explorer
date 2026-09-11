@@ -24,6 +24,12 @@ interface SessionsState {
   /** Bring a conversation in from a share link as a new local session,
    * flagged `imported`. Does not change the active session. */
   importSession: (payload: SharePayload & { token: string; sharedAt?: string }) => Session
+  /** Merge sessions from a parsed backup file (see the Settings "Backup" /
+   * "Restore" buttons) into local history under fresh ids. Unlike
+   * `importSession`, original timestamps/title are kept — this is the
+   * user's own history, not someone else's shared conversation. Returns
+   * how many sessions were restored; malformed entries are skipped. */
+  restoreSessions: (payload: unknown) => number
 }
 
 export const MAX_NOTES_PER_SESSION = 5
@@ -238,7 +244,7 @@ type PersistedSessions = Pick<SessionsState, 'sessions' | 'activeSessionId'>
  * persisting it on every message in every session is what pushes the store
  * past the localStorage quota. Strip it from the persisted copy only.
  */
-function stripPersistHeavyFields(message: SessionMessage): SessionMessage {
+export function stripPersistHeavyFields(message: SessionMessage): SessionMessage {
   if (!message.trace) return message
   const copy = { ...message }
   delete copy.trace
@@ -478,6 +484,37 @@ export const useSessionsStore = create<SessionsState>()(
         }
         set((state) => ({ sessions: { ...state.sessions, [session.id]: session } }))
         return session
+      },
+
+      restoreSessions: (payload) => {
+        const sessionsArray =
+          payload && typeof payload === 'object' && Array.isArray((payload as { sessions?: unknown }).sessions)
+            ? (payload as { sessions: unknown[] }).sessions
+            : null
+        if (!sessionsArray) return 0
+
+        const restored: Record<string, Session> = {}
+        for (const value of sessionsArray) {
+          if (!isValidSession(value)) continue
+          const s = value
+          const id = genId()
+          restored[id] = {
+            id,
+            createdAt: typeof s.createdAt === 'number' ? s.createdAt : Date.now(),
+            updatedAt: typeof s.updatedAt === 'number' ? s.updatedAt : Date.now(),
+            mode: s.mode,
+            modeParams: s.modeParams ?? {},
+            title: s.title || deriveTitle(s.mode, s.modeParams ?? {}),
+            messages: sanitizeMessages(s.messages),
+            notes: sanitizeNotes((s as { notes?: unknown }).notes, false),
+          }
+        }
+
+        const count = Object.keys(restored).length
+        if (count > 0) {
+          set((state) => ({ sessions: { ...state.sessions, ...restored } }))
+        }
+        return count
       },
 
       updateNote: (sessionId, noteId, body) =>

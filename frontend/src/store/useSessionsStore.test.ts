@@ -401,6 +401,76 @@ describe('useSessionsStore', () => {
     })
   })
 
+  describe('restoreSessions', () => {
+    const backupSession = {
+      id: 'orig-id',
+      createdAt: 100,
+      updatedAt: 200,
+      mode: 'freeform' as const,
+      modeParams: {},
+      title: 'Old Chat',
+      messages: [{ id: 'm1', role: 'user' as const, text: 'hello' }],
+      notes: [{ id: 'n1', body: 'a note', createdAt: 1, updatedAt: 1 }],
+    }
+
+    it('adds sessions from a backup payload under fresh ids, keeping original data', () => {
+      const count = useSessionsStore.getState().restoreSessions({ sessions: [backupSession] })
+      expect(count).toBe(1)
+      const sessions = Object.values(useSessionsStore.getState().sessions)
+      expect(sessions).toHaveLength(1)
+      const restored = sessions[0]
+      expect(restored.id).not.toBe('orig-id')
+      expect(restored.createdAt).toBe(100)
+      expect(restored.updatedAt).toBe(200)
+      expect(restored.title).toBe('Old Chat')
+      expect(restored.messages).toEqual(backupSession.messages)
+      expect(restored.notes).toEqual(backupSession.notes)
+    })
+
+    it('does not steal focus or touch activeSessionId', () => {
+      const existing = useSessionsStore.getState().createSession('freeform', {})
+      useSessionsStore.getState().restoreSessions({ sessions: [backupSession] })
+      expect(useSessionsStore.getState().activeSessionId).toBe(existing.id)
+    })
+
+    it('skips malformed entries but restores the valid ones', () => {
+      const count = useSessionsStore.getState().restoreSessions({
+        sessions: [backupSession, { not: 'a session' }, 'nope'],
+      })
+      expect(count).toBe(1)
+      expect(Object.keys(useSessionsStore.getState().sessions)).toHaveLength(1)
+    })
+
+    it('merges into existing sessions rather than replacing them', () => {
+      useSessionsStore.getState().createSession('freeform', {})
+      useSessionsStore.getState().restoreSessions({ sessions: [backupSession] })
+      expect(Object.keys(useSessionsStore.getState().sessions)).toHaveLength(2)
+    })
+
+    it('returns 0 and changes nothing for a payload with no sessions array', () => {
+      const before = useSessionsStore.getState().sessions
+      expect(useSessionsStore.getState().restoreSessions({ foo: 'bar' })).toBe(0)
+      expect(useSessionsStore.getState().restoreSessions(null)).toBe(0)
+      expect(useSessionsStore.getState().sessions).toBe(before)
+    })
+
+    it('sanitizes messages and notes on restored sessions', () => {
+      const count = useSessionsStore.getState().restoreSessions({
+        sessions: [
+          {
+            ...backupSession,
+            messages: [{ id: 'm1', role: 'user', text: 'ok' }, { role: 'user', text: 'no id — dropped' }],
+            notes: [{ id: 'n1', body: 'keep', createdAt: 1, updatedAt: 1 }, 'not-an-object'],
+          },
+        ],
+      })
+      expect(count).toBe(1)
+      const restored = Object.values(useSessionsStore.getState().sessions)[0]
+      expect(restored.messages).toHaveLength(1)
+      expect(restored.notes).toHaveLength(1)
+    })
+  })
+
   it('rehydrates a valid imported marker and drops a malformed one', async () => {
     localStorage.setItem(
       'bible-explorer-sessions',
