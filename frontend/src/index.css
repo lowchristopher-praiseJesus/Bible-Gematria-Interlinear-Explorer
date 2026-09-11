@@ -291,6 +291,18 @@ colophon { font-style: italic; }
   40% { transform: scale(1); }
 }
 
+/* Rotating status phrase shown next to the dots during the devotional
+   generation wait (no incremental backend progress to show, so this is a
+   client-side illusion of forward motion — see ChatPane.tsx's
+   DEVOTIONAL_STATUS_PHRASES). Fades between phrases rather than snapping. */
+.chat-typing-status {
+  animation: chat-typing-status-fade 3s ease-in-out infinite;
+}
+@keyframes chat-typing-status-fade {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 /* Rendered markdown in chat bubbles (renderMarkdown.tsx). Tailwind's
    preflight strips default styling from headings/lists/tables/hr/code, so
    the LLM's GFM output needs these rules to read as structured text. */

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ChatPane } from './ChatPane'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -611,6 +611,37 @@ describe('ChatPane', () => {
     expect(screen.getByRole('button', { name: /read the devotional/i })).toBeInTheDocument()
     // delivered flag set
     expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
+  it('rotates a status phrase next to the dots during the devotional generation wait', async () => {
+    vi.useFakeTimers()
+    try {
+      const session = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+      useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+      useSessionsStore.getState().appendMessage(session.id, {
+        id: 'a1', role: 'assistant', text: 'pick', choicesStatus: 'ready',
+        choices: [{ label: "I'll choose", modeParams: { source: 'user' } }],
+      })
+      useSessionsStore.getState().appendMessage(session.id, { id: 'a2', role: 'assistant', text: 'Let me find a verse for you…' })
+      // Never resolves — only the phrase rotation while pending is under test.
+      vi.spyOn(chatApi, 'postChatStream').mockImplementation(() => new Promise(() => {}))
+
+      render(<ChatPane sessionId={session.id} />)
+      await act(async () => {})
+
+      expect(screen.getByText('Finding a verse…')).toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(3000))
+      expect(screen.getByText('Reading it over…')).toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(3000))
+      expect(screen.getByText('Writing your devotional…')).toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(3000))
+      expect(screen.getByText('Finding a verse…')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not auto-fire for a user-source session; the typed message is the generation', async () => {

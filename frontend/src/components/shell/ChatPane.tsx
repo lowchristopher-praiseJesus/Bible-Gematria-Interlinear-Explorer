@@ -35,6 +35,12 @@ function errorMessage(err: unknown): string {
 const ARTIFACT_PILL =
   'text-xs px-2 py-1 rounded-full border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]'
 
+// The devotional generation call has no incremental progress to report (see
+// the streamAssistantReply comment on why its SSE chunks never reach the
+// bubble), so these rotate on a client-side timer purely to keep the
+// multi-second wait from reading as frozen.
+const DEVOTIONAL_STATUS_PHRASES = ['Finding a verse…', 'Reading it over…', 'Writing your devotional…']
+
 interface ArtifactGroup {
   primary: ArtifactLink
   bookContext?: ArtifactLink
@@ -95,6 +101,22 @@ export function ChatPane({ sessionId }: Props) {
   // a new question, a regenerate, a choice being resolved, or a day being
   // marked complete. Drives the "thinking" indicator.
   const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete
+
+  // Only the devotional generation leg of `isBusy` runs long enough (~10s+)
+  // that the plain dots read as frozen — narrow the rotating status text to
+  // that case so a quick regenerate/mark-complete doesn't flash a phrase.
+  const devotionalPending = loading && session?.mode === 'devotional' && !session.modeParams.delivered
+  const [devotionalStatusIndex, setDevotionalStatusIndex] = useState(0)
+  useEffect(() => {
+    if (!devotionalPending) {
+      setDevotionalStatusIndex(0)
+      return
+    }
+    const interval = setInterval(() => {
+      setDevotionalStatusIndex((i) => (i + 1) % DEVOTIONAL_STATUS_PHRASES.length)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [devotionalPending])
 
   // Keep the latest message in view as the conversation grows — a new
   // message, a choice prompt resolving, or its options finishing a fetch
@@ -617,9 +639,16 @@ export function ChatPane({ sessionId }: Props) {
             className="flex justify-start"
             role="status"
             aria-live="polite"
-            aria-label="Assistant is thinking"
+            aria-label={
+              devotionalPending ? DEVOTIONAL_STATUS_PHRASES[devotionalStatusIndex] : 'Assistant is thinking'
+            }
           >
-            <div className="max-w-[85%] px-3.5 py-3 rounded-2xl rounded-bl-sm bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]">
+            <div className="max-w-[85%] px-3.5 py-3 rounded-2xl rounded-bl-sm bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] flex items-center gap-2">
+              {devotionalPending && (
+                <span key={devotionalStatusIndex} className="chat-typing-status text-sm" aria-hidden="true">
+                  {DEVOTIONAL_STATUS_PHRASES[devotionalStatusIndex]}
+                </span>
+              )}
               <div className="chat-typing" aria-hidden="true">
                 <span />
                 <span />
