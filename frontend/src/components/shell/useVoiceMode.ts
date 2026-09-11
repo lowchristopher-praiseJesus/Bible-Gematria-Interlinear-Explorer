@@ -199,6 +199,14 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
       const { sdp } = await createVoiceSession(pc.localDescription?.sdp ?? '', openaiApiKey)
       await pc.setRemoteDescription({ type: 'answer', sdp })
     } catch (err) {
+      // Detach handlers on this attempt's own pc before closing it: pc.close()
+      // transitions connectionState to 'closed' and fires connectionstatechange,
+      // and if onconnectionstatechange were still attached it could see a
+      // *later, legitimate* session's status (statusRef is shared) and
+      // wrongly tear that down. Nulling first makes this attempt's close a
+      // no-op event.
+      pc.onconnectionstatechange = null
+      pc.ontrack = null
       dc.close()
       pc.close()
       micStream.getTracks().forEach((track) => track.stop())
@@ -211,7 +219,11 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
 
     if (myId !== connectionIdRef.current) {
       // Superseded while completing the handshake — tear down the
-      // connection/mic this attempt just finished building.
+      // connection/mic this attempt just finished building. Same
+      // detach-before-close reasoning as the catch block above: a newer
+      // connect() may already be 'listening' by the time this runs.
+      pc.onconnectionstatechange = null
+      pc.ontrack = null
       dc.close()
       pc.close()
       micStream.getTracks().forEach((track) => track.stop())

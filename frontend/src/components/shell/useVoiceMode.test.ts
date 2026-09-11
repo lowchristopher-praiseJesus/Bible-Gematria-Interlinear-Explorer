@@ -48,7 +48,16 @@ class FakeRTCPeerConnection {
   }
   async setRemoteDescription() {}
   close() {
+    // Match real RTCPeerConnection: close() is a no-op if already closed
+    // (per spec), and otherwise transitions connectionState to 'closed'
+    // and fires connectionstatechange — this is what makes the
+    // detach-handlers-before-close fix in useVoiceMode.ts actually
+    // testable (without this, an abandoned attempt's pc.close() would
+    // silently do nothing observable to onconnectionstatechange).
+    if (this.closed) return
     this.closed = true
+    this.connectionState = 'closed'
+    this.onconnectionstatechange?.()
   }
 }
 
@@ -286,8 +295,18 @@ describe('useVoiceMode', () => {
     mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
   })
 
-  it('does not run the key-cleared teardown on mount, whether or not a key is set', () => {
+  it('does not run the key-cleared teardown on mount when no key is set', () => {
     useVoiceSettingsStore.setState({ openaiApiKey: null })
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    expect(result.current.status).toBe('idle')
+    expect(result.current.errorMessage).toBeNull()
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('does not run the key-cleared teardown on mount when a key is already set', () => {
+    // openaiApiKey is 'sk-test-123' from beforeEach — mounting with a
+    // truthy key must not itself be treated as a "key cleared" transition.
     const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
 
     expect(result.current.status).toBe('idle')
@@ -377,5 +396,61 @@ describe('useVoiceMode', () => {
     expect(FakeRTCPeerConnection.instances[0].dataChannel?.readyState).toBe('closed')
     mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
     expect(FakeRTCPeerConnection.instances).toHaveLength(1)
+  })
+
+  it('does not let a stale, abandoned connect() attempt tear down a later legitimate session', async () => {
+    // Attempt A: starts connecting, then gets cancelled by stop() while its
+    // SDP handshake call is still pending. Attempt B: a fresh, successful
+    // connect() started right after. A's handshake call is later allowed
+    // to resolve, well after B is already 'listening'. A's stale cleanup
+    // then closes its own (abandoned) peer connection — real
+    // RTCPeerConnection.close() fires connectionstatechange, and if A's
+    // onconnectionstatechange were still attached it would read the
+    // *shared* statusRef (now 'listening' because of B) and wrongly call
+    // the shared stop(), tearing B down. This reproduces that exact race.
+    let resolveA!: (value: { sessionId: string; sdp: string }) => void
+    let handshakeCalls = 0
+    vi.spyOn(voiceApi, 'createVoiceSession').mockImplementation(() => {
+      handshakeCalls += 1
+      if (handshakeCalls === 1) {
+        return new Promise((resolve) => {
+          resolveA = resolve
+        })
+      }
+      return Promise.resolve({ sessionId: 'live_b', sdp: 'fake-answer-sdp-b' })
+    })
+
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    // Attempt A: gets stuck awaiting its (deliberately deferred) handshake.
+    act(() => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(FakeRTCPeerConnection.instances).toHaveLength(1))
+
+    // User cancels A before it resolves.
+    act(() => {
+      result.current.stop()
+    })
+    expect(result.current.status).toBe('idle')
+
+    // Attempt B: a fresh connect() that succeeds normally.
+    act(() => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2)
+
+    // Now let A's stale handshake resolve, triggering A's superseded-cleanup
+    // path (which closes A's own abandoned peer connection).
+    act(() => {
+      resolveA({ sessionId: 'live_a', sdp: 'fake-answer-sdp-a' })
+    })
+    await waitFor(() => expect(FakeRTCPeerConnection.instances[0].closed).toBe(true))
+
+    // B must be completely unaffected by A's belated teardown.
+    expect(result.current.status).toBe('listening')
+    expect(result.current.errorMessage).toBeNull()
+    expect(FakeRTCPeerConnection.instances[1].closed).toBe(false)
   })
 })
