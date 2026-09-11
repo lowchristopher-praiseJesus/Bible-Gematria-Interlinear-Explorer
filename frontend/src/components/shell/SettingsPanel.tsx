@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { CalendarDays, Check, Download, RotateCcw, Settings, Trash2, Upload, X } from 'lucide-react'
+import { CalendarDays, Check, Download, Eye, EyeOff, KeyRound, RotateCcw, Settings, Trash2, Upload, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { useThemeStore, type ThemeId } from '@/store/useThemeStore'
 import { stripPersistHeavyFields, useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore, type ReadingPlanProgress } from '@/store/useReadingPlanStore'
+import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
 
 // `swatch` mirrors the surface / accent / text tokens each theme sets in
 // index.css — it exists only so a card can preview itself. Keep the three
@@ -53,7 +54,12 @@ const PLANS: { id: ReadingPlanProgress['plan']; label: string }[] = [
 // restarting the day count) all discard something the user can't get
 // back, so each is armed by a first click and only acts on the second.
 // Only one can be armed at a time.
-type Pending = { kind: 'clear' } | { kind: 'plan'; plan: ReadingPlanProgress['plan'] } | { kind: 'reset' } | null
+type Pending =
+  | { kind: 'clear' }
+  | { kind: 'plan'; plan: ReadingPlanProgress['plan'] }
+  | { kind: 'reset' }
+  | { kind: 'clearVoiceKey' }
+  | null
 
 export function SettingsPanel() {
   const theme = useThemeStore((s) => s.theme)
@@ -64,9 +70,13 @@ export function SettingsPanel() {
   const readingPlan = useReadingPlanStore((s) => s.progress)
   const switchPlan = useReadingPlanStore((s) => s.switchPlan)
   const restartDayCount = useReadingPlanStore((s) => s.restartDayCount)
+  const openaiApiKey = useVoiceSettingsStore((s) => s.openaiApiKey)
+  const setApiKey = useVoiceSettingsStore((s) => s.setApiKey)
+  const clearApiKey = useVoiceSettingsStore((s) => s.clearApiKey)
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   const [restoreStatus, setRestoreStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [showKey, setShowKey] = useState(false)
   const restoreInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -140,6 +150,15 @@ export function SettingsPanel() {
       return
     }
     restartDayCount()
+    setPending(null)
+  }
+
+  function handleClearVoiceKeyClick() {
+    if (pending?.kind !== 'clearVoiceKey') {
+      setPending({ kind: 'clearVoiceKey' })
+      return
+    }
+    clearApiKey()
     setPending(null)
   }
 
@@ -308,6 +327,55 @@ export function SettingsPanel() {
                   </div>
                 </section>
               )}
+
+              {/* ── Voice ──────────────────────────────────────────────── */}
+              <section className="flex flex-col gap-2">
+                <SectionLabel icon={<KeyRound className="h-3.5 w-3.5" aria-hidden="true" />}>
+                  Voice
+                </SectionLabel>
+                <div className="flex items-center gap-1.5 rounded-xl border border-[var(--color-theme-border)] px-3">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={openaiApiKey ?? ''}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="OpenAI API key (sk-...)"
+                    aria-label="OpenAI API key"
+                    className="min-h-11 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-secondary)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((v) => !v)}
+                    aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                    className="shrink-0 rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)]"
+                  >
+                    {showKey ? (
+                      <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                {!!openaiApiKey && (
+                  <button
+                    type="button"
+                    onClick={handleClearVoiceKeyClick}
+                    className={cn(
+                      'inline-flex min-h-11 w-fit items-center gap-1.5 rounded-lg px-3 text-sm transition-colors',
+                      pending?.kind === 'clearVoiceKey'
+                        ? 'bg-[var(--color-danger)]/10 font-medium text-[var(--color-danger)]'
+                        : 'text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10',
+                    )}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {pending?.kind === 'clearVoiceKey' ? 'Click again to confirm' : 'Clear key'}
+                  </button>
+                )}
+                <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                  Used only in your browser to start a voice session with OpenAI&apos;s GPT-Live.
+                  Your key is sent to this app&apos;s server once per session to set up the
+                  connection, then discarded — never stored server-side.
+                </p>
+              </section>
 
               {/* ── Data ───────────────────────────────────────────────── */}
               <section className="flex flex-col gap-2">

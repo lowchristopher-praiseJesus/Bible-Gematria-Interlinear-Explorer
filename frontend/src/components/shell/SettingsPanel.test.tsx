@@ -6,6 +6,7 @@ import { useThemeStore } from '@/store/useThemeStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
+import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
 
 describe('SettingsPanel', () => {
   beforeEach(() => {
@@ -15,6 +16,7 @@ describe('SettingsPanel', () => {
     useSessionsStore.setState({ sessions: {}, activeSessionId: null })
     useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
     useReadingPlanStore.setState({ progress: null })
+    useVoiceSettingsStore.setState({ openaiApiKey: null })
   })
 
   it('opens and lists all four themes', async () => {
@@ -197,5 +199,40 @@ describe('SettingsPanel', () => {
 
     expect(screen.getByRole('button', { name: /clear all chat history/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /click again to confirm/i })).not.toBeInTheDocument()
+  })
+
+  it('saves an OpenAI API key as it is typed', async () => {
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    const input = screen.getByLabelText(/openai api key/i)
+    await userEvent.type(input, 'sk-test-123')
+    expect(useVoiceSettingsStore.getState().openaiApiKey).toBe('sk-test-123')
+  })
+
+  it('masks the API key by default and reveals it on toggle', async () => {
+    useVoiceSettingsStore.getState().setApiKey('sk-test-123')
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    const input = screen.getByLabelText(/openai api key/i) as HTMLInputElement
+    expect(input.type).toBe('password')
+    await userEvent.click(screen.getByRole('button', { name: /show api key/i }))
+    expect(input.type).toBe('text')
+  })
+
+  it('requires a second click to clear the API key', async () => {
+    useVoiceSettingsStore.getState().setApiKey('sk-test-123')
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    const clearButton = screen.getByRole('button', { name: /clear key/i })
+    await userEvent.click(clearButton)
+    expect(useVoiceSettingsStore.getState().openaiApiKey).toBe('sk-test-123')
+    await userEvent.click(screen.getByRole('button', { name: /click again to confirm/i }))
+    expect(useVoiceSettingsStore.getState().openaiApiKey).toBeNull()
+  })
+
+  it('hides the Clear key button when no key is set', async () => {
+    render(<SettingsPanel />)
+    await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.queryByRole('button', { name: /clear key/i })).not.toBeInTheDocument()
   })
 })
