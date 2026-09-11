@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw, Share2 } from 'lucide-react'
+import { ArrowUp, CalendarDays, Check, Copy, Flag, Loader2, RefreshCw, Share2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -34,6 +34,10 @@ function errorMessage(err: unknown): string {
 
 const ARTIFACT_PILL =
   'text-xs px-2 py-1 rounded-full border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]'
+
+// Both reading orders (chronological, canonical) are always distributed
+// across exactly 365 days — see _DAYS in chatbot/data/reading_plans.py.
+const READING_PLAN_TOTAL_DAYS = 365
 
 // The devotional generation call has no incremental progress to report (see
 // the streamAssistantReply comment on why its SSE chunks never reach the
@@ -458,6 +462,11 @@ export function ChatPane({ sessionId }: Props) {
   // Only once a plan has actually been picked (the choice prompt resolved)
   // is there a day loaded to mark complete.
   const showMarkComplete = session.mode === 'reading_plan' && !!session.modeParams.plan && !!lastMessage
+  const showReadingPlanProgress = session.mode === 'reading_plan' && !!session.modeParams.plan
+  const readingPlanDayIndex = session.modeParams.dayIndex ?? 0
+  const readingPlanPercent = Math.round(
+    ((session.modeParams.completedDays?.length ?? 0) / READING_PLAN_TOTAL_DAYS) * 100
+  )
   const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id
 
   // The synthetic "💬 Ask Anything" bubble a mode starter posts as the
@@ -493,6 +502,15 @@ export function ChatPane({ sessionId }: Props) {
             <Flag className="w-3 h-3" aria-hidden="true" />
             Report an issue
           </button>
+          {showReadingPlanProgress && (
+            <span
+              className="hidden lg:inline-flex shrink-0 items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]"
+              title={`${session.modeParams.completedDays?.length ?? 0} of ${READING_PLAN_TOTAL_DAYS} days completed`}
+            >
+              <CalendarDays className="w-3 h-3" aria-hidden="true" />
+              Day {readingPlanDayIndex + 1} of {READING_PLAN_TOTAL_DAYS} · {readingPlanPercent}% complete
+            </span>
+          )}
           <span className="hidden lg:inline-block shrink-0 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)]">
             {session.imported ? 'Imported' : MODE_LABELS[session.mode]}
           </span>
