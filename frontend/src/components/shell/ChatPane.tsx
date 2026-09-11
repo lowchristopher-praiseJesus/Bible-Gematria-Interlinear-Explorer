@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, CalendarDays, Check, Copy, Flag, Loader2, RefreshCw, Share2 } from 'lucide-react'
+import { ArrowUp, CalendarDays, Check, Copy, Flag, Loader2, Mic, MicOff, RefreshCw, Share2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -16,6 +16,7 @@ import { PromptChips } from './PromptChips'
 import { ChatNotesMenu } from './ChatNotesMenu'
 import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
+import { useVoiceMode, type UseVoiceModeResult } from './useVoiceMode'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
 import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
 
@@ -44,6 +45,13 @@ const READING_PLAN_TOTAL_DAYS = 365
 // bubble), so these rotate on a client-side timer purely to keep the
 // multi-second wait from reading as frozen.
 const DEVOTIONAL_STATUS_PHRASES = ['Finding a verse…', 'Reading it over…', 'Writing your devotional…']
+
+const VOICE_STATUS_LABEL: Record<string, string> = {
+  connecting: 'Connecting…',
+  listening: 'Listening…',
+  thinking: 'Thinking…',
+  speaking: 'Speaking…',
+}
 
 interface ArtifactGroup {
   primary: ArtifactLink
@@ -94,6 +102,8 @@ export function ChatPane({ sessionId }: Props) {
   const [reportOpen, setReportOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const lastTurnWasVoiceRef = useRef(false)
+  const voiceModeRef = useRef<UseVoiceModeResult | null>(null)
   // Which session the devotional generation has already auto-fired for.
   // A single <ChatPane> instance is reused across sessions (no `key` in
   // App.tsx), so this must be keyed by session id, not a bare boolean —
@@ -243,6 +253,8 @@ export function ChatPane({ sessionId }: Props) {
       // generation (the multi-minute devotional turn especially) starts a
       // second one.
       if (loading) return
+      const wasVoiceTurn = lastTurnWasVoiceRef.current
+      lastTurnWasVoiceRef.current = false
       const userMessage: SessionMessage = { id: genId(), role: 'user', text }
       appendMessage(sessionId, userMessage)
       setInput('')
@@ -255,18 +267,32 @@ export function ChatPane({ sessionId }: Props) {
       const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
       setLoading(true)
       try {
-        await streamAssistantReply(genId(), {
+        const response = await streamAssistantReply(genId(), {
           message: text,
           history,
           mode: session.mode,
           mode_params: { ...session.modeParams },
         })
+        if (wasVoiceTurn) {
+          voiceModeRef.current?.speak(response?.message ?? 'Sorry, something went wrong.')
+        }
       } finally {
         setLoading(false)
       }
     },
     [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn]
   )
+
+  const voiceMode = useVoiceMode({
+    onTranscript: (text) => {
+      lastTurnWasVoiceRef.current = true
+      void sendMessage(text)
+    },
+  })
+
+  useEffect(() => {
+    voiceModeRef.current = voiceMode
+  })
 
   // "Pick one for me" devotional: once the pill has resolved (its ack is
   // the last message and the user hasn't typed anything), kick off the
@@ -496,6 +522,25 @@ export function ChatPane({ sessionId }: Props) {
             Share
           </button>
           <button
+            onClick={voiceMode.toggle}
+            title={voiceMode.errorMessage ?? undefined}
+            aria-pressed={voiceMode.status !== 'idle' && voiceMode.status !== 'error'}
+            className={`shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              voiceMode.status === 'idle' || voiceMode.status === 'error'
+                ? 'border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]'
+                : 'border-[var(--color-theme-accent)] bg-[var(--color-theme-accent)]/10 text-[var(--color-theme-accent)]'
+            }`}
+          >
+            {voiceMode.status === 'idle' || voiceMode.status === 'error' ? (
+              <Mic className="w-3 h-3" aria-hidden="true" />
+            ) : (
+              <MicOff className="w-3 h-3" aria-hidden="true" />
+            )}
+            {voiceMode.status === 'idle' || voiceMode.status === 'error'
+              ? 'Voice'
+              : VOICE_STATUS_LABEL[voiceMode.status]}
+          </button>
+          <button
             onClick={() => setReportOpen(true)}
             className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
           >
@@ -687,6 +732,10 @@ export function ChatPane({ sessionId }: Props) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {voiceMode.liveCaption && (
+        <div className="px-4 pb-1 text-xs italic text-[var(--color-text-secondary)]">{voiceMode.liveCaption}</div>
+      )}
 
       <form
         className="flex items-center gap-2 mx-3 mt-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border border-[var(--color-theme-border)] bg-[var(--color-surface-alt)] px-4 py-3 shadow-sm focus-within:border-[var(--color-theme-accent)] transition-colors"

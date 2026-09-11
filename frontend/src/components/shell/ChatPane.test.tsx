@@ -8,6 +8,7 @@ import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
 import * as chatApi from '@/lib/chatApi'
 import * as shareApi from '@/lib/shareApi'
+import * as voiceModule from './useVoiceMode'
 
 describe('ChatPane', () => {
   beforeEach(() => {
@@ -885,5 +886,61 @@ describe('ChatPane', () => {
       expect.objectContaining({ message: 'what is the Greek word?', mode: 'devotional' }),
       expect.objectContaining({ onChunk: expect.any(Function) })
     )
+  })
+
+  it('renders a voice toggle that reflects the voice hook status', () => {
+    vi.spyOn(voiceModule, 'useVoiceMode').mockReturnValue({
+      status: 'listening',
+      errorMessage: null,
+      liveCaption: 'What does grace mean',
+      toggle: vi.fn(),
+      stop: vi.fn(),
+      speak: vi.fn(),
+    })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    expect(screen.getByRole('button', { name: /listening/i })).toBeInTheDocument()
+    expect(screen.getByText('What does grace mean')).toBeInTheDocument()
+  })
+
+  it('speaks the resolved answer when the turn was voice-originated', async () => {
+    const speak = vi.fn()
+    let onTranscript: ((text: string) => void) | undefined
+    vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
+      onTranscript = opts.onTranscript
+      return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak }
+    })
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Grace is unmerited favor.' })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    await act(async () => {
+      onTranscript?.('What does grace mean?')
+    })
+
+    expect(await screen.findByText('Grace is unmerited favor.')).toBeInTheDocument()
+    expect(speak).toHaveBeenCalledWith('Grace is unmerited favor.')
+  })
+
+  it('does not speak the answer for a normal typed turn', async () => {
+    const speak = vi.fn()
+    vi.spyOn(voiceModule, 'useVoiceMode').mockReturnValue({
+      status: 'idle',
+      errorMessage: null,
+      liveCaption: '',
+      toggle: vi.fn(),
+      stop: vi.fn(),
+      speak,
+    })
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Sure, go ahead.' })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'Hello')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    await screen.findByText('Sure, go ahead.')
+    expect(speak).not.toHaveBeenCalled()
   })
 })
