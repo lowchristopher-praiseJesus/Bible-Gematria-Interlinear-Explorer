@@ -10,13 +10,24 @@ export interface UseVoiceModeResult {
   liveCaption: string
   toggle: () => void
   stop: () => void
-  speak: (text: string) => void
+  /** Voices `text` for the turn identified by `delegationId` — always the id
+   * that turn's own transcript arrived with (see `onTranscript`), never
+   * "whatever delegation is current now": with full-duplex listening a
+   * later utterance's delegation can already have superseded it by the time
+   * an answer is ready, and appending to that one would speak this answer
+   * against the wrong question. */
+  speak: (text: string, delegationId: string) => void
 }
 
 interface UseVoiceModeOptions {
   /** Called once per finished user utterance, with the accumulated,
-   * trimmed transcript. Never called for an empty/whitespace-only turn. */
-  onTranscript: (text: string) => void
+   * trimmed transcript and the delegation id that utterance was delegated
+   * under. Never called for an empty/whitespace-only turn. The caller must
+   * hand that same id back to `speak()` when the answer is ready — it is
+   * the only way to keep two overlapping turns' answers from being swapped.
+   * Empty string when the event carried no id (nothing can be spoken back
+   * for that turn; the transcript is still answered on screen). */
+  onTranscript: (text: string, delegationId: string) => void
 }
 
 /**
@@ -46,7 +57,6 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
   const micStreamRef = useRef<MediaStream | null>(null)
   const audioElRef = useRef<HTMLAudioElement | null>(null)
   const transcriptBufferRef = useRef('')
-  const delegationIdRef = useRef<string | null>(null)
   const onTranscriptRef = useRef(onTranscript)
   const prevKeyRef = useRef(openaiApiKey)
   /** Bumped by stop() and by connect() itself; lets a suspended connect()
@@ -72,6 +82,14 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
     connectionIdRef.current += 1
     dcRef.current?.close()
     dcRef.current = null
+    // Detach before closing, the same discipline connect()'s cleanup
+    // branches use: close() can fire connectionstatechange synchronously,
+    // and onconnectionstatechange reads the *shared* statusRef — letting it
+    // run mid-teardown is the bug class that pattern exists to prevent.
+    if (pcRef.current) {
+      pcRef.current.onconnectionstatechange = null
+      pcRef.current.ontrack = null
+    }
     pcRef.current?.close()
     pcRef.current = null
     micStreamRef.current?.getTracks().forEach((track) => track.stop())
@@ -80,7 +98,6 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
       audioElRef.current.srcObject = null
     }
     transcriptBufferRef.current = ''
-    delegationIdRef.current = null
     setLiveCaption('')
     setErrorMessage(message)
     setStatus(message ? 'error' : 'idle')
@@ -105,18 +122,49 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
       }
       case 'session.delegation.created': {
         const delegation = event.delegation as { id?: string } | undefined
-        delegationIdRef.current = delegation?.id ?? null
+        // Hand this turn's id straight to the caller rather than parking it
+        // in a shared ref: with full-duplex listening a later utterance can
+        // overwrite that ref before this turn's answer is ready, which would
+        // speak this answer against the wrong delegation.
+        const delegationId = delegation?.id ?? ''
         const transcript = transcriptBufferRef.current.trim()
         transcriptBufferRef.current = ''
         setLiveCaption('')
         if (transcript) {
           setStatus('thinking')
-          onTranscriptRef.current(transcript)
+          onTranscriptRef.current(transcript, delegationId)
         }
         break
       }
-      default:
+      default: {
+        // GPT-Live's error shape isn't pinned down by the docs this was
+        // built from (see the spec's Open Questions), so recognise both
+        // `error` and any `*.error` type and read the message defensively.
+        // Swallowing these silently is how the whole feature can fail with
+        // no caption, no audio, and nothing to debug from.
+        const type = String(event.type ?? '')
+        if (type === 'error' || type.endsWith('.error')) {
+          const nested = (event as { error?: { message?: unknown } }).error
+          const detail =
+            (typeof nested?.message === 'string' && nested.message) ||
+            (typeof (event as { message?: unknown }).message === 'string' &&
+              (event as { message: string }).message) ||
+            ''
+          // A hard error means the session is in a bad state (a rejected
+          // commentary.append would otherwise pin status at 'speaking'
+          // forever), so tear it down with a visible message rather than
+          // sitting in some status silently.
+          stop(detail ? `Voice session error: ${detail}` : 'The voice session reported an error.')
+          break
+        }
+        // Permanent, DEV-only diagnostic: the manual verification pass needs
+        // to see the real event stream (to confirm the transcript delta field
+        // name, among others) without hand-editing this file to add a log.
+        if (import.meta.env.DEV) {
+          console.debug('[voice] unhandled event', event.type, event)
+        }
         break
+      }
     }
   }
 
@@ -244,15 +292,22 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
     }
   }
 
-  function speak(text: string) {
+  function speak(text: string, delegationId: string) {
     const dc = dcRef.current
-    if (!dc || dc.readyState !== 'open' || !delegationIdRef.current) return
+    if (!dc || dc.readyState !== 'open') return
+    if (!delegationId) {
+      // The turn arrived without a delegation id, so there is nothing to
+      // append the answer to — but don't leave the hook pinned at
+      // 'thinking' waiting for audio that can never be requested.
+      if (statusRef.current === 'thinking') setStatus('listening')
+      return
+    }
     setStatus('speaking')
     dc.send(
       JSON.stringify({
         type: 'session.commentary.append',
         event_id: `commentary_${Date.now()}`,
-        delegation_id: delegationIdRef.current,
+        delegation_id: delegationId,
         content: text,
       })
     )

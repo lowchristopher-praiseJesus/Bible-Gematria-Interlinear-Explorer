@@ -185,7 +185,7 @@ describe('useVoiceMode', () => {
     })
 
     expect(onTranscript).toHaveBeenCalledTimes(1)
-    expect(onTranscript).toHaveBeenCalledWith('What does love mean?')
+    expect(onTranscript).toHaveBeenCalledWith('What does love mean?', 'deleg_1')
     expect(result.current.liveCaption).toBe('')
   })
 
@@ -210,7 +210,7 @@ describe('useVoiceMode', () => {
     expect(onTranscript).not.toHaveBeenCalled()
   })
 
-  it('speak() sends a session.commentary.append with the current delegation id', async () => {
+  it('speak() sends a session.commentary.append with the delegation id it was given', async () => {
     const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
 
     await act(async () => {
@@ -228,7 +228,7 @@ describe('useVoiceMode', () => {
     })
 
     act(() => {
-      result.current.speak('Love is patient and kind.')
+      result.current.speak('Love is patient and kind.', 'deleg_1')
     })
 
     expect(dc.sent).toHaveLength(1)
@@ -237,6 +237,111 @@ describe('useVoiceMode', () => {
     expect(sent.delegation_id).toBe('deleg_1')
     expect(sent.content).toBe('Love is patient and kind.')
     expect(result.current.status).toBe('speaking')
+  })
+
+  it("speaks each turn's answer against the delegation id that turn's transcript arrived with", async () => {
+    // Full-duplex: a second utterance's delegation.created can land before
+    // the first utterance's answer is ready. The first answer must still be
+    // appended to deleg_A — not to whichever delegation happens to be the
+    // most recent when speak() finally runs.
+    const onTranscript = vi.fn()
+    const { result } = renderHook(() => useVoiceMode({ onTranscript }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    const dc = FakeRTCPeerConnection.instances[0].dataChannel!
+
+    // Turn A finishes: transcript captured with deleg_A.
+    act(() => {
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'session.input_transcript.delta', delta: 'Who wrote Psalm 23?' }),
+        })
+      )
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'session.delegation.created', delegation: { id: 'deleg_A', target: 'client' } }),
+        })
+      )
+    })
+    expect(onTranscript).toHaveBeenCalledTimes(1)
+    const [textA, delegationIdA] = onTranscript.mock.calls[0]
+    expect(textA).toBe('Who wrote Psalm 23?')
+    expect(delegationIdA).toBe('deleg_A')
+
+    // Turn B starts and completes while A's answer is still generating.
+    act(() => {
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'session.input_transcript.delta', delta: 'And who wrote Psalm 51?' }),
+        })
+      )
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'session.delegation.created', delegation: { id: 'deleg_B', target: 'client' } }),
+        })
+      )
+    })
+
+    // A's answer arrives now, carrying the id captured at A's transcript time.
+    act(() => {
+      result.current.speak('David.', delegationIdA)
+    })
+
+    const appended = dc.sent.map((raw) => JSON.parse(raw))
+    const commentary = appended.filter((e) => e.type === 'session.commentary.append')
+    expect(commentary).toHaveLength(1)
+    expect(commentary[0].delegation_id).toBe('deleg_A')
+    expect(commentary[0].content).toBe('David.')
+  })
+
+  it('surfaces a GPT-Live error event instead of silently swallowing it', async () => {
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    const dc = FakeRTCPeerConnection.instances[0].dataChannel!
+    act(() => {
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'error',
+            error: { type: 'invalid_request_error', message: 'Unknown delegation_id' },
+          }),
+        })
+      )
+    })
+
+    expect(result.current.status).toBe('error')
+    expect(result.current.errorMessage).toMatch(/unknown delegation_id/i)
+    // A hard error means the session is in a bad state — it's torn down
+    // rather than left sitting silently in some status.
+    expect(FakeRTCPeerConnection.instances[0].closed).toBe(true)
+  })
+
+  it('surfaces a suffixed *.error event and falls back to a generic message when none is carried', async () => {
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    const dc = FakeRTCPeerConnection.instances[0].dataChannel!
+    act(() => {
+      dc.dispatchEvent(
+        new MessageEvent('message', { data: JSON.stringify({ type: 'session.error' }) })
+      )
+    })
+
+    expect(result.current.status).toBe('error')
+    expect(result.current.errorMessage).toMatch(/voice session/i)
   })
 
   it('stop() closes the peer connection and stops every mic track', async () => {
@@ -256,6 +361,12 @@ describe('useVoiceMode', () => {
     expect(result.current.status).toBe('idle')
     expect(FakeRTCPeerConnection.instances[0].closed).toBe(true)
     mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
+    // Same detach-before-close discipline connect()'s cleanup branches use:
+    // close() can fire connectionstatechange, and a still-attached handler
+    // touching the shared statusRef during teardown is exactly the bug
+    // class that pattern exists to prevent.
+    expect(FakeRTCPeerConnection.instances[0].onconnectionstatechange).toBeNull()
+    expect(FakeRTCPeerConnection.instances[0].ontrack).toBeNull()
   })
 
   it('tears down and reports an error when the connection drops unexpectedly', async () => {
@@ -335,14 +446,15 @@ describe('useVoiceMode', () => {
 
     expect(() => {
       act(() => {
-        result.current.speak('hello')
+        result.current.speak('hello', 'deleg_1')
       })
     }).not.toThrow()
     expect(result.current.status).toBe('idle')
   })
 
-  it('speak() is a no-op when connected but no delegation is open yet', async () => {
-    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+  it('speak() is a no-op when the turn carried no delegation id, and never leaves the hook at "thinking"', async () => {
+    const onTranscript = vi.fn()
+    const { result } = renderHook(() => useVoiceMode({ onTranscript }))
 
     await act(async () => {
       result.current.toggle()
@@ -350,8 +462,24 @@ describe('useVoiceMode', () => {
     await waitFor(() => expect(result.current.status).toBe('listening'))
 
     const dc = FakeRTCPeerConnection.instances[0].dataChannel!
+    // A delegation.created with no id at all: the transcript is still
+    // forwarded to the chat pipeline, but there is nothing to append the
+    // answer to.
     act(() => {
-      result.current.speak('hello')
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'session.input_transcript.delta', delta: 'hello' }),
+        })
+      )
+      dc.dispatchEvent(
+        new MessageEvent('message', { data: JSON.stringify({ type: 'session.delegation.created' }) })
+      )
+    })
+    expect(onTranscript).toHaveBeenCalledWith('hello', '')
+    expect(result.current.status).toBe('thinking')
+
+    act(() => {
+      result.current.speak('an answer', '')
     })
 
     expect(dc.sent).toHaveLength(0)

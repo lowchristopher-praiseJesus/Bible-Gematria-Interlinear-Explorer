@@ -1395,13 +1395,15 @@ In the running app: open Settings → Voice → paste a real OpenAI API key with
 
 - [ ] **Step 3: Confirm the turn-completion signal assumption**
 
-Open the browser's DevTools console. Temporarily add a `console.log(event)` at the top of `handleEvent` in `useVoiceMode.ts` (or use the Network/WS panel if the browser exposes WebRTC data channel messages there). Click the Voice toggle, grant mic access, and ask a short question aloud.
+Open the browser's DevTools console — no source edit needed: `handleEvent`'s `default` branch already logs `[voice] unhandled event` via `console.debug` whenever `import.meta.env.DEV` is set, so every event type this implementation does *not* recognise shows up in the console under Verbose/Debug level. (Recognised types — the transcript delta and `session.delegation.created` — are visible through their effects: the live caption and the chat turn.) Click the Voice toggle, grant mic access, and ask a short question aloud.
 
 Confirm: `session.input_transcript.delta` events carry the spoken text under the field this implementation reads (`delta`, falling back to `text`). Confirm `session.delegation.created` fires once, after the user stops talking, and that the transcript accumulated up to that point is the complete utterance (not truncated, not duplicated).
 
 If the real field name or completion signal differs from what Task 5 assumed: update `handleEvent` in `useVoiceMode.ts` accordingly, then re-run `cd frontend && npx vitest run src/components/shell/useVoiceMode.test.ts` to confirm the existing mocked-event tests still pass (update the mocked event shapes in the test file to match reality if the field name changed).
 
-Remove the temporary `console.log` once confirmed.
+Nothing to remove afterwards — the diagnostic is permanent and DEV-only, so it never reaches a production build.
+
+If the caption stays empty for a turn, look for an `[voice] unhandled event` line naming the real transcript-delta event type, and for any `error`/`*.error` event — those are now surfaced in the UI as a voice-session error rather than swallowed.
 
 - [ ] **Step 4: Confirm commentary speech fidelity**
 

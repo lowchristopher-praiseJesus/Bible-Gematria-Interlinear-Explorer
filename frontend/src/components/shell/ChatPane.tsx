@@ -102,7 +102,14 @@ export function ChatPane({ sessionId }: Props) {
   const [reportOpen, setReportOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const lastTurnWasVoiceRef = useRef(false)
+  // Set by the voice hook's onTranscript immediately before it calls
+  // sendMessage, and consumed (and cleared) at the very top of sendMessage.
+  // Non-null means "this turn came from speech"; `delegationId` is the id
+  // that turn's transcript actually arrived with, carried explicitly
+  // because the hook's own notion of "current delegation" can be
+  // superseded by a later utterance before this turn's answer is ready.
+  // Kept as one object so the flag and the id can never drift apart.
+  const pendingVoiceTurnRef = useRef<{ delegationId: string } | null>(null)
   const voiceModeRef = useRef<UseVoiceModeResult | null>(null)
   // Which session the devotional generation has already auto-fired for.
   // A single <ChatPane> instance is reused across sessions (no `key` in
@@ -247,19 +254,55 @@ export function ChatPane({ sessionId }: Props) {
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim() || !session) return
+      // Claim the voice-turn marker before ANY early return. It is set by
+      // onTranscript just before this call, so a path that leaves it in
+      // place would both strand the voice hook at 'thinking' (nothing ever
+      // calls speak() for that turn) and make the *next* turn — even a
+      // typed one — speak its answer against a stale delegation id.
+      const voiceTurn = pendingVoiceTurnRef.current
+      pendingVoiceTurnRef.current = null
+
+      if (!text.trim() || !session) {
+        // Clearing the marker above is the whole recovery here: the hook
+        // already drops empty/whitespace transcripts before calling
+        // onTranscript, and it only exists while a session is rendered, so
+        // a voice-originated call realistically can't reach this guard —
+        // and if one did there'd be no answer worth speaking anyway.
+        return
+      }
       // Enter submits the form directly, bypassing the disabled Send
       // button — without this guard, pressing it during an in-flight
       // generation (the multi-minute devotional turn especially) starts a
       // second one.
-      if (loading) return
-      const wasVoiceTurn = lastTurnWasVoiceRef.current
-      lastTurnWasVoiceRef.current = false
+      if (loading) {
+        // GPT-Live is full-duplex, so it keeps listening while the previous
+        // answer is still generating and a second utterance lands right
+        // here. Say so out loud (against this turn's own delegation id) so
+        // the hook returns to 'listening' instead of sitting at 'thinking'
+        // for an utterance that will never be answered.
+        if (voiceTurn) {
+          voiceModeRef.current?.speak(
+            "One moment — I'm still finishing the last answer.",
+            voiceTurn.delegationId
+          )
+        }
+        return
+      }
       const userMessage: SessionMessage = { id: genId(), role: 'user', text }
       appendMessage(sessionId, userMessage)
       setInput('')
 
       if (session.mode === 'devotional' && !session.modeParams.delivered) {
+        // The devotional turn's answer is a ~1,400-word document that opens
+        // from the artifact pane, not something to read aloud, so a
+        // voice-originated devotional isn't spoken back. Still close the
+        // turn out loud so the hook leaves 'thinking'.
+        if (voiceTurn) {
+          voiceModeRef.current?.speak(
+            "I'm writing your devotional — it'll open on screen when it's ready.",
+            voiceTurn.delegationId
+          )
+        }
         await runDevotionalTurn(text)
         return
       }
@@ -273,8 +316,14 @@ export function ChatPane({ sessionId }: Props) {
           mode: session.mode,
           mode_params: { ...session.modeParams },
         })
-        if (wasVoiceTurn) {
-          voiceModeRef.current?.speak(response?.message ?? 'Sorry, something went wrong.')
+        if (voiceTurn) {
+          // Against the id captured when THIS turn's transcript arrived —
+          // another utterance may have opened a newer delegation while this
+          // answer was generating.
+          voiceModeRef.current?.speak(
+            response?.message ?? 'Sorry, something went wrong.',
+            voiceTurn.delegationId
+          )
         }
       } finally {
         setLoading(false)
@@ -284,8 +333,8 @@ export function ChatPane({ sessionId }: Props) {
   )
 
   const voiceMode = useVoiceMode({
-    onTranscript: (text) => {
-      lastTurnWasVoiceRef.current = true
+    onTranscript: (text, delegationId) => {
+      pendingVoiceTurnRef.current = { delegationId }
       void sendMessage(text)
     },
   })
@@ -293,6 +342,20 @@ export function ChatPane({ sessionId }: Props) {
   useEffect(() => {
     voiceModeRef.current = voiceMode
   })
+
+  // A voice session belongs to the conversation it was started in (the
+  // design spec puts carrying one across a session switch out of scope).
+  // This ChatPane instance is reused across sidebar switches (no `key` in
+  // App.tsx), so the hook and its WebRTC connection survive a sessionId
+  // change unless stopped explicitly. This cleanup runs both right before
+  // the effect re-runs for a new sessionId and on true unmount, covering
+  // both cases; stop() is idempotent and null-safe, so it's harmless when
+  // voice mode was never started.
+  useEffect(() => {
+    return () => {
+      voiceModeRef.current?.stop()
+    }
+  }, [sessionId])
 
   // "Pick one for me" devotional: once the pill has resolved (its ack is
   // the last message and the user hasn't typed anything), kick off the

@@ -904,9 +904,9 @@ describe('ChatPane', () => {
     expect(screen.getByText('What does grace mean')).toBeInTheDocument()
   })
 
-  it('speaks the resolved answer when the turn was voice-originated', async () => {
+  it('speaks the resolved answer against the delegation id the transcript arrived with', async () => {
     const speak = vi.fn()
-    let onTranscript: ((text: string) => void) | undefined
+    let onTranscript: ((text: string, delegationId: string) => void) | undefined
     vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
       onTranscript = opts.onTranscript
       return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak }
@@ -916,11 +916,161 @@ describe('ChatPane', () => {
     render(<ChatPane sessionId={session.id} />)
 
     await act(async () => {
-      onTranscript?.('What does grace mean?')
+      onTranscript?.('What does grace mean?', 'deleg_1')
     })
 
     expect(await screen.findByText('Grace is unmerited favor.')).toBeInTheDocument()
-    expect(speak).toHaveBeenCalledWith('Grace is unmerited favor.')
+    expect(speak).toHaveBeenCalledWith('Grace is unmerited favor.', 'deleg_1')
+  })
+
+  it('stops the voice session when the sidebar switches to another conversation', () => {
+    const stop = vi.fn()
+    vi.spyOn(voiceModule, 'useVoiceMode').mockReturnValue({
+      status: 'listening',
+      errorMessage: null,
+      liveCaption: '',
+      toggle: vi.fn(),
+      stop,
+      speak: vi.fn(),
+    })
+    const s1 = useSessionsStore.getState().createSession('freeform', {})
+    const s2 = useSessionsStore.getState().createSession('freeform', {})
+
+    // No `key` in App.tsx, so this is the same mounted ChatPane (and the
+    // same live WebRTC session) being pointed at a different conversation.
+    const { rerender } = render(<ChatPane sessionId={s1.id} />)
+    expect(stop).not.toHaveBeenCalled()
+
+    rerender(<ChatPane sessionId={s2.id} />)
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops the voice session on unmount', () => {
+    const stop = vi.fn()
+    vi.spyOn(voiceModule, 'useVoiceMode').mockReturnValue({
+      status: 'listening',
+      errorMessage: null,
+      liveCaption: '',
+      toggle: vi.fn(),
+      stop,
+      speak: vi.fn(),
+    })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const { unmount } = render(<ChatPane sessionId={session.id} />)
+
+    unmount()
+    expect(stop).toHaveBeenCalled()
+  })
+
+  it('speaks a short hold-on message when a voice turn is dropped mid-generation, and still answers the first turn against its own delegation id', async () => {
+    // Full-duplex: GPT-Live keeps listening while the previous answer is
+    // generating, so a second utterance can hit sendMessage's `loading`
+    // guard. It must not leave the hook stuck at 'thinking' — and the first
+    // turn's answer must still be spoken against ITS delegation id, not the
+    // dropped turn's.
+    const speak = vi.fn()
+    let onTranscript: ((text: string, delegationId: string) => void) | undefined
+    vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
+      onTranscript = opts.onTranscript
+      return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak }
+    })
+    let resolvePost!: (value: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockImplementation(
+      () => new Promise((resolve) => { resolvePost = resolve })
+    )
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    await act(async () => {
+      onTranscript?.('Who wrote Psalm 23?', 'deleg_A')
+    })
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      onTranscript?.('And who wrote Psalm 51?', 'deleg_B')
+    })
+
+    expect(spy).toHaveBeenCalledTimes(1) // the second turn was dropped …
+    expect(speak).toHaveBeenCalledTimes(1) // … but not silently
+    expect(speak).toHaveBeenCalledWith(expect.stringMatching(/one moment/i), 'deleg_B')
+
+    await act(async () => {
+      resolvePost({ type: 'chat', message: 'David wrote it.' })
+    })
+
+    expect(speak).toHaveBeenLastCalledWith('David wrote it.', 'deleg_A')
+  })
+
+  it('does not speak a typed turn that follows a dropped voice turn', async () => {
+    // Regression: the "this turn was voice-originated" marker used to
+    // survive an early return, so the *next* turn — even a typed one —
+    // wrongly got spoken back.
+    const speak = vi.fn()
+    let onTranscript: ((text: string, delegationId: string) => void) | undefined
+    vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
+      onTranscript = opts.onTranscript
+      return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak }
+    })
+    let resolvePost!: (value: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void
+    vi.spyOn(chatApi, 'postChatStream').mockImplementation(
+      () => new Promise((resolve) => { resolvePost = resolve })
+    )
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    const input = screen.getByPlaceholderText(/ask about a verse/i)
+    const form = input.closest('form')!
+    fireEvent.change(input, { target: { value: 'a typed question' } })
+    fireEvent.submit(form)
+
+    // A voice utterance lands while the typed turn is still generating.
+    await act(async () => {
+      onTranscript?.('a dropped voice question', 'deleg_X')
+    })
+    expect(speak).toHaveBeenCalledWith(expect.stringMatching(/one moment/i), 'deleg_X')
+    speak.mockClear()
+
+    // The typed turn's own answer must not be spoken.
+    await act(async () => {
+      resolvePost({ type: 'chat', message: 'A typed answer.' })
+    })
+    expect(speak).not.toHaveBeenCalled()
+
+    // Nor the next typed turn's.
+    fireEvent.change(input, { target: { value: 'another typed question' } })
+    fireEvent.submit(form)
+    await act(async () => {
+      resolvePost({ type: 'chat', message: 'Another typed answer.' })
+    })
+    expect(speak).not.toHaveBeenCalled()
+  })
+
+  it('does not leave the voice hook at "thinking" when a voice turn hits the devotional generation branch', async () => {
+    const speak = vi.fn()
+    let onTranscript: ((text: string, delegationId: string) => void) | undefined
+    vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
+      onTranscript = opts.onTranscript
+      return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak }
+    })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue(devotionalFinal() as never)
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'user' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'p', role: 'assistant', text: 'Tell me a verse reference or a theme.',
+    })
+    render(<ChatPane sessionId={session.id} />)
+
+    await act(async () => {
+      onTranscript?.('Psalm 23', 'deleg_D')
+    })
+
+    // The devotional still generates …
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Psalm 23', mode: 'devotional' }),
+      expect.anything()
+    )
+    // … and the hook is told something rather than left hanging at 'thinking'.
+    expect(speak).toHaveBeenCalledTimes(1)
+    expect(speak.mock.calls[0][1]).toBe('deleg_D')
   })
 
   it('does not speak the answer for a normal typed turn', async () => {
