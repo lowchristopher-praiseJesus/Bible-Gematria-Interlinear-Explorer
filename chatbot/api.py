@@ -535,10 +535,34 @@ async def create_voice_session(
             status_code=401,
             detail="Couldn't start a voice session — check your OpenAI API key in Settings.",
         )
+    # A working key that simply lacks access to this model is its own,
+    # likely BYOK failure (gpt-live-1 is newly released) — the generic 502
+    # below would wrongly point the user at server trouble.
+    if response.status_code == 403:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This OpenAI key doesn't have access to GPT-Live — "
+                "check your OpenAI account's model access."
+            ),
+        )
     if response.status_code == 429:
         raise HTTPException(status_code=429, detail="OpenAI is rate-limiting this key right now.")
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail="OpenAI couldn't start the voice session.")
 
-    body = response.json()
-    return VoiceSessionResponse(session_id=body["session"]["id"], sdp=body["transport"]["sdp"])
+    # An unexpected-shape (or non-JSON) 200 must land in this function's own
+    # deliberate error mapping, not as an unhandled KeyError/TypeError →
+    # FastAPI 500. `response.json()` raises json.JSONDecodeError (a
+    # ValueError) on a non-JSON body; the subscripts raise KeyError on a
+    # missing field and TypeError when a container isn't the shape assumed.
+    try:
+        body = response.json()
+        session_id = body["session"]["id"]
+        answer_sdp = body["transport"]["sdp"]
+        if not isinstance(session_id, str) or not isinstance(answer_sdp, str):
+            raise TypeError("unexpected field types in the GPT-Live session response")
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="OpenAI returned an unexpected response.")
+
+    return VoiceSessionResponse(session_id=session_id, sdp=answer_sdp)
