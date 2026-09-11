@@ -117,6 +117,34 @@ describe('useVoiceMode', () => {
     await waitFor(() => expect(result.current.status).toBe('error'))
     expect(result.current.errorMessage).toBe('bad key')
     expect(FakeRTCPeerConnection.instances[0]?.closed).toBe(true)
+    expect(FakeRTCPeerConnection.instances[0]?.dataChannel?.readyState).toBe('closed')
+  })
+
+  it('surfaces an error and releases the mic + peer connection when a pre-handshake step throws', async () => {
+    // Regression test: createOffer/setLocalDescription/the ICE wait used to
+    // sit outside any try/catch, so a rejection here was an unhandled
+    // promise rejection that left status stuck at 'connecting' with a live
+    // mic and peer connection. The whole sequence through
+    // setRemoteDescription must now be caught and cleaned up.
+    const mic = fakeMicStream()
+    ;(navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue(mic)
+    const offerSpy = vi
+      .spyOn(FakeRTCPeerConnection.prototype, 'createOffer')
+      .mockRejectedValue(new Error('no ice servers'))
+
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.errorMessage).toBe('no ice servers')
+    expect(FakeRTCPeerConnection.instances[0]?.closed).toBe(true)
+    expect(FakeRTCPeerConnection.instances[0]?.dataChannel?.readyState).toBe('closed')
+    mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
+
+    offerSpy.mockRestore()
   })
 
   it('connects, accumulates transcript deltas, and forwards the finished transcript on delegation.created', async () => {
@@ -236,5 +264,118 @@ describe('useVoiceMode', () => {
 
     expect(result.current.status).toBe('error')
     expect(result.current.errorMessage).toMatch(/voice session ended/i)
+  })
+
+  it('stops an active session and reports an error when the API key is cleared mid-session', async () => {
+    const mic = fakeMicStream()
+    ;(navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue(mic)
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    act(() => {
+      useVoiceSettingsStore.setState({ openaiApiKey: null })
+    })
+
+    expect(result.current.status).toBe('error')
+    expect(result.current.errorMessage).toMatch(/api key was cleared/i)
+    expect(FakeRTCPeerConnection.instances[0].closed).toBe(true)
+    mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
+  })
+
+  it('does not run the key-cleared teardown on mount, whether or not a key is set', () => {
+    useVoiceSettingsStore.setState({ openaiApiKey: null })
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    expect(result.current.status).toBe('idle')
+    expect(result.current.errorMessage).toBeNull()
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('closes the peer connection and stops every mic track on unmount', async () => {
+    const mic = fakeMicStream()
+    ;(navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue(mic)
+    const { result, unmount } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    unmount()
+
+    expect(FakeRTCPeerConnection.instances[0].closed).toBe(true)
+    mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
+  })
+
+  it('speak() is a no-op when no voice session is open', () => {
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    expect(() => {
+      act(() => {
+        result.current.speak('hello')
+      })
+    }).not.toThrow()
+    expect(result.current.status).toBe('idle')
+  })
+
+  it('speak() is a no-op when connected but no delegation is open yet', async () => {
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    const dc = FakeRTCPeerConnection.instances[0].dataChannel!
+    act(() => {
+      result.current.speak('hello')
+    })
+
+    expect(dc.sent).toHaveLength(0)
+    expect(result.current.status).toBe('listening')
+  })
+
+  it('aborts an in-flight connect() when stop() is called before it resolves, leaving no mic or peer connection behind', async () => {
+    const mic = fakeMicStream()
+    ;(navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue(mic)
+
+    let resolveSession!: (value: { sessionId: string; sdp: string }) => void
+    vi.spyOn(voiceApi, 'createVoiceSession').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSession = resolve
+        })
+    )
+
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    act(() => {
+      result.current.toggle()
+    })
+    expect(result.current.status).toBe('connecting')
+
+    await waitFor(() => expect(FakeRTCPeerConnection.instances).toHaveLength(1))
+
+    act(() => {
+      result.current.stop()
+    })
+    expect(result.current.status).toBe('idle')
+
+    // Let the suspended connect() resume: it must notice it was
+    // superseded and tear down what it built rather than reporting
+    // 'listening' or leaving the mic/peer connection live.
+    act(() => {
+      resolveSession({ sessionId: 'live_123', sdp: 'fake-answer-sdp' })
+    })
+
+    await waitFor(() => expect(FakeRTCPeerConnection.instances[0].closed).toBe(true))
+    expect(result.current.status).toBe('idle')
+    expect(FakeRTCPeerConnection.instances[0].dataChannel?.readyState).toBe('closed')
+    mic.stopFns.forEach((stop) => expect(stop).toHaveBeenCalled())
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1)
   })
 })

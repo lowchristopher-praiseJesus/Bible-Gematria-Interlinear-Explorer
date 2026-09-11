@@ -49,6 +49,12 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
   const delegationIdRef = useRef<string | null>(null)
   const onTranscriptRef = useRef(onTranscript)
   const prevKeyRef = useRef(openaiApiKey)
+  /** Bumped by stop() and by connect() itself; lets a suspended connect()
+   * detect — after each meaningful await — that it has been superseded
+   * (by an explicit stop(), unmount, the key-cleared effect, or a newer
+   * connect()) and must tear down whatever it already created instead of
+   * committing it to the shared refs / status. */
+  const connectionIdRef = useRef(0)
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript
@@ -60,6 +66,10 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
   }
 
   function stop(message: string | null = null) {
+    // Invalidate any in-flight connect() so it cleans up after itself
+    // instead of resuming and committing a live mic/peer connection that
+    // nothing will ever be told about again.
+    connectionIdRef.current += 1
     dcRef.current?.close()
     dcRef.current = null
     pcRef.current?.close()
@@ -116,6 +126,13 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
       setStatus('error')
       return
     }
+    // Claim a generation id for this attempt. stop() (called explicitly,
+    // on unmount, from the key-cleared effect, or from
+    // onconnectionstatechange below) bumps connectionIdRef — any await
+    // this function resumes from after that must notice `myId` is stale
+    // and tear down what it already built instead of finishing the
+    // connection or touching shared status/refs.
+    const myId = ++connectionIdRef.current
     setErrorMessage(null)
     setStatus('connecting')
 
@@ -123,19 +140,25 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch {
-      setErrorMessage('Microphone permission was denied.')
-      setStatus('error')
+      if (myId === connectionIdRef.current) {
+        setErrorMessage('Microphone permission was denied.')
+        setStatus('error')
+      }
       return
     }
-    micStreamRef.current = micStream
+
+    if (myId !== connectionIdRef.current) {
+      // Superseded while awaiting the mic — release it, nothing else was
+      // created yet.
+      micStream.getTracks().forEach((track) => track.stop())
+      return
+    }
 
     const pc = new RTCPeerConnection()
-    pcRef.current = pc
     micStream.getTracks().forEach((track) => pc.addTrack(track, micStream))
 
     const dc = pc.createDataChannel('oai-events')
     dc.onmessage = (e) => handleEvent(e.data)
-    dcRef.current = dc
 
     pc.ontrack = (event: RTCTrackEvent) => {
       if (!audioElRef.current) {
@@ -150,36 +173,54 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
       }
     }
 
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    await new Promise<void>((resolve) => {
-      if (pc.iceGatheringState === 'complete') {
-        resolve()
-        return
-      }
-      const check = () => {
-        if (pc.iceGatheringState === 'complete') {
-          pc.removeEventListener('icegatheringstatechange', check)
-          resolve()
-        }
-      }
-      pc.addEventListener('icegatheringstatechange', check)
-    })
-
+    // Everything from here through setRemoteDescription can throw (a
+    // rejected createOffer/setLocalDescription, the ICE wait, the
+    // handshake proxy call, or setRemoteDescription itself) — all of it
+    // must be caught so a failure always lands in 'error' with the mic
+    // and peer connection released, never an unhandled rejection with
+    // status stuck at 'connecting' and live resources leaked.
     try {
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      await new Promise<void>((resolve) => {
+        if (pc.iceGatheringState === 'complete') {
+          resolve()
+          return
+        }
+        const check = () => {
+          if (pc.iceGatheringState === 'complete') {
+            pc.removeEventListener('icegatheringstatechange', check)
+            resolve()
+          }
+        }
+        pc.addEventListener('icegatheringstatechange', check)
+      })
+
       const { sdp } = await createVoiceSession(pc.localDescription?.sdp ?? '', openaiApiKey)
       await pc.setRemoteDescription({ type: 'answer', sdp })
     } catch (err) {
+      dc.close()
       pc.close()
       micStream.getTracks().forEach((track) => track.stop())
-      pcRef.current = null
-      dcRef.current = null
-      micStreamRef.current = null
-      setErrorMessage(err instanceof Error ? err.message : String(err))
-      setStatus('error')
+      if (myId === connectionIdRef.current) {
+        setErrorMessage(err instanceof Error ? err.message : String(err))
+        setStatus('error')
+      }
       return
     }
 
+    if (myId !== connectionIdRef.current) {
+      // Superseded while completing the handshake — tear down the
+      // connection/mic this attempt just finished building.
+      dc.close()
+      pc.close()
+      micStream.getTracks().forEach((track) => track.stop())
+      return
+    }
+
+    pcRef.current = pc
+    dcRef.current = dc
+    micStreamRef.current = micStream
     setStatus('listening')
   }
 
