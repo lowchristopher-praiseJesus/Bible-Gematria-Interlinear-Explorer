@@ -91,15 +91,6 @@ class StudyWikisResponse(BaseModel):
     study_wikis: List[StudyWikiEntry] = Field(..., description="List of registered study wiki series")
 
 
-class WikiPageResponse(BaseModel):
-    series_id: str = Field(..., description="The series this page belongs to")
-    slug: str = Field(..., description="Page slug")
-    title: str = Field(..., description="Page title")
-    kind: str = Field(..., description="concept | entity | source")
-    body_html: str = Field(..., description="Rendered HTML body, wikilinks and scripture refs already resolved to links")
-    citation: str = Field(..., description="Attribution line, e.g. 'Joseph Prince — The Present-Day Ministry of Jesus'")
-
-
 class SSEChunk(BaseModel):
     chunk: str = Field(..., description="Streaming text chunk")
     done: bool = Field(False, description="Whether this is the final chunk")

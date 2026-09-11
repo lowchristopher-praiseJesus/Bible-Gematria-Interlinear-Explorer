@@ -997,7 +997,7 @@ async def route_claude(
 
 from chatbot.data.parables import get_parable
 from chatbot.data.reading_plans import get_day_reading
-from chatbot import wiki_loader
+from chatbot import wiki_loader, wiki_qa
 from chatbot.tools import random_verse
 
 _FULL_NAME_TO_USFM = {full: usfm for usfm, full in _USFM_TO_BOOK.items()}
@@ -1102,33 +1102,15 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
                 "route": "Mode primer → topic → series",
             }
 
-        page = wiki_loader.get_page(series_id, concept_slug)
-        if not page:
+        if not wiki_loader.get_page(series_id, concept_slug):
             return {
                 "type": "error", "message": "Unknown concept.", "data": None,
                 "route": "Mode primer → topic → concept not found",
             }
-        message = (
-            f"Here's the study page on **{page['title']}** — from \"{manifest['title']}\" "
-            f"({manifest['speaker']}). Scripture links open the original languages; "
-            "ask me a follow-up question about it."
-        )
-        return {
-            # The page renders inline in the chat window (WikiPageBubble);
-            # only its scripture links open the artifact panel.
-            "type": "wiki_page",
-            "message": message,
-            "data": {
-                "series_id": series_id,
-                "slug": concept_slug,
-                "title": page["title"],
-                "kind": page["kind"],
-                "body_html": page["body_html"],
-                "citation": f"{manifest['speaker']} — {manifest['title']}",
-            },
-            "route": "Mode primer → topic → concept",
-            "follow_up_questions": [f"What else does this series say about {page['title']}?"],
-        }
+        # The concept's raw .md page is never shown to the user directly —
+        # answer_concept() synthesizes one LLM explanation from the page and
+        # its directly-linked related pages instead.
+        return await wiki_qa.answer_concept(series_id, concept_slug)
 
     if mode == "verse":
         reference = mode_params.get("reference")

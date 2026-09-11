@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Check, Copy, Flag, Loader2, RefreshCw, Share2 } from 'lucide-react'
-import { fetchWikiConcept, postChat, postChatStream } from '@/lib/chatApi'
+import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -12,13 +12,11 @@ import { VerseGroupBubble } from './VerseGroupBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { StudyBubble } from './StudyBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
-import { WikiPageBubble } from './WikiPageBubble'
 import { PromptChips } from './PromptChips'
 import { ChatNotesMenu } from './ChatNotesMenu'
 import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
-import type { WikiPageResponse } from '@/types/api'
 import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
 
 interface Props {
@@ -367,38 +365,6 @@ export function ChatPane({ sessionId }: Props) {
     [session, sessionId, updateMessage]
   )
 
-  // A [[wikilink]] clicked inside an inline wiki page opens the linked
-  // concept as a NEW assistant message, so the conversation keeps a
-  // scrollable trail of every page the user has read. (Scripture links
-  // inside the page go to the artifact panel instead — handled by the
-  // bubble itself.)
-  const openWikiConcept = useCallback(
-    async (seriesId: string, slug: string, label: string) => {
-      appendMessage(sessionId, {
-        id: genId(),
-        role: 'user',
-        text: label || slug,
-      })
-      try {
-        const page = await fetchWikiConcept(seriesId, slug)
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: `Here's the linked study page on **${page.title}**.`,
-          type: 'wiki_page',
-          data: page as unknown as Record<string, unknown>,
-        })
-      } catch (err) {
-        appendMessage(sessionId, {
-          id: genId(),
-          role: 'assistant',
-          text: 'Sorry, something went wrong: ' + errorMessage(err),
-        })
-      }
-    },
-    [sessionId, appendMessage]
-  )
-
   async function copyMessage(id: string, text: string) {
     try {
       await navigator.clipboard.writeText(text)
@@ -531,12 +497,6 @@ export function ChatPane({ sessionId }: Props) {
                   )}
                   {msg.type === 'strongs' && msg.data && <StrongsBubble data={msg.data} />}
                   {msg.type === 'study' && msg.data && <StudyBubble data={msg.data} />}
-                  {msg.type === 'wiki_page' && msg.data && (
-                    <WikiPageBubble
-                      data={msg.data as unknown as WikiPageResponse}
-                      onOpenConcept={openWikiConcept}
-                    />
-                  )}
                   {msg.artifacts && msg.artifacts.length > 0 && (
                     <div className="mt-2 flex flex-col gap-1.5">
                       {groupArtifacts(msg.artifacts).map((group, i) =>

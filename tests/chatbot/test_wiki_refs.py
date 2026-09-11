@@ -1,4 +1,18 @@
-from chatbot.wiki_refs import resolve_scripture_refs, resolve_wikilinks, render_wiki_body
+from chatbot.wiki_refs import (
+    extract_wikilink_slugs,
+    render_wiki_body,
+    resolve_scripture_refs,
+    resolve_wikilinks,
+)
+
+
+def test_extract_wikilink_slugs_dedupes_preserving_first_seen_order():
+    body = "See [[holiness]] and [[grace]], and [[holiness]] again."
+    assert extract_wikilink_slugs(body) == ["holiness", "grace"]
+
+
+def test_extract_wikilink_slugs_no_links_returns_empty_list():
+    assert extract_wikilink_slugs("No links here.") == []
 
 
 def test_resolve_wikilinks_known_slug():

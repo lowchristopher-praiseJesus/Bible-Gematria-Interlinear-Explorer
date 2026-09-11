@@ -26,6 +26,17 @@ _SCRIPTURE_REF_RE = re.compile(
 )
 
 
+def extract_wikilink_slugs(body: str) -> list:
+    """Returns every `[[slug]]` cross-reference in `body`, deduped and in
+    first-seen order. Used to find a page's directly-linked "related"
+    pages, as opposed to resolve_wikilinks()'s job of turning them into
+    clickable links."""
+    seen: Dict[str, None] = {}
+    for slug in _WIKILINK_RE.findall(body):
+        seen.setdefault(slug, None)
+    return list(seen.keys())
+
+
 def resolve_wikilinks(body: str, series_id: str, titles_by_slug: Dict[str, str]) -> str:
     """Replace every `[[slug]]` with a markdown link to that page, using
     its resolved title as the link text. A slug with no matching page is

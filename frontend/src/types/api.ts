@@ -177,11 +177,3 @@ export interface BookContextResponse {
   sections: Record<string, string | null>
 }
 
-export interface WikiPageResponse {
-  series_id: string
-  slug: string
-  title: string
-  kind: string
-  body_html: string
-  citation: string
-}

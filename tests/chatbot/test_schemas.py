@@ -46,20 +46,6 @@ def test_study_wiki_entry_round_trips():
     assert entry.model_dump()["speaker"] == "Joseph Prince"
 
 
-def test_wiki_page_response_round_trips():
-    from chatbot.schemas import WikiPageResponse
-
-    page = WikiPageResponse(
-        series_id="s1",
-        slug="grace",
-        title="Grace",
-        kind="concept",
-        body_html="<p>Undeserved favor.</p>",
-        citation="Joseph Prince — The Present-Day Ministry of Jesus and How It Empowers You",
-    )
-    assert page.model_dump()["slug"] == "grace"
-
-
 def test_chat_response_accepts_optional_trace():
     resp = ChatResponse(type="chat", message="hi", trace={"turnId": "abc", "steps": []})
     assert resp.trace == {"turnId": "abc", "steps": []}

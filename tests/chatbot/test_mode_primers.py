@@ -124,23 +124,29 @@ async def test_topic_primer_unknown_series():
 
 
 @pytest.mark.asyncio
-async def test_topic_primer_concept_page():
+async def test_topic_primer_concept_page(monkeypatch):
+    # The concept page's raw markdown is never handed to the user directly
+    # — the primer delegates to wiki_qa.answer_concept(), which synthesizes
+    # one LLM answer from the page (and its related pages) instead.
+    import chatbot.wiki_qa as wiki_qa_module
+
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "Grace is God's undeserved favor toward us in Christ.", "data": None}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        return []
+
+    monkeypatch.setattr(wiki_qa_module, "call_ollama_with_context", fake_call_ollama_with_context)
+    monkeypatch.setattr(wiki_qa_module, "generate_llm_follow_ups", fake_llm_follow_ups)
+
     result = await build_mode_primer(
         "topic", {"series_id": "present-day-ministry-of-jesus", "concept_slug": "grace"}
     )
-    # The page renders inline in the chat window, so the primer returns the
-    # full rendered page as data (same shape the page endpoint serves) —
-    # not an artifact link pointing at the side panel.
-    assert result["type"] == "wiki_page"
-    data = result["data"]
-    assert data["series_id"] == "present-day-ministry-of-jesus"
-    assert data["slug"] == "grace"
-    assert data["title"] == "Grace"
-    assert "<" in data["body_html"]  # rendered HTML, not raw markdown
-    assert data["citation"] == "Joseph Prince — The Present-Day Ministry of Jesus and How It Empowers You"
-    # Scripture refs stay clickable into the Explorer, but the page itself
-    # is not an artifact-panel link.
-    assert not any(a["type"] == "wiki_concept" for a in result.get("artifacts") or [])
+    assert result["type"] == "chat"
+    assert result["message"] == "Grace is God's undeserved favor toward us in Christ."
+    assert result["data"]["series_id"] == "present-day-ministry-of-jesus"
+    assert result["data"]["concept_slug"] == "grace"
+    assert result["data"]["title"] == "Grace"
 
 
 @pytest.mark.asyncio

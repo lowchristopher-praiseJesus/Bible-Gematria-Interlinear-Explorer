@@ -6,7 +6,6 @@ import type {
   ExplorerResponse,
   GematriaResponse,
   StrongsResponse,
-  WikiPageResponse,
 } from '@/types/api'
 import type { ArtifactLink, ModeParams } from '@/types/session'
 import type { Trace } from '@/types/trace'
@@ -235,7 +234,3 @@ export async function fetchEnglishSearch(query: string): Promise<EnglishResponse
   return parseJsonResponse<EnglishResponse>(res)
 }
 
-export async function fetchWikiConcept(seriesId: string, slug: string): Promise<WikiPageResponse> {
-  const res = await fetch(`${CHAT_API}/study-wikis/${encodeURIComponent(seriesId)}/pages/${encodeURIComponent(slug)}`)
-  return parseJsonResponse<WikiPageResponse>(res)
-}

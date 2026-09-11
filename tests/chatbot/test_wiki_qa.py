@@ -3,6 +3,19 @@ import pytest
 from chatbot import wiki_qa
 
 
+@pytest.fixture(autouse=True)
+def _no_llm_follow_ups(monkeypatch):
+    """Stub the follow-up-question LLM call to a fast no-op by default, so
+    tests that don't care about follow-ups never depend on a real LLM
+    provider being reachable (e.g. a local Ollama daemon actually running
+    on the dev machine). Tests exercising follow-up behavior override this
+    per-test."""
+    async def fake(user_message, assistant_message, page_context=None):
+        return []
+
+    monkeypatch.setattr(wiki_qa, "generate_llm_follow_ups", fake)
+
+
 @pytest.mark.asyncio
 async def test_answer_unknown_series():
     result = await wiki_qa.answer("not-a-real-series", "what is grace?")
@@ -196,3 +209,156 @@ async def test_answer_links_scripture_references_in_llm_response(monkeypatch):
     assert "[2 Pet 3:18](/explorer?reference=2PE%203%3A18)" in result["message"]
     assert "md:71" in result["message"]
     assert "](/explorer" not in result["message"].split("md:71")[1]
+
+
+@pytest.mark.asyncio
+async def test_answer_uses_llm_generated_follow_ups(monkeypatch):
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "Grace is undeserved favor.", "data": None}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        return ["Tell me more about holiness."]
+
+    monkeypatch.setattr(
+        wiki_qa.wiki_loader,
+        "search",
+        lambda series_id, message, top_n=3: [
+            {"slug": "grace", "title": "Grace", "kind": "concept", "body": "Grace body."}
+        ],
+    )
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+    monkeypatch.setattr(wiki_qa, "generate_llm_follow_ups", fake_llm_follow_ups)
+
+    result = await wiki_qa.answer("present-day-ministry-of-jesus", "what is grace?")
+
+    assert result["follow_up_questions"] == ["Tell me more about holiness."]
+
+
+@pytest.mark.asyncio
+async def test_answer_leaves_follow_ups_unset_when_llm_gives_none(monkeypatch):
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "ok", "data": None}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        return []
+
+    monkeypatch.setattr(
+        wiki_qa.wiki_loader,
+        "search",
+        lambda series_id, message, top_n=3: [
+            {"slug": "grace", "title": "Grace", "kind": "concept", "body": "Grace body."}
+        ],
+    )
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+    monkeypatch.setattr(wiki_qa, "generate_llm_follow_ups", fake_llm_follow_ups)
+
+    result = await wiki_qa.answer("present-day-ministry-of-jesus", "what is grace?")
+
+    assert "follow_up_questions" not in result
+
+
+@pytest.mark.asyncio
+async def test_answer_concept_unknown_series():
+    result = await wiki_qa.answer_concept("not-a-real-series", "grace")
+    assert result["type"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_answer_concept_unknown_slug(monkeypatch):
+    monkeypatch.setattr(wiki_qa.wiki_loader, "get_page", lambda series_id, slug: None)
+    result = await wiki_qa.answer_concept("present-day-ministry-of-jesus", "not-a-real-slug")
+    assert result["type"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_answer_concept_grounds_ollama_call_with_current_and_related_pages(monkeypatch):
+    captured = {}
+    pages = {
+        "grace": {
+            "kind": "concept", "title": "Grace", "tags": [],
+            "body": "Grace is undeserved favor. See [[holiness]].",
+        },
+        "holiness": {
+            "kind": "concept", "title": "Holiness", "tags": [],
+            "body": "Holiness is God's set-apartness.",
+        },
+    }
+
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        captured["message"] = message
+        captured["research_data"] = research_data
+        return {"type": "chat", "message": "Grace and holiness go together.", "data": None}
+
+    monkeypatch.setattr(wiki_qa.wiki_loader, "get_page", lambda series_id, slug: pages.get(slug))
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+
+    result = await wiki_qa.answer_concept("present-day-ministry-of-jesus", "grace")
+
+    assert "Grace is undeserved favor" in captured["research_data"]
+    assert "Holiness is God's set-apartness" in captured["research_data"]
+    assert "currently open" in captured["research_data"]
+    assert "Joseph Prince" in captured["research_data"]
+    assert result["message"] == "Grace and holiness go together."
+    assert result["data"] == {
+        "series_id": "present-day-ministry-of-jesus", "concept_slug": "grace", "title": "Grace",
+    }
+
+
+@pytest.mark.asyncio
+async def test_answer_concept_ignores_wikilink_to_unknown_slug(monkeypatch):
+    pages = {"grace": {"kind": "concept", "title": "Grace", "tags": [], "body": "See [[ghost-page]]."}}
+
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "ok", "data": None}
+
+    monkeypatch.setattr(wiki_qa.wiki_loader, "get_page", lambda series_id, slug: pages.get(slug))
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+
+    result = await wiki_qa.answer_concept("present-day-ministry-of-jesus", "grace")
+
+    assert result["type"] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_answer_concept_trims_long_related_page_bodies(monkeypatch):
+    long_body = "y" * 5000
+    pages = {
+        "grace": {"kind": "concept", "title": "Grace", "tags": [], "body": "See [[holiness]]."},
+        "holiness": {"kind": "concept", "title": "Holiness", "tags": [], "body": long_body},
+    }
+    captured = {}
+
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        captured["research_data"] = research_data
+        return {"type": "chat", "message": "ok", "data": None}
+
+    monkeypatch.setattr(wiki_qa.wiki_loader, "get_page", lambda series_id, slug: pages.get(slug))
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+
+    await wiki_qa.answer_concept("present-day-ministry-of-jesus", "grace")
+
+    assert long_body not in captured["research_data"]
+    assert "y" * wiki_qa._MAX_PAGE_CHARS_IN_GROUNDING in captured["research_data"]
+
+
+@pytest.mark.asyncio
+async def test_answer_concept_uses_llm_generated_follow_ups(monkeypatch):
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, page_context=None):
+        return {"type": "chat", "message": "Grace is undeserved favor.", "data": None}
+
+    async def fake_llm_follow_ups(user_message, assistant_message, page_context=None):
+        return ["What does holiness require?", "How is grace received?"]
+
+    monkeypatch.setattr(
+        wiki_qa.wiki_loader,
+        "get_page",
+        lambda series_id, slug: {
+            "kind": "concept", "title": "Grace", "tags": [], "body": "Grace is undeserved favor.",
+        },
+    )
+    monkeypatch.setattr(wiki_qa, "call_ollama_with_context", fake_call_ollama_with_context)
+    monkeypatch.setattr(wiki_qa, "generate_llm_follow_ups", fake_llm_follow_ups)
+
+    result = await wiki_qa.answer_concept("present-day-ministry-of-jesus", "grace")
+
+    assert result["follow_up_questions"] == ["What does holiness require?", "How is grace received?"]
