@@ -838,7 +838,7 @@ describe('ChatPane', () => {
 
     render(<ChatPane sessionId={session.id} />)
 
-    // Regenerate would replace the ~1,400-word devotional with a
+    // Regenerate would replace the ~600-word devotional with a
     // one-paragraph chat answer, unrecoverably — it must not be offered.
     expect(screen.queryByRole('button', { name: /regenerate response/i })).not.toBeInTheDocument()
     // The devotional artifact pill is still there.
@@ -887,6 +887,39 @@ describe('ChatPane', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'what is the Greek word?', mode: 'devotional' }),
       expect.objectContaining({ onChunk: expect.any(Function) })
+    )
+  })
+
+  it('a follow-up after delivery sees the full devotional body in history, not just its pointer sentence', async () => {
+    // The delivered devotional's chat bubble is only "Here's a devotional
+    // on X" — the actual ~600-word body lives in the message's artifact
+    // so it doesn't flood the transcript. A follow-up turn (e.g. voice
+    // mode's "read out the devotion", or a typed "summarize that") needs
+    // the artifact's real text in `history`, or the LLM answering it has
+    // nothing to work from.
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'user', delivered: true })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: "Here's a devotional on **JHN 14:27**.", type: 'verse',
+      data: { reference: 'JHN 14:27', translations: { 'eng-KJV': '...' } },
+      artifacts: [{
+        type: 'devotional', label: 'Read the devotional ▸',
+        params: { reference: 'JHN 14:27', text: '# On Peace\n\nThe full devotional body goes here.' },
+      }],
+    })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Sure, here it is.' } as never)
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'read out the devotion')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(await screen.findByText('Sure, here it is.')).toBeInTheDocument()
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', text: expect.stringContaining('The full devotional body goes here.') }),
+        ]),
+      }),
+      expect.anything()
     )
   })
 

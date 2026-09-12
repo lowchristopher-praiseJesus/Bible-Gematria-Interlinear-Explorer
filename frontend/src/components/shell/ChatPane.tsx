@@ -19,7 +19,7 @@ import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
 import { useVoiceMode, type UseVoiceModeResult } from './useVoiceMode'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
-import type { ArtifactLink, MessageChoice, SessionMessage } from '@/types/session'
+import type { ArtifactLink, DevotionalArtifactParams, MessageChoice, SessionMessage } from '@/types/session'
 
 interface Props {
   sessionId: string
@@ -32,6 +32,20 @@ function genId(): string {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// A delivered devotional's chat bubble is only its pointer sentence
+// ("Here's a devotional on X") — the actual body lives solely in the
+// message's `devotional` artifact, so it never floods the transcript.
+// History sent to the backend needs the real text swapped back in, or a
+// follow-up turn (e.g. voice mode's "read out the devotion") reaches the
+// LLM with no devotional content to answer from.
+function toHistory(messages: SessionMessage[]): { role: string; text: string }[] {
+  return messages.map((m) => {
+    const devotional = m.artifacts?.find((a) => a.type === 'devotional')
+    const text = devotional ? (devotional.params as DevotionalArtifactParams).text : m.text
+    return { role: m.role, text }
+  })
 }
 
 const ARTIFACT_PILL =
@@ -210,7 +224,7 @@ export function ChatPane({ sessionId }: Props) {
   const runDevotionalTurn = useCallback(
     async (message: string) => {
       if (!session) return
-      const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
+      const history = toHistory(session.messages.slice(-6))
 
       // "Pick one for me" = system source + no typed verse/theme. Deal the
       // next verse from the per-browser rotation deck. Inject the (seed,
@@ -298,7 +312,7 @@ export function ChatPane({ sessionId }: Props) {
       setInput('')
 
       if (session.mode === 'devotional' && !session.modeParams.delivered) {
-        // The devotional turn's answer is a ~1,400-word document that opens
+        // The devotional turn's answer is a ~600-word document that opens
         // from the artifact pane, not something to read aloud, so a
         // voice-originated devotional isn't spoken back. Still close the
         // turn out loud so the hook leaves 'thinking'.
@@ -312,7 +326,7 @@ export function ChatPane({ sessionId }: Props) {
         return
       }
 
-      const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
+      const history = toHistory(session.messages.slice(-6))
       // Voice mode's BYOK override only ever applies to a voice-originated
       // turn — a typed message never carries it, even with the setting on,
       // since the toggle's whole premise is "the answer GPT-Live is about
