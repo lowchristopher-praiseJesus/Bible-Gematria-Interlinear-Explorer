@@ -110,7 +110,7 @@ WRITING CHARACTERISTICS:
 
 LENGTH:
 
-Write approximately 1,200-1,600 words.
+Write approximately 500-800 words.
 
 MOST IMPORTANT:
 
@@ -308,7 +308,7 @@ async def stream_devotional(
     prompt = build_devotional_prompt(reference, verse_text)
 
     full = ""
-    async for ev in stream_devotional_completion(DEVOTIONAL_SYSTEM_PROMPT, prompt, max_tokens=3600):
+    async for ev in stream_devotional_completion(DEVOTIONAL_SYSTEM_PROMPT, prompt, max_tokens=1800):
         if ev["type"] == "stream":
             full += ev["chunk"]
             yield {"type": "stream", "chunk": ev["chunk"]}
