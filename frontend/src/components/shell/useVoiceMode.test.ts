@@ -75,7 +75,7 @@ describe('useVoiceMode', () => {
     useVoiceSettingsStore.setState({ openaiApiKey: 'sk-test-123' })
     FakeRTCPeerConnection.instances = []
     vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
-    Object.defineProperty(global.navigator, 'mediaDevices', {
+    Object.defineProperty(globalThis.navigator, 'mediaDevices', {
       value: { getUserMedia: vi.fn().mockResolvedValue(fakeMicStream()) },
       configurable: true,
     })

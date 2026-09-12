@@ -8,7 +8,7 @@ describe('createVoiceSession', () => {
 
   it('POSTs the offer with the key in a header and returns session id + answer sdp', async () => {
     const fetchSpy = vi
-      .spyOn(global, 'fetch')
+      .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify({ session_id: 'live_123', sdp: 'answer-sdp' }), { status: 200 }))
 
     const result = await createVoiceSession('offer-sdp', 'sk-test-123')
@@ -21,7 +21,7 @@ describe('createVoiceSession', () => {
   })
 
   it('throws the backend detail message on a non-ok response', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({ detail: "Couldn't start a voice session — check your OpenAI API key in Settings." }),
         { status: 401 }
@@ -32,7 +32,7 @@ describe('createVoiceSession', () => {
   })
 
   it('falls back to a status-based message when the error body has no detail', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('not json', { status: 500, statusText: 'Server Error' }))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not json', { status: 500, statusText: 'Server Error' }))
 
     await expect(createVoiceSession('offer-sdp', 'sk-test-123')).rejects.toThrow(/500/)
   })
