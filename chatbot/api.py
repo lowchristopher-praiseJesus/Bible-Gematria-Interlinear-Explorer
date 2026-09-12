@@ -255,7 +255,7 @@ async def post_chat(request: ChatRequest):
             return _with_trace(result)
 
         result = await route_deterministic(
-            request.message, history=history, page_context=request.page_context
+            request.message, history=history, page_context=request.page_context, mode=request.mode
         )
         if result:
             return _with_trace(result)
@@ -408,7 +408,7 @@ async def _stream_chat_response(
             return
 
         result = await route_deterministic(
-            request.message, history=history, page_context=request.page_context
+            request.message, history=history, page_context=request.page_context, mode=request.mode
         )
         if result:
             _note_outcome(result)

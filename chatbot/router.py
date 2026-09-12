@@ -638,6 +638,7 @@ async def route_deterministic(
     message: str,
     history: Optional[List[Dict]] = None,
     page_context: Optional[str] = None,
+    mode: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Try to handle the message deterministically.
 
@@ -790,7 +791,14 @@ async def route_deterministic(
                 # not a raw analysis card, which was never useful end-user prose.
                 record_routing("fell through to LLM (study keyword, context ref)")
                 return None
-            if _QUOTE_KW_RE.search(text_lower):
+            # In devotional mode, a context ref almost always comes from the
+            # devotional's own pointer sentence ("Here's a devotional on
+            # **PSA 25:4**.") — so a reference-less quote-keyword message
+            # ("can you read the devotional for me") means "read back the
+            # devotional", not "re-quote the bare verse". Defer to the LLM
+            # (which has the devotional's full text in its history) instead
+            # of hijacking the turn with a one-line verse card.
+            if _QUOTE_KW_RE.search(text_lower) and mode != "devotional":
                 resp = await _quote_response(
                     context_ref,
                     f"Here is **{context_ref}** (from {context_source}).",
