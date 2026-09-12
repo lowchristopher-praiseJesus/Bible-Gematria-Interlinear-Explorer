@@ -28,6 +28,13 @@ interface UseVoiceModeOptions {
    * Empty string when the event carried no id (nothing can be spoken back
    * for that turn; the transcript is still answered on screen). */
   onTranscript: (text: string, delegationId: string) => void
+  /** Whether the session voice mode is being started in already has prior
+   * messages (typed and/or spoken). Read once per `connect()` call (i.e. at
+   * the moment the user starts voice mode) and forwarded to
+   * `/voice/session` so the backend can pick continuation-aware
+   * `instructions` — see chatbot/api.py::_voice_session_instructions.
+   * Defaults to false. */
+  hasHistory?: boolean
 }
 
 /**
@@ -44,7 +51,7 @@ interface UseVoiceModeOptions {
  * Questions) — this reads both `delta` and `text` defensively; confirm
  * against a real session (Task 7) and simplify once verified.
  */
-export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceModeResult {
+export function useVoiceMode({ onTranscript, hasHistory = false }: UseVoiceModeOptions): UseVoiceModeResult {
   const openaiApiKey = useVoiceSettingsStore((s) => s.openaiApiKey)
 
   const [status, setStatusState] = useState<VoiceModeStatus>('idle')
@@ -244,7 +251,7 @@ export function useVoiceMode({ onTranscript }: UseVoiceModeOptions): UseVoiceMod
         pc.addEventListener('icegatheringstatechange', check)
       })
 
-      const { sdp } = await createVoiceSession(pc.localDescription?.sdp ?? '', openaiApiKey)
+      const { sdp } = await createVoiceSession(pc.localDescription?.sdp ?? '', openaiApiKey, hasHistory)
       await pc.setRemoteDescription({ type: 'answer', sdp })
     } catch (err) {
       // Detach handlers on this attempt's own pc before closing it: pc.close()

@@ -17,7 +17,18 @@ describe('createVoiceSession', () => {
     const [url, init] = fetchSpy.mock.calls[0]
     expect(url).toBe('/api/bible-chat/voice/session')
     expect(init?.headers).toMatchObject({ 'X-OpenAI-Key': 'sk-test-123' })
-    expect(JSON.parse(init?.body as string)).toEqual({ sdp: 'offer-sdp' })
+    expect(JSON.parse(init?.body as string)).toEqual({ sdp: 'offer-sdp', has_history: false })
+  })
+
+  it('sends has_history: true when the session already has prior messages', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ session_id: 'live_123', sdp: 'answer-sdp' }), { status: 200 }))
+
+    await createVoiceSession('offer-sdp', 'sk-test-123', true)
+
+    const [, init] = fetchSpy.mock.calls[0]
+    expect(JSON.parse(init?.body as string)).toEqual({ sdp: 'offer-sdp', has_history: true })
   })
 
   it('throws the backend detail message on a non-ok response', async () => {

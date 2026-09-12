@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, CalendarDays, Check, Copy, Flag, Loader2, Mic, MicOff, RefreshCw, Share2 } from 'lucide-react'
+import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, RefreshCw, Share2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -7,6 +7,7 @@ import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
+import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
 import { VerseBubble, type VerseBubbleData } from './VerseBubble'
 import { VerseGroupBubble } from './VerseGroupBubble'
 import { StrongsBubble } from './StrongsBubble'
@@ -159,7 +160,7 @@ export function ChatPane({ sessionId }: Props) {
     async (
       assistantId: string,
       payload: Parameters<typeof postChatStream>[0],
-      opts?: { devotional?: boolean }
+      opts?: { devotional?: boolean; openAiApiKey?: string }
     ) => {
       let started = false
       const put = (patch: Partial<SessionMessage>) => {
@@ -177,10 +178,14 @@ export function ChatPane({ sessionId }: Props) {
         // the artifact pane). So no onChunk: the message is created once,
         // complete, from the final payload; the typing indicator covers
         // the wait.
-        const response = await postChatStream(
-          payload,
-          opts?.devotional ? {} : { onChunk: (text) => put({ text }) }
-        )
+        // Only pass a third argument at all when there's an override key —
+        // an explicit `undefined` is still an argument, and tests/mocks
+        // elsewhere assert postChatStream's exact call shape for the
+        // (far more common) non-voice-override path.
+        const handlers = opts?.devotional ? {} : { onChunk: (text: string) => put({ text }) }
+        const response = opts?.openAiApiKey
+          ? await postChatStream(payload, handlers, opts.openAiApiKey)
+          : await postChatStream(payload, handlers)
         put({
           text: response.message,
           type: response.type,
@@ -308,14 +313,25 @@ export function ChatPane({ sessionId }: Props) {
       }
 
       const history = session.messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))
+      // Voice mode's BYOK override only ever applies to a voice-originated
+      // turn — a typed message never carries it, even with the setting on,
+      // since the toggle's whole premise is "the answer GPT-Live is about
+      // to speak back".
+      const { openaiApiKey, useOpenAiForResponses } = useVoiceSettingsStore.getState()
+      const useOpenAiLlm = !!voiceTurn && useOpenAiForResponses && !!openaiApiKey
       setLoading(true)
       try {
-        const response = await streamAssistantReply(genId(), {
-          message: text,
-          history,
-          mode: session.mode,
-          mode_params: { ...session.modeParams },
-        })
+        const response = await streamAssistantReply(
+          genId(),
+          {
+            message: text,
+            history,
+            mode: session.mode,
+            mode_params: { ...session.modeParams },
+            ...(useOpenAiLlm && { use_openai_llm: true }),
+          },
+          useOpenAiLlm ? { openAiApiKey: openaiApiKey ?? undefined } : undefined
+        )
         if (voiceTurn) {
           // Against the id captured when THIS turn's transcript arrived —
           // another utterance may have opened a newer delegation while this
@@ -337,6 +353,7 @@ export function ChatPane({ sessionId }: Props) {
       pendingVoiceTurnRef.current = { delegationId }
       void sendMessage(text)
     },
+    hasHistory: !!session && session.messages.length > 0,
   })
 
   useEffect(() => {
@@ -585,26 +602,6 @@ export function ChatPane({ sessionId }: Props) {
             Share
           </button>
           <button
-            onClick={voiceMode.toggle}
-            aria-pressed={voiceMode.status !== 'idle' && voiceMode.status !== 'error'}
-            className={`shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-              voiceMode.status === 'error'
-                ? 'border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10'
-                : voiceMode.status === 'idle'
-                  ? 'border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]'
-                  : 'border-[var(--color-theme-accent)] bg-[var(--color-theme-accent)]/10 text-[var(--color-theme-accent)]'
-            }`}
-          >
-            {voiceMode.status === 'idle' || voiceMode.status === 'error' ? (
-              <Mic className="w-3 h-3" aria-hidden="true" />
-            ) : (
-              <MicOff className="w-3 h-3" aria-hidden="true" />
-            )}
-            {voiceMode.status === 'idle' || voiceMode.status === 'error'
-              ? 'Voice'
-              : VOICE_STATUS_LABEL[voiceMode.status]}
-          </button>
-          <button
             onClick={() => setReportOpen(true)}
             className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
           >
@@ -817,6 +814,39 @@ export function ChatPane({ sessionId }: Props) {
           placeholder="Ask about a verse..."
           className="flex-1 bg-transparent outline-none text-sm"
         />
+        <button
+          type="button"
+          onClick={voiceMode.toggle}
+          aria-pressed={voiceMode.status !== 'idle' && voiceMode.status !== 'error'}
+          aria-label={
+            voiceMode.status === 'idle' || voiceMode.status === 'error'
+              ? 'Start voice input'
+              : VOICE_STATUS_LABEL[voiceMode.status]
+          }
+          title={
+            voiceMode.status === 'idle' || voiceMode.status === 'error'
+              ? 'Start voice input'
+              : VOICE_STATUS_LABEL[voiceMode.status]
+          }
+          className={`shrink-0 w-9 h-9 flex items-center justify-center rounded-full border transition-colors ${
+            voiceMode.status === 'error'
+              ? 'border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10'
+              : voiceMode.status === 'idle'
+                ? 'border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]'
+                : 'border-transparent bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]'
+          }`}
+        >
+          {voiceMode.status === 'connecting' ? (
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          ) : voiceMode.status === 'idle' || voiceMode.status === 'error' ? (
+            <Mic className="w-4 h-4" aria-hidden="true" />
+          ) : (
+            <AudioLines
+              className={`w-4 h-4 ${voiceMode.status === 'listening' ? 'animate-pulse' : ''}`}
+              aria-hidden="true"
+            />
+          )}
+        </button>
         <button
           type="submit"
           aria-label="Send"

@@ -18,6 +18,12 @@ interface ChatPayload {
   page_context?: string
   mode?: string
   mode_params?: ModeParams
+  /** Voice mode's BYOK override: generate this turn's answer with the
+   * caller's own OpenAI key instead of the server's default model. Only
+   * `use_openai_llm` travels in the body — the key itself is sent
+   * separately as the X-OpenAI-Key header by postChatStream() so it never
+   * sits in a JSON payload a trace/log could capture. */
+  use_openai_llm?: boolean
 }
 
 /**
@@ -131,12 +137,19 @@ interface ChatStreamHandlers {
  */
 export async function postChatStream(
   payload: ChatPayload,
-  handlers: ChatStreamHandlers = {}
+  handlers: ChatStreamHandlers = {},
+  /** Present only for a voice-mode turn with the OpenAI-LLM setting on;
+   * sent as the X-OpenAI-Key header (never the JSON body) matching how
+   * the voice-session handshake itself avoids logging the key. */
+  openAiApiKey?: string
 ): Promise<ChatApiResponse> {
   const { mode_params, ...rest } = payload
   const res = await fetch(`${CHAT_API}/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(payload.use_openai_llm && openAiApiKey ? { 'X-OpenAI-Key': openAiApiKey } : {}),
+    },
     body: JSON.stringify({
       ...rest,
       ...(mode_params && { mode_params: toWireModeParams(mode_params) }),

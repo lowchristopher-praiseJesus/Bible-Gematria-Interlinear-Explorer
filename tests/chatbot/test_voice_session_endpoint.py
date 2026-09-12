@@ -28,7 +28,10 @@ def test_create_voice_session_happy_path(client, monkeypatch):
         assert str(request.url) == "https://api.openai.com/v1/live/sessions"
         assert request.headers["Authorization"] == "Bearer sk-test-123"
         payload = json.loads(request.content)
-        assert payload["session"] == {"model": "gpt-live-1", "delegation": {"type": "client"}}
+        assert payload["session"]["model"] == "gpt-live-1"
+        assert payload["session"]["delegation"] == {"type": "client"}
+        assert "verbatim" in payload["session"]["instructions"]
+        assert "continues a conversation" not in payload["session"]["instructions"]
         assert payload["transport"] == {"type": "webrtc", "sdp": "fake-offer-sdp"}
         return httpx.Response(
             200,
@@ -43,6 +46,24 @@ def test_create_voice_session_happy_path(client, monkeypatch):
     )
     assert res.status_code == 200
     assert res.json() == {"session_id": "live_123", "sdp": "fake-answer-sdp"}
+
+
+def test_create_voice_session_continuation_instructions_when_history_present(client, monkeypatch):
+    def handler(request):
+        payload = json.loads(request.content)
+        assert "continues a conversation" in payload["session"]["instructions"]
+        return httpx.Response(
+            200,
+            json={"session": {"id": "live_123"}, "transport": {"sdp": "fake-answer-sdp"}},
+        )
+
+    _install_transport(monkeypatch, handler)
+    res = client.post(
+        "/voice/session",
+        json={"sdp": "fake-offer-sdp", "has_history": True},
+        headers={"X-OpenAI-Key": "sk-test-123"},
+    )
+    assert res.status_code == 200
 
 
 def test_create_voice_session_missing_key_header(client):

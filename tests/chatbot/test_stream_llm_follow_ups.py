@@ -19,7 +19,7 @@ def _final_result(raw: str):
     raise AssertionError("no final event in stream")
 
 
-async def _fake_stream_chat_with_ollama(message, conversation_history=None, page_context=None):
+async def _fake_stream_chat_with_ollama(message, conversation_history=None, page_context=None, llm_override=None):
     yield {"type": "stream", "chunk": "The Bible was written over roughly 1,500 years."}
     yield {"type": "done", "message": ""}
 

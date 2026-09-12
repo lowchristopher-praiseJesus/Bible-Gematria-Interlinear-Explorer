@@ -11,14 +11,18 @@ export interface VoiceSessionResult {
  * the caller's behalf — see chatbot/api.py::create_voice_session. The key
  * is sent once, in a header, and never stored by this client either.
  */
-export async function createVoiceSession(sdp: string, apiKey: string): Promise<VoiceSessionResult> {
+export async function createVoiceSession(
+  sdp: string,
+  apiKey: string,
+  hasHistory: boolean = false
+): Promise<VoiceSessionResult> {
   const res = await fetch(`${CHAT_API}/voice/session`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-OpenAI-Key': apiKey,
     },
-    body: JSON.stringify({ sdp }),
+    body: JSON.stringify({ sdp, has_history: hasHistory }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => null)

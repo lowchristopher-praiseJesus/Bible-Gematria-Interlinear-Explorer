@@ -6,6 +6,7 @@ import { useSessionsStore } from '@/store/useSessionsStore'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
+import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
 import * as chatApi from '@/lib/chatApi'
 import * as shareApi from '@/lib/shareApi'
 import * as voiceModule from './useVoiceMode'
@@ -17,6 +18,7 @@ describe('ChatPane', () => {
     useArtifactStore.setState({ activeArtifact: null, status: 'idle', data: null, error: null })
     useReadingPlanStore.setState({ progress: null })
     useDevotionalRotationStore.setState({ seed: null, cursor: 0 })
+    useVoiceSettingsStore.setState({ openaiApiKey: null, useOpenAiForResponses: false })
   })
 
   afterEach(() => {
@@ -938,6 +940,68 @@ describe('ChatPane', () => {
 
     expect(await screen.findByText('Grace is unmerited favor.')).toBeInTheDocument()
     expect(speak).toHaveBeenCalledWith('Grace is unmerited favor.', 'deleg_1')
+  })
+
+  it('sends the OpenAI BYOK override for a voice-originated turn when the setting is on', async () => {
+    useVoiceSettingsStore.setState({ openaiApiKey: 'sk-user-key', useOpenAiForResponses: true })
+    let onTranscript: ((text: string, delegationId: string) => void) | undefined
+    vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
+      onTranscript = opts.onTranscript
+      return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak: vi.fn() }
+    })
+    const postChatStream = vi
+      .spyOn(chatApi, 'postChatStream')
+      .mockResolvedValue({ type: 'chat', message: 'Grace is unmerited favor.' })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    await act(async () => {
+      onTranscript?.('What does grace mean?', 'deleg_1')
+    })
+
+    await screen.findByText('Grace is unmerited favor.')
+    expect(postChatStream).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'What does grace mean?', use_openai_llm: true }),
+      expect.anything(),
+      'sk-user-key'
+    )
+  })
+
+  it('does not send the OpenAI override for a typed turn even when the setting is on', async () => {
+    useVoiceSettingsStore.setState({ openaiApiKey: 'sk-user-key', useOpenAiForResponses: true })
+    const postChatStream = vi
+      .spyOn(chatApi, 'postChatStream')
+      .mockResolvedValue({ type: 'chat', message: 'Sure, go ahead.' })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask about a verse...'), 'Hello{Enter}')
+
+    await screen.findByText('Sure, go ahead.')
+    expect(postChatStream.mock.calls[0]).toHaveLength(2)
+    expect(postChatStream.mock.calls[0][0]).not.toHaveProperty('use_openai_llm')
+  })
+
+  it('does not send the OpenAI override for a voice turn when the setting is off', async () => {
+    useVoiceSettingsStore.setState({ openaiApiKey: 'sk-user-key', useOpenAiForResponses: false })
+    let onTranscript: ((text: string, delegationId: string) => void) | undefined
+    vi.spyOn(voiceModule, 'useVoiceMode').mockImplementation((opts) => {
+      onTranscript = opts.onTranscript
+      return { status: 'listening', errorMessage: null, liveCaption: '', toggle: vi.fn(), stop: vi.fn(), speak: vi.fn() }
+    })
+    const postChatStream = vi
+      .spyOn(chatApi, 'postChatStream')
+      .mockResolvedValue({ type: 'chat', message: 'Grace is unmerited favor.' })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    await act(async () => {
+      onTranscript?.('What does grace mean?', 'deleg_1')
+    })
+
+    await screen.findByText('Grace is unmerited favor.')
+    expect(postChatStream.mock.calls[0]).toHaveLength(2)
+    expect(postChatStream.mock.calls[0][0]).not.toHaveProperty('use_openai_llm')
   })
 
   it('stops the voice session when the sidebar switches to another conversation', () => {

@@ -210,29 +210,63 @@ def llm_unconfigured_error():
     return None
 
 
-def active_model_label():
+def active_model_label(llm_override: Optional[Dict[str, str]] = None):
     """Short 'Provider (model)' label for the response 'route' strings."""
+    if llm_override:
+        return f"OpenAI ({llm_override.get('model', OPENAI_VOICE_MODEL)})"
     provider, _base_url, model, _api_key = _llm_config()
     return f"{'NVIDIA' if provider == 'nvidia' else 'Ollama'} ({model})"
 
 
-def _build_request(messages, *, stream, max_tokens: int = 2048):
-    """(provider, url, headers, payload) for a chat call to the active provider."""
-    provider, base_url, model, api_key = _llm_config()
+# --- OpenAI (BYOK override, voice mode only — see chatbot/api.py) ---
+OPENAI_API_URL = "https://api.openai.com/v1"
+OPENAI_VOICE_MODEL = "gpt-5.4-mini"
+
+
+def _build_request(
+    messages,
+    *,
+    stream,
+    max_tokens: int = 2048,
+    llm_override: Optional[Dict[str, str]] = None,
+):
+    """(provider, url, headers, payload) for a chat call.
+
+    `llm_override` (shape: {"provider": "openai", "api_key": ..., "model": ...})
+    bypasses the server's configured LLM_PROVIDER entirely for this one call —
+    used only for a voice-mode turn where the caller supplied their own
+    OpenAI key and opted into gpt-5.4-mini. Absent, behaves exactly as before.
+    """
+    if llm_override:
+        provider = llm_override["provider"]
+        model = llm_override.get("model") or OPENAI_VOICE_MODEL
+        api_key = llm_override["api_key"]
+        base_url = OPENAI_API_URL
+    else:
+        provider, base_url, model, api_key = _llm_config()
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    if provider == "nvidia":
+    if provider in ("nvidia", "openai"):
         # base_url already ends with /v1 (OpenAI-compatible surface).
         url = f"{base_url}/chat/completions"
         payload = {
             "model": model,
             "messages": messages,
             "stream": stream,
-            "temperature": 0.7,
-            "max_tokens": max_tokens,
         }
+        if provider == "openai":
+            # gpt-5-class models on OpenAI's Chat Completions endpoint
+            # reject a non-default `temperature` (only 1, the default, is
+            # accepted) and don't accept `max_tokens` at all — they require
+            # `max_completion_tokens` instead. NVIDIA NIM's models have no
+            # such restriction, so this only applies to the openai branch
+            # (voice mode's BYOK gpt-5.4-mini override).
+            payload["max_completion_tokens"] = max_tokens
+        else:
+            payload["temperature"] = 0.7
+            payload["max_tokens"] = max_tokens
     else:
         url = f"{base_url}/api/chat"
         payload = {
@@ -249,7 +283,7 @@ def _build_request(messages, *, stream, max_tokens: int = 2048):
 
 def _extract_content(provider, result):
     """(content, error) from a non-streaming chat response body."""
-    if provider == "nvidia":
+    if provider in ("nvidia", "openai"):
         choices = result.get("choices") or []
         content = ""
         if choices:
@@ -264,7 +298,7 @@ def _extract_content(provider, result):
 
 def _extract_tokens(provider, result):
     """(prompt_tokens, completion_tokens) from a non-streaming response body."""
-    if provider == "nvidia":
+    if provider in ("nvidia", "openai"):
         usage = result.get("usage") or {}
         return usage.get("prompt_tokens"), usage.get("completion_tokens")
     return result.get("prompt_eval_count"), result.get("eval_count")
@@ -279,7 +313,7 @@ def _stream_delta(provider, line):
     if not line:
         return None
 
-    if provider == "nvidia":
+    if provider in ("nvidia", "openai"):
         if not line.startswith("data:"):
             return None  # SSE ": comment" keep-alives, "event:" lines, etc.
         data = line[len("data:"):].strip()
@@ -485,15 +519,22 @@ async def stream_chat_with_ollama(
     message: str,
     conversation_history: Optional[List[Dict]] = None,
     page_context: Optional[str] = None,
+    llm_override: Optional[Dict[str, str]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Stream responses from Ollama with mybibletoolbox-code research data.
 
+    `llm_override` (see _build_request) routes this one call to OpenAI with
+    the caller's own key instead of the server's configured provider — the
+    server-provider check below is skipped in that case since there's
+    nothing server-side to be unconfigured.
+
     Yields dicts with 'type' and content (chunk, done, or error).
     """
-    err = llm_unconfigured_error()
-    if err:
-        yield {"type": "error", "message": err}
-        return
+    if not llm_override:
+        err = llm_unconfigured_error()
+        if err:
+            yield {"type": "error", "message": err}
+            return
 
     # Fetch research data from mybibletoolbox-code
     research_data = await _fetch_research_data(message, conversation_history, page_context)
@@ -511,14 +552,16 @@ async def stream_chat_with_ollama(
 
     messages.append({"role": "user", "content": message})
 
-    provider, url, headers, payload = _build_request(messages, stream=True)
+    provider, url, headers, payload = _build_request(
+        messages, stream=True, llm_override=llm_override
+    )
     llm_request = {
         "system": system_prompt,
         "messages": messages,
         "params": {k: v for k, v in payload.items() if k != "messages"},
     }
 
-    with record_llm(active_model_label(), llm_request) as _step:
+    with record_llm(active_model_label(llm_override), llm_request) as _step:
         accumulated = ""
         async with httpx.AsyncClient() as client:
             try:

@@ -22,6 +22,15 @@ class ChatRequest(BaseModel):
     page_context: Optional[str] = Field(None, description="Verse reference currently displayed on the Explorer page (e.g. 'John 3:16')")
     mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, freeform")
     mode_params: Optional[Dict[str, Any]] = Field(None, description="Mode-specific parameters, e.g. {'plan': 'chronological', 'day_index': 0}")
+    use_openai_llm: Optional[bool] = Field(
+        None,
+        description=(
+            "Voice mode's BYOK override: generate this turn's answer with the "
+            "caller's own OpenAI key (sent separately as the X-OpenAI-Key "
+            "header, never in the body) instead of the server's configured "
+            "Ollama/NVIDIA provider. Ignored if the header is absent."
+        ),
+    )
 
 
 class ChatResponse(BaseModel):
@@ -98,6 +107,15 @@ class SSEChunk(BaseModel):
 
 class VoiceSessionRequest(BaseModel):
     sdp: str = Field(..., description="Browser's WebRTC SDP offer")
+    has_history: bool = Field(
+        False,
+        description=(
+            "Whether the session this voice turn belongs to already has prior "
+            "messages (typed and/or spoken). Used only to pick the session's "
+            "`instructions` wording — GPT-Live never sees the message content "
+            "itself, since it doesn't generate answers (delegation: client)."
+        ),
+    )
 
 
 class VoiceSessionResponse(BaseModel):

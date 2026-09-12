@@ -281,7 +281,7 @@ async def post_chat(request: ChatRequest):
 # ---------------------------------------------------------------------------
 
 async def _stream_chat_response(
-    recorder: TraceRecorder, request: ChatRequest
+    recorder: TraceRecorder, request: ChatRequest, openai_key: Optional[str] = None
 ) -> AsyncIterator[str]:
     """Yield SSE events for a chat response: zero or more `stream` chunk
     events while the LLM is generating (only the AI-fallback path below ever
@@ -294,6 +294,14 @@ async def _stream_chat_response(
     caller from /chat to /chat/stream never changes *what* answers a
     message — only whether the AI fallback's own generation streams in as
     it's produced instead of arriving all at once after a silent wait.
+
+    `openai_key` is voice mode's BYOK override (from the X-OpenAI-Key
+    header — never logged, never part of `request`): when present *and*
+    `request.use_openai_llm` is set, the AI-fallback leg below generates the
+    answer via OpenAI's gpt-5.4-mini with that key instead of the server's
+    configured Ollama/NVIDIA provider. Every other routing path (mode
+    primers, wiki Q&A, deterministic matches) ignores it entirely, since
+    they never call the LLM.
     """
     current_recorder.set(recorder)
     outcome_type = "chat"
@@ -411,19 +419,27 @@ async def _stream_chat_response(
             llm_unconfigured_error,
             active_model_label,
             stream_chat_with_ollama,
+            OPENAI_VOICE_MODEL,
         )
 
-        llm_error = llm_unconfigured_error()
-        if llm_error:
-            result = {
-                "type": "error",
-                "message": f"No matching pattern found and the LLM is not configured. {llm_error}",
-                "data": None,
-                "route": "Error path",
-            }
-            _note_outcome(result)
-            yield await sse_event("final", {"result": result})
-            return
+        llm_override = (
+            {"provider": "openai", "api_key": openai_key, "model": OPENAI_VOICE_MODEL}
+            if request.use_openai_llm and openai_key
+            else None
+        )
+
+        if not llm_override:
+            llm_error = llm_unconfigured_error()
+            if llm_error:
+                result = {
+                    "type": "error",
+                    "message": f"No matching pattern found and the LLM is not configured. {llm_error}",
+                    "data": None,
+                    "route": "Error path",
+                }
+                _note_outcome(result)
+                yield await sse_event("final", {"result": result})
+                return
 
         ollama_history = (
             [{"role": h["role"], "content": h["text"]} for h in history]
@@ -432,7 +448,10 @@ async def _stream_chat_response(
         text_buffer = ""
         stream_error: Optional[str] = None
         async for event in stream_chat_with_ollama(
-            request.message, conversation_history=ollama_history, page_context=request.page_context
+            request.message,
+            conversation_history=ollama_history,
+            page_context=request.page_context,
+            llm_override=llm_override,
         ):
             if event.get("type") == "stream":
                 chunk = event.get("chunk", "")
@@ -448,7 +467,7 @@ async def _stream_chat_response(
                 "type": "chat",
                 "message": text_buffer,
                 "data": None,
-                "route": f"AI Fallback → {active_model_label()} → stream_chat_with_ollama()",
+                "route": f"AI Fallback → {active_model_label(llm_override)} → stream_chat_with_ollama()",
             }
             # Same post-processing post_chat() runs on route_claude()'s
             # result: box up any verses the answer cites, ask the LLM for
@@ -477,8 +496,15 @@ async def _stream_chat_response(
 
 
 @router.post("/chat/stream")
-async def post_chat_stream(request: ChatRequest):
-    """Process a chat message and stream the response via SSE."""
+async def post_chat_stream(
+    request: ChatRequest,
+    x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
+):
+    """Process a chat message and stream the response via SSE.
+
+    `X-OpenAI-Key` is voice mode's optional BYOK override header (see
+    `_stream_chat_response`) — absent for every ordinary typed turn.
+    """
     recorder = TraceRecorder(
         "/chat/stream",
         request.message,
@@ -488,7 +514,7 @@ async def post_chat_stream(request: ChatRequest):
         page_context=request.page_context,
     )
     return StreamingResponse(
-        _stream_chat_response(recorder, request),
+        _stream_chat_response(recorder, request, openai_key=x_openai_key),
         media_type="text/event-stream",
     )
 
@@ -499,6 +525,34 @@ async def post_chat_stream(request: ChatRequest):
 
 _MAX_VOICE_SDP_BYTES = 64 * 1024
 _GPT_LIVE_SESSIONS_URL = "https://api.openai.com/v1/live/sessions"
+
+# GPT-Live runs in `delegation: "client"` mode: it never generates the answer
+# itself, only transcribes the user's speech and speaks back whatever text
+# this app appends via `session.commentary.append` (the real answer, produced
+# by the existing text-chat pipeline in ollama_client.py). `instructions`
+# therefore governs delivery style, not content — it must not be confused
+# with `_SYSTEM_PROMPT_BASE`, which is the actual answering persona.
+_VOICE_SESSION_INSTRUCTIONS = (
+    "You are the voice I/O layer for Bible Explorer, a Bible-study app. "
+    "You never answer the user's question yourself and never generate your "
+    "own reply text. Your only jobs are: transcribe what the user says, and "
+    "when text is appended via commentary, speak that exact text back "
+    "essentially verbatim — no paraphrasing, no added commentary, no "
+    "greeting, and no sign-off of your own. Speak in a warm, calm, natural "
+    "voice suited to quiet Bible study."
+)
+_VOICE_SESSION_INSTRUCTIONS_CONTINUATION = (
+    " This voice session continues a conversation the user already started "
+    "(by typing and/or speaking) — do not greet the user or introduce "
+    "yourself as if this were a new conversation; just continue naturally "
+    "from where it left off."
+)
+
+
+def _voice_session_instructions(has_history: bool) -> str:
+    if has_history:
+        return _VOICE_SESSION_INSTRUCTIONS + _VOICE_SESSION_INSTRUCTIONS_CONTINUATION
+    return _VOICE_SESSION_INSTRUCTIONS
 
 
 @router.post("/voice/session", response_model=VoiceSessionResponse)
@@ -524,6 +578,7 @@ async def create_voice_session(
                     "session": {
                         "model": "gpt-live-1",
                         "delegation": {"type": "client"},
+                        "instructions": _voice_session_instructions(request.has_history),
                     },
                     "transport": {"type": "webrtc", "sdp": request.sdp},
                 },
