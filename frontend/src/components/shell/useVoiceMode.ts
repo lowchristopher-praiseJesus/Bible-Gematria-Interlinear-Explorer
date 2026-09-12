@@ -4,6 +4,34 @@ import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
 
 export type VoiceModeStatus = 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error'
 
+// GPT-Live rejects a single session.commentary.append whose content exceeds
+// 500 tokens ("Context append text must not exceed 500 tokens") — hit in
+// practice by a devotional read-back, whose answer easily runs several
+// hundred words. There's no tokenizer on the client, so this budgets by
+// characters using a conservative ~3.5 chars/token (real English prose
+// tokenizes closer to ~4), leaving headroom for punctuation-dense text.
+const MAX_COMMENTARY_CHARS = 1400
+
+/** Splits `text` into chunks GPT-Live will accept from a single
+ * commentary.append, breaking on sentence boundaries so each chunk still
+ * reads naturally aloud instead of cutting mid-sentence. Text already under
+ * the budget comes back as a single chunk (the common case). */
+function chunkForCommentary(text: string): string[] {
+  if (text.length <= MAX_COMMENTARY_CHARS) return [text]
+  const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) ?? [text]
+  const chunks: string[] = []
+  let current = ''
+  for (const sentence of sentences) {
+    if (current && current.length + sentence.length > MAX_COMMENTARY_CHARS) {
+      chunks.push(current.trim())
+      current = ''
+    }
+    current += sentence
+  }
+  if (current.trim()) chunks.push(current.trim())
+  return chunks
+}
+
 export interface UseVoiceModeResult {
   status: VoiceModeStatus
   errorMessage: string | null
@@ -310,14 +338,20 @@ export function useVoiceMode({ onTranscript, hasHistory = false }: UseVoiceModeO
       return
     }
     setStatus('speaking')
-    dc.send(
-      JSON.stringify({
-        type: 'session.commentary.append',
-        event_id: `commentary_${Date.now()}`,
-        delegation_id: delegationId,
-        content: text,
-      })
-    )
+    // Chunked so a long answer (a devotional read-back especially) doesn't
+    // trip GPT-Live's 500-token cap on a single append — each chunk is sent
+    // as its own commentary.append against the same delegation id, which
+    // GPT-Live accumulates and speaks as one continuous turn.
+    chunkForCommentary(text).forEach((chunk, i) => {
+      dc.send(
+        JSON.stringify({
+          type: 'session.commentary.append',
+          event_id: `commentary_${Date.now()}_${i}`,
+          delegation_id: delegationId,
+          content: chunk,
+        })
+      )
+    })
   }
 
   useEffect(() => {

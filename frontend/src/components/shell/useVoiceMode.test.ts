@@ -239,6 +239,49 @@ describe('useVoiceMode', () => {
     expect(result.current.status).toBe('speaking')
   })
 
+  it('speak() splits a long answer into multiple appends instead of tripping the 500-token cap', async () => {
+    // Reported bug: reading a devotional back (several hundred words) in
+    // one session.commentary.append got rejected by GPT-Live with "Context
+    // append text must not exceed 500 tokens" — a hard error that tore the
+    // whole voice session down. Long text must now go out as several
+    // same-delegation appends instead of one oversized one.
+    const { result } = renderHook(() => useVoiceMode({ onTranscript: vi.fn() }))
+
+    await act(async () => {
+      result.current.toggle()
+    })
+    await waitFor(() => expect(result.current.status).toBe('listening'))
+
+    const dc = FakeRTCPeerConnection.instances[0].dataChannel!
+    act(() => {
+      dc.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'session.delegation.created', delegation: { id: 'deleg_1', target: 'client' } }),
+        })
+      )
+    })
+
+    const sentence = 'Have you ever found yourself in a moment that feels like a furnace? '
+    const longAnswer = sentence.repeat(60) // ~4,200 chars — well past a single append's budget
+
+    act(() => {
+      result.current.speak(longAnswer, 'deleg_1')
+    })
+
+    const appended = dc.sent.map((raw) => JSON.parse(raw))
+    expect(appended.length).toBeGreaterThan(1)
+    for (const event of appended) {
+      expect(event.type).toBe('session.commentary.append')
+      expect(event.delegation_id).toBe('deleg_1')
+      expect(event.content.length).toBeLessThanOrEqual(1400)
+    }
+    // No sentence lost or duplicated across the split.
+    expect(appended.map((e) => e.content).join(' ').replace(/\s+/g, ' ').trim()).toBe(
+      longAnswer.replace(/\s+/g, ' ').trim()
+    )
+    expect(result.current.status).toBe('speaking')
+  })
+
   it("speaks each turn's answer against the delegation id that turn's transcript arrived with", async () => {
     // Full-duplex: a second utterance's delegation.created can land before
     // the first utterance's answer is ready. The first answer must still be
