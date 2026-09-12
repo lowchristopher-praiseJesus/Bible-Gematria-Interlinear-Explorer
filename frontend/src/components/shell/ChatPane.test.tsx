@@ -904,6 +904,23 @@ describe('ChatPane', () => {
     expect(screen.getByText('What does grace mean')).toBeInTheDocument()
   })
 
+  it('shows the voice error message as visible text, not only a hover tooltip', () => {
+    vi.spyOn(voiceModule, 'useVoiceMode').mockReturnValue({
+      status: 'error',
+      errorMessage: 'Microphone permission was denied.',
+      liveCaption: '',
+      toggle: vi.fn(),
+      stop: vi.fn(),
+      speak: vi.fn(),
+    })
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    render(<ChatPane sessionId={session.id} />)
+
+    // A `title` attribute never renders on a touch device (no hover state),
+    // so the error must also appear as real text in the document.
+    expect(screen.getByText('Microphone permission was denied.')).toBeInTheDocument()
+  })
+
   it('speaks the resolved answer against the delegation id the transcript arrived with', async () => {
     const speak = vi.fn()
     let onTranscript: ((text: string, delegationId: string) => void) | undefined

@@ -586,12 +586,13 @@ export function ChatPane({ sessionId }: Props) {
           </button>
           <button
             onClick={voiceMode.toggle}
-            title={voiceMode.errorMessage ?? undefined}
             aria-pressed={voiceMode.status !== 'idle' && voiceMode.status !== 'error'}
             className={`shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-              voiceMode.status === 'idle' || voiceMode.status === 'error'
-                ? 'border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]'
-                : 'border-[var(--color-theme-accent)] bg-[var(--color-theme-accent)]/10 text-[var(--color-theme-accent)]'
+              voiceMode.status === 'error'
+                ? 'border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10'
+                : voiceMode.status === 'idle'
+                  ? 'border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]'
+                  : 'border-[var(--color-theme-accent)] bg-[var(--color-theme-accent)]/10 text-[var(--color-theme-accent)]'
             }`}
           >
             {voiceMode.status === 'idle' || voiceMode.status === 'error' ? (
@@ -796,6 +797,9 @@ export function ChatPane({ sessionId }: Props) {
         <div ref={bottomRef} />
       </div>
 
+      {voiceMode.status === 'error' && voiceMode.errorMessage && (
+        <div className="px-4 pb-1 text-xs text-[var(--color-danger)]">{voiceMode.errorMessage}</div>
+      )}
       {voiceMode.liveCaption && (
         <div className="px-4 pb-1 text-xs italic text-[var(--color-text-secondary)]">{voiceMode.liveCaption}</div>
       )}
