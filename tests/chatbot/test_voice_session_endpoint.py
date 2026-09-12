@@ -28,8 +28,7 @@ def test_create_voice_session_happy_path(client, monkeypatch):
         assert str(request.url) == "https://api.openai.com/v1/live/sessions"
         assert request.headers["Authorization"] == "Bearer sk-test-123"
         payload = json.loads(request.content)
-        assert payload["model"] == "gpt-live-1"
-        assert payload["delegation"] == {"type": "client"}
+        assert payload["session"] == {"model": "gpt-live-1", "delegation": {"type": "client"}}
         assert payload["transport"] == {"type": "webrtc", "sdp": "fake-offer-sdp"}
         return httpx.Response(
             200,

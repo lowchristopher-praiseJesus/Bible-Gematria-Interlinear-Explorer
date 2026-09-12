@@ -1,6 +1,7 @@
 """FastAPI routes for the Bible chatbot."""
 
 import asyncio
+import logging
 from typing import AsyncIterator, Optional, Tuple
 
 import httpx
@@ -43,6 +44,7 @@ from chatbot.streaming import sse_event
 from chatbot.trace import TraceRecorder, current_recorder
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -519,13 +521,16 @@ async def create_voice_session(
                 _GPT_LIVE_SESSIONS_URL,
                 headers={"Authorization": f"Bearer {x_openai_key}"},
                 json={
-                    "model": "gpt-live-1",
-                    "delegation": {"type": "client"},
+                    "session": {
+                        "model": "gpt-live-1",
+                        "delegation": {"type": "client"},
+                    },
                     "transport": {"type": "webrtc", "sdp": request.sdp},
                 },
                 timeout=15.0,
             )
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
+        logger.warning("GPT-Live session request failed: %s", exc)
         raise HTTPException(
             status_code=502, detail="Couldn't reach OpenAI to start a voice session."
         )
@@ -549,6 +554,15 @@ async def create_voice_session(
     if response.status_code == 429:
         raise HTTPException(status_code=429, detail="OpenAI is rate-limiting this key right now.")
     if response.status_code >= 400:
+        # Never seen the caller's key here — this is OpenAI's own response
+        # body, safe to log — but it's the one signal that explains *why*
+        # a BYOK voice session failed, and the client only ever gets the
+        # generic message below.
+        logger.warning(
+            "GPT-Live session request rejected: status=%s body=%s",
+            response.status_code,
+            response.text[:2000],
+        )
         raise HTTPException(status_code=502, detail="OpenAI couldn't start the voice session.")
 
     # An unexpected-shape (or non-JSON) 200 must land in this function's own
