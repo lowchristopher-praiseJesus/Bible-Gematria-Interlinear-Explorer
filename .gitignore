@@ -28,6 +28,7 @@ frontend/CACHED_PAGES/
 
 # Docker deployment: local secrets + nginx logs
 .env
+.api_key.rtf
 nginx/logs/
 
 # Real mybibletoolbox-code commentary corpus if staged in-repo (keep the
