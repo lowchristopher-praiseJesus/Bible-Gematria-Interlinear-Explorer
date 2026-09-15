@@ -4,6 +4,7 @@ grounded in its text and any curated book context. Mirrors wiki_qa.py's
 per-turn handler shape, but grounds on a single resolved verse reference
 rather than a study-wiki series."""
 
+import re
 from typing import Any, Dict, List, Optional
 
 from chatbot.book_context import get_book_context
@@ -13,8 +14,14 @@ from chatbot.ollama_client import (
     call_ollama_with_context,
     generate_llm_follow_ups,
 )
-from chatbot.router import _ref_from_history
-from chatbot.tools import fetch_verse_translations
+from chatbot.router import (
+    _AMBIGUOUS_EMBEDDED_ABBREVIATIONS,
+    _BOOK_ABBREVIATIONS,
+    _USFM_TO_BOOK,
+    _reading_artifacts,
+    _ref_from_history,
+)
+from chatbot.tools import fetch_verse_translations, list_passage_verses
 
 SOCRATIC_SYSTEM_PROMPT = """You are a Socratic Bible study partner, in the tradition of David Gooding and John Lennox: you help the user examine a passage for themselves rather than handing them conclusions. Your ultimate aim, whenever the passage supports it, is to help the user see what the text reveals about who God is — His character, nature, and ways.
 
@@ -54,16 +61,48 @@ def _is_stuck_signal(message: str) -> bool:
     return any(phrase in normalized for phrase in _STUCK_PHRASES)
 
 
+# A bare chapter ("Gen 1", "Psalm 23") — the verse patterns all require a
+# ":V", so without this a user who names a whole chapter never gets the
+# session grounded at all.
+_CHAPTER_REF_RE = re.compile(r"\b([1-3]\s?[A-Za-z]{2,}|[A-Za-z]{2,})\.?\s+(\d{1,3})\b(?!\s*:\s*\d)")
+
+
+def _detect_chapter_reference(text: str) -> Optional[str]:
+    # Several book abbreviations are ordinary words ("numbers", "song",
+    # "mark"), so inside a longer sentence only a capitalized book counts;
+    # a message that is nothing but the reference ("gen 1") counts in any case.
+    stripped = text.strip()
+    for m in _CHAPTER_REF_RE.finditer(stripped):
+        book_text, chapter = m.groups()
+        normalized = re.sub(r"[.\s]", "", book_text).lower()
+        if normalized in _AMBIGUOUS_EMBEDDED_ABBREVIATIONS:
+            continue
+        usfm = _BOOK_ABBREVIATIONS.get(normalized)
+        if not usfm:
+            continue
+        if m.group(0) != stripped and not (book_text[0].isupper() or book_text[0].isdigit()):
+            continue
+        return f"{usfm} {chapter}"
+    return None
+
+
 def _detect_reference(text: str) -> Optional[str]:
-    """Best-effort extraction of a single verse reference embedded in free
-    text (e.g. "Let's look at John 3:16") — used when no reference has been
-    established yet for the session, so a freeform-start conversation can
-    still ground its questions once the user names a passage."""
+    """Best-effort extraction of a single verse — or, failing that, a whole
+    chapter — embedded in free text (e.g. "Let's look at John 3:16", "Gen 1")."""
     match = VERSE_REF_PATTERN.search(text)
-    if not match:
-        return None
-    usfm = _usfm_from_name(match.group(1))
-    return f"{usfm} {match.group(2)}:{match.group(3)}"
+    if match:
+        usfm = _usfm_from_name(match.group(1))
+        return f"{usfm} {match.group(2)}:{match.group(3)}"
+    return _detect_chapter_reference(text)
+
+
+def _reference_from_history(history: List[Dict[str, str]]) -> Optional[str]:
+    """Most recent verse or chapter reference anywhere in the conversation."""
+    for msg in reversed(history):
+        ref = _ref_from_history([msg]) or _detect_chapter_reference(msg.get("text", ""))
+        if ref:
+            return ref
+    return None
 
 
 async def _grounding_for(reference: str, fetch_verse_text: bool = True) -> Dict[str, Any]:
@@ -87,6 +126,16 @@ async def _grounding_for(reference: str, fetch_verse_text: bool = True) -> Dict[
             parts.append(f"Text (KJV): {text}")
 
     usfm = reference.split(" ")[0].upper()
+    if ":" not in reference:
+        # Bare chapter: ground on its KJV text straight from Complete.db (no
+        # network) — without it the model has nothing but "GEN 1" to go on.
+        chapter = reference.split(" ")[-1]
+        book_name = _USFM_TO_BOOK.get(usfm)
+        if book_name and chapter.isdigit():
+            verses = await list_passage_verses(book_name, int(chapter))
+            chapter_text = " ".join(f"{v['vnum']} {v['kjv']}" for v in verses if v.get("kjv"))
+            if chapter_text:
+                parts.append(f"Chapter text (KJV): {chapter_text[:4000]}")
     ctx = get_book_context(usfm)
     if ctx:
         sections = ctx.get("sections", {})
@@ -119,13 +168,14 @@ async def answer(
     resolved = (
         _detect_reference(message)
         or reference
-        or _ref_from_history(conversation_history or [])
+        or _reference_from_history(conversation_history or [])
     )
     is_range = bool(resolved) and ":" in resolved and "-" in resolved.split(":", 1)[1]
+    is_chapter = bool(resolved) and ":" not in resolved
     translations: Dict[str, str] = {}
     book_context = None
     if resolved:
-        grounding = await _grounding_for(resolved, fetch_verse_text=not is_range)
+        grounding = await _grounding_for(resolved, fetch_verse_text=not (is_range or is_chapter))
         research_data = grounding["research_data"]
         translations = grounding["translations"]
         book_context = grounding["book_context"]
@@ -163,6 +213,10 @@ async def answer(
         result["data"] = {"reference": resolved, "translations": translations, "book_context": book_context}
     else:
         result["data"] = {"reference": resolved}
+        # A chapter or range has no single-verse box, so show it the way
+        # other modes do: an inline chapter-reading link.
+        if result.get("type") == "chat" and (is_chapter or is_range):
+            result["artifacts"] = _reading_artifacts(resolved)
     return result
 
 

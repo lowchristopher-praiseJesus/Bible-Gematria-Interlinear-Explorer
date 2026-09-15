@@ -358,3 +358,89 @@ async def test_answer_leaves_follow_ups_unset_when_llm_gives_none(monkeypatch):
     result = await socratic.answer("GEN 1:1", "what stands out?")
 
     assert "follow_up_questions" not in result
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Gen 1", "GEN 1"),
+        ("gen 1", "GEN 1"),
+        ("Psalm 23", "PSA 23"),
+        ("Let's look at Genesis 1", "GEN 1"),
+        ("1 John 4", "1JN 4"),
+    ],
+)
+def test_detect_reference_recognizes_chapter_only(text, expected):
+    assert socratic._detect_reference(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "God is 3 in 1",
+        "I have 2 ideas about this",
+        "the numbers 7 and 40 recur",
+        "what stands out?",
+    ],
+)
+def test_detect_reference_ignores_non_references(text):
+    assert socratic._detect_reference(text) is None
+
+
+def _chapter_stubs(monkeypatch, captured):
+    async def fake_fetch_verse(reference, languages=None):
+        raise AssertionError("a bare chapter can't go through the single-verse fetch path")
+
+    async def fake_list_passage_verses(book_name, chapter, start_verse=None, end_verse=None):
+        captured["args"] = (book_name, chapter)
+        return [
+            {"vnum": 1, "kjv": "In the beginning God created the heaven and the earth."},
+            {"vnum": 3, "kjv": "And God said, Let there be light: and there was light."},
+        ]
+
+    async def fake_call(message, research_data, conversation_history=None, system_prompt=None):
+        captured["research_data"] = research_data
+        return {"type": "chat", "message": "What does God's speaking reveal about Him?", "data": None}
+
+    monkeypatch.setattr(socratic, "fetch_verse_translations", fake_fetch_verse)
+    monkeypatch.setattr(socratic, "list_passage_verses", fake_list_passage_verses)
+    monkeypatch.setattr(socratic, "get_book_context", lambda usfm: None)
+    monkeypatch.setattr(socratic, "call_ollama_with_context", fake_call)
+
+
+@pytest.mark.asyncio
+async def test_answer_grounds_on_chapter_only_reference(monkeypatch):
+    captured = {}
+    _chapter_stubs(monkeypatch, captured)
+
+    result = await socratic.answer(None, "Gen 1")
+
+    assert captured["args"] == ("Genesis", 1)
+    assert "In the beginning God created" in captured["research_data"]
+    assert "no passage" not in captured["research_data"].lower()
+    assert result["type"] == "chat"
+    assert result["data"] == {"reference": "GEN 1"}
+    assert result["artifacts"][0]["type"] == "chapter"
+
+
+@pytest.mark.asyncio
+async def test_answer_recovers_chapter_only_reference_from_history(monkeypatch):
+    """Regression for a reported bug: the user typed "Gen 1", then answered
+    the first question — but a bare chapter was never recognized, so the
+    next turn told the model no passage had been named and it asked the
+    user to pick a passage instead of affirming their answer."""
+    captured = {}
+    _chapter_stubs(monkeypatch, captured)
+    history = [
+        {"role": "user", "text": "Gen 1"},
+        {"role": "assistant", "text": "What does the way God creates the world reveal about His character?"},
+    ]
+
+    result = await socratic.answer(
+        None,
+        "God is an orderly God and he only needs to speak and creation is done",
+        conversation_history=history,
+    )
+
+    assert "no passage" not in captured["research_data"].lower()
+    assert result["data"] == {"reference": "GEN 1"}
