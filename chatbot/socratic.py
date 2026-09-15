@@ -105,6 +105,22 @@ def _reference_from_history(history: List[Dict[str, str]]) -> Optional[str]:
     return None
 
 
+def _is_answer_turn(message: str, history: List[Dict[str, str]]) -> bool:
+    """True when the user is replying to a question the assistant just asked —
+    the turn that must open by judging their answer. The code only detects
+    the turn; whether the answer is right is still the model's call."""
+    last = next((m for m in reversed(history) if m.get("role") == "assistant"), None)
+    if not last or not last.get("text", "").rstrip(" \"'”’").endswith("?"):
+        return False
+    stripped = message.strip()
+    if stripped.endswith("?") or _is_stuck_signal(stripped):
+        return False
+    # Naming a passage ("Gen 1") starts a new topic rather than answering.
+    if _detect_reference(stripped) and len(stripped.split()) <= 4:
+        return False
+    return True
+
+
 async def _grounding_for(reference: str, fetch_verse_text: bool = True) -> Dict[str, Any]:
     """Returns {"research_data", "translations", "book_context"} — the LLM
     prompt text plus the raw pieces the caller needs to also show the
@@ -193,6 +209,15 @@ async def answer(
             "This turn only: do NOT ask another question — give ONE direct, concise "
             "answer about the passage, grounded in the text and context above. "
             "Resume questioning on your next turn."
+        )
+    elif _is_answer_turn(message, conversation_history or []):
+        system_prompt += (
+            "\n\nThe user's message just now is their answer to your previous question. "
+            "Open your reply by explicitly judging that answer before anything else: if it "
+            "is right or partly right, affirm it and name specifically what they got right "
+            "(e.g. \"Yes — creating by His word alone does show...\"); if it misses or "
+            "misreads something, say so gently and name what. Only then ask ONE new question "
+            "on an angle the conversation hasn't covered yet."
         )
 
     result = await call_ollama_with_context(

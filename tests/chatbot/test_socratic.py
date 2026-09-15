@@ -387,6 +387,55 @@ def test_detect_reference_ignores_non_references(text):
     assert socratic._detect_reference(text) is None
 
 
+_ASKED = [
+    {"role": "user", "text": "Gen 3:21"},
+    {"role": "assistant", "text": "What does God clothing them reveal about His character?"},
+]
+
+
+def test_is_answer_turn_when_replying_to_a_question():
+    assert socratic._is_answer_turn("God still provides for them and cares for their dignity", _ASKED)
+
+
+@pytest.mark.parametrize(
+    "message,history",
+    [
+        ("Why did He use animal skins?", _ASKED),
+        ("I don't know", _ASKED),
+        ("Gen 1", _ASKED),
+        ("God still provides for them", []),
+        ("God still provides for them", [{"role": "assistant", "text": "Here is GEN 3:21."}]),
+    ],
+)
+def test_is_answer_turn_false_otherwise(message, history):
+    assert not socratic._is_answer_turn(message, history)
+
+
+@pytest.mark.asyncio
+async def test_answer_forces_judging_the_users_answer(monkeypatch):
+    """Regression for reported bugs: correct answers weren't reliably
+    affirmed — the persona instruction alone was followed only some of the
+    time, so an answer turn now gets an explicit per-turn directive to judge
+    the answer (affirm or gently correct) before asking anything new."""
+    captured = {}
+
+    async def fake_fetch_verse(reference, languages=None):
+        return {"eng-KJV": "Unto Adam also and to his wife did the LORD God make coats of skins, and clothed them."}
+
+    async def fake_call_ollama_with_context(message, research_data, conversation_history=None, system_prompt=None):
+        captured["system_prompt"] = system_prompt
+        return {"type": "chat", "message": "Yes — exactly.", "data": None}
+
+    monkeypatch.setattr(socratic, "fetch_verse_translations", fake_fetch_verse)
+    monkeypatch.setattr(socratic, "get_book_context", lambda usfm: None)
+    monkeypatch.setattr(socratic, "call_ollama_with_context", fake_call_ollama_with_context)
+
+    await socratic.answer("GEN 3:21", "God still provides for them and cares for their dignity", conversation_history=_ASKED)
+
+    assert captured["system_prompt"].startswith(socratic.SOCRATIC_SYSTEM_PROMPT)
+    assert "explicitly judging that answer" in captured["system_prompt"]
+
+
 def _chapter_stubs(monkeypatch, captured):
     async def fake_fetch_verse(reference, languages=None):
         raise AssertionError("a bare chapter can't go through the single-verse fetch path")
