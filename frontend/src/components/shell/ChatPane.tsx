@@ -52,10 +52,12 @@ function socraticReference(data: unknown): string | undefined {
   return (data as { reference?: string | null } | undefined)?.reference ?? undefined
 }
 
-function toHistory(messages: SessionMessage[]): { role: string; text: string }[] {
+function toHistory(messages: SessionMessage[]): { role: 'user' | 'assistant'; text: string }[] {
   return messages.map((m) => {
     const devotional = m.artifacts?.find((a) => a.type === 'devotional')
-    const text = devotional ? (devotional.params as DevotionalArtifactParams).text : m.text
+    const text = devotional
+      ? (devotional.params as unknown as DevotionalArtifactParams).text
+      : m.text
     return { role: m.role, text }
   })
 }
