@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
 import { translationLabel } from '@/lib/translationLabel'
-import { fetchInterlinear } from '@/lib/chatApi'
+import { fetchInterlinear, fetchStrongsEntry } from '@/lib/chatApi'
 import {
   useVerseFontScaleStore,
   MIN_VERSE_FONT_SCALE,
   MAX_VERSE_FONT_SCALE,
 } from '@/store/useVerseFontScaleStore'
-import type { ExplorerResponse } from '@/types/api'
+import type { ExplorerResponse, StrongsResponse } from '@/types/api'
+
+// Same cross-reference rewrite StrongsArtifact does for the old Flask
+// `/strongs?strongsnumber=` links embedded in definition text — this
+// popover has its own nav (setStrongsCode) instead of the shared
+// artifact store, since it renders inside a fullscreen dialog that sits
+// above the main artifact pane.
+const STRONGS_HREF_RE = /^\/strongs\?strongsnumber=([A-Za-z0-9]+)/
 
 export interface VerseFullscreenVerse {
   reference: string
@@ -114,12 +121,14 @@ function OriginalLanguageBlock({
   scale,
   showHeading,
   reference,
+  onStrongsClick,
 }: {
   status: LoadStatus
   data: ExplorerResponse | null
   scale: number
   showHeading: boolean
   reference: string
+  onStrongsClick: (code: string) => void
 }) {
   if (status === 'loading') {
     return <p className="text-xs text-[var(--color-text-secondary)] italic">Loading original language…</p>
@@ -154,7 +163,13 @@ function OriginalLanguageBlock({
       <div className="flex flex-col gap-1" style={{ fontSize: rem(BASE_WORD_ROW_REM, scale) }}>
         {kjvWords.map((w, i) => (
           <div key={i} className="flex items-baseline gap-2 border-b border-[var(--color-theme-border)] pb-1">
-            <span className="font-mono px-1 rounded bg-[var(--color-surface-alt)]">{w.strongsNumber}</span>
+            <button
+              type="button"
+              onClick={() => onStrongsClick(w.strongsNumber)}
+              className="font-mono px-1 rounded bg-[var(--color-surface-alt)] hover:underline"
+            >
+              {w.strongsNumber}
+            </button>
             <span dangerouslySetInnerHTML={{ __html: stripStrongsTags(w.kjvText) }} />
           </div>
         ))}
@@ -168,11 +183,13 @@ function OriginalLanguagePane({
   scale,
   dataByRef,
   errorByRef,
+  onStrongsClick,
 }: {
   verses: VerseFullscreenVerse[]
   scale: number
   dataByRef: Record<string, ExplorerResponse>
   errorByRef: Record<string, boolean>
+  onStrongsClick: (code: string) => void
 }) {
   const showHeading = verses.length > 1
   return (
@@ -191,10 +208,69 @@ function OriginalLanguagePane({
               scale={scale}
               showHeading={showHeading}
               reference={verse.reference}
+              onStrongsClick={onStrongsClick}
             />
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function StrongsPopover({
+  code,
+  status,
+  data,
+  onNavigate,
+  onClose,
+}: {
+  code: string
+  status: LoadStatus
+  data: StrongsResponse | null
+  onNavigate: (code: string) => void
+  onClose: () => void
+}) {
+  function handleDefinitionClick(e: MouseEvent<HTMLDivElement>) {
+    const anchor = (e.target as HTMLElement).closest('a')
+    const href = anchor?.getAttribute('href')
+    const match = href?.match(STRONGS_HREF_RE)
+    if (!match) return
+    e.preventDefault()
+    onNavigate(match[1].toUpperCase())
+  }
+
+  return (
+    <div className="absolute inset-x-3 bottom-3 z-10 max-h-[45%] overflow-y-auto rounded-lg border border-[var(--color-theme-border)] bg-[var(--color-surface)] p-3 shadow-lg md:inset-x-auto md:right-3 md:w-96">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-xs font-semibold">{code}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close Strong's definition"
+          className="text-xs px-2 py-0.5 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]"
+        >
+          ✕
+        </button>
+      </div>
+      {status === 'loading' && (
+        <p className="text-xs text-[var(--color-text-secondary)] italic">Loading…</p>
+      )}
+      {status === 'error' && (
+        <p className="text-xs text-[var(--color-text-secondary)] italic">Could not load {code}.</p>
+      )}
+      {status === 'ready' && data && !data.definition && (
+        <p className="text-xs text-[var(--color-text-secondary)] italic">{data.resultSummary}</p>
+      )}
+      {status === 'ready' && data?.definition && (
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="text-lg">{data.definition.root}</div>
+          <div className="text-xs text-[var(--color-text-secondary)]">
+            {data.definition.transliteration1} — {data.definition.partOfSpeech}
+          </div>
+          <div className="font-medium">{data.definition.meaning}</div>
+          <div onClick={handleDefinitionClick} dangerouslySetInnerHTML={{ __html: data.definition.strongsDefinition }} />
+        </div>
+      )}
     </div>
   )
 }
@@ -210,6 +286,9 @@ export function VerseFullscreen({
   const [origData, setOrigData] = useState<Record<string, ExplorerResponse>>({})
   const [origErrors, setOrigErrors] = useState<Record<string, boolean>>({})
   const fetchedRefs = useRef<Set<string>>(new Set())
+  const [strongsCode, setStrongsCode] = useState<string | null>(null)
+  const [strongsData, setStrongsData] = useState<Record<string, StrongsResponse>>({})
+  const [strongsErrors, setStrongsErrors] = useState<Record<string, boolean>>({})
   const [syncScroll, setSyncScroll] = useState(true)
   const paneEls = useRef<Record<number, HTMLElement | null>>({})
   const isSyncingRef = useRef(false)
@@ -231,6 +310,13 @@ export function VerseFullscreen({
         .catch(() => setOrigErrors((prev) => ({ ...prev, [ref]: true })))
     }
   }, [needsOriginal, verses])
+
+  useEffect(() => {
+    if (!strongsCode || strongsData[strongsCode] || strongsErrors[strongsCode]) return
+    fetchStrongsEntry(strongsCode)
+      .then((d) => setStrongsData((prev) => ({ ...prev, [strongsCode]: d })))
+      .catch(() => setStrongsErrors((prev) => ({ ...prev, [strongsCode]: true })))
+  }, [strongsCode, strongsData, strongsErrors])
 
   function setPane(index: number, value: string) {
     setExtraPanes((panes) => panes.map((p, i) => (i === index ? value : p)))
@@ -370,7 +456,13 @@ export function VerseFullscreen({
                   </button>
                 </div>
                 {content === ORIGINAL_LANGUAGE ? (
-                  <OriginalLanguagePane verses={verses} scale={scale} dataByRef={origData} errorByRef={origErrors} />
+                  <OriginalLanguagePane
+                    verses={verses}
+                    scale={scale}
+                    dataByRef={origData}
+                    errorByRef={origErrors}
+                    onStrongsClick={setStrongsCode}
+                  />
                 ) : (
                   <TranslationPane verses={verses} code={content} scale={scale} />
                 )}
@@ -387,6 +479,16 @@ export function VerseFullscreen({
               </button>
             )}
           </div>
+
+          {strongsCode && (
+            <StrongsPopover
+              code={strongsCode}
+              status={strongsErrors[strongsCode] ? 'error' : strongsData[strongsCode] ? 'ready' : 'loading'}
+              data={strongsData[strongsCode] ?? null}
+              onNavigate={setStrongsCode}
+              onClose={() => setStrongsCode(null)}
+            />
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
