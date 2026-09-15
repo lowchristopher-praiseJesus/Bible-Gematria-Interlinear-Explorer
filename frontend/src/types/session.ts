@@ -63,6 +63,11 @@ export interface Note {
   id: string
   createdAt: number
   updatedAt: number
+  /** Optional title, shown in note lists in place of the derived label. */
+  title?: string
+  /** Rich text content as sanitized HTML (produced by the Tiptap editor).
+   * Older notes predate rich text and hold plain text here — Tiptap
+   * renders plain text as a single paragraph, so both forms display fine. */
   body: string
 }
 

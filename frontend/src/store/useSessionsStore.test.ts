@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useSessionsStore } from './useSessionsStore'
+import { MAX_NOTE_SIZE_CHARS, useSessionsStore } from './useSessionsStore'
 
 const TRACE = {
   turnId: 't1',
@@ -243,6 +243,32 @@ describe('useSessionsStore', () => {
     expect(stored.notes[0].body).toBe('revised')
     expect(stored.notes[0].updatedAt).toBeGreaterThanOrEqual(note.updatedAt)
     expect(stored.updatedAt).toBe(sessionUpdatedAt)
+  })
+
+  it('addNote stores an optional title alongside the body', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const note = useSessionsStore.getState().addNote(session.id, '<p>body</p>', 'My title')!
+    expect(note.title).toBe('My title')
+    expect(useSessionsStore.getState().sessions[session.id].notes[0].title).toBe('My title')
+  })
+
+  it('addNote and updateNote reject content over MAX_NOTE_SIZE_CHARS', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const huge = 'x'.repeat(MAX_NOTE_SIZE_CHARS + 1)
+    expect(useSessionsStore.getState().addNote(session.id, huge)).toBeNull()
+    expect(useSessionsStore.getState().sessions[session.id].notes).toHaveLength(0)
+
+    const note = useSessionsStore.getState().addNote(session.id, 'small')!
+    expect(useSessionsStore.getState().updateNote(session.id, note.id, huge)).toBe(false)
+    expect(useSessionsStore.getState().sessions[session.id].notes[0].body).toBe('small')
+  })
+
+  it('updateNote replaces the title and returns true on success', () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const note = useSessionsStore.getState().addNote(session.id, 'body', 'old title')!
+    const ok = useSessionsStore.getState().updateNote(session.id, note.id, 'body', 'new title')
+    expect(ok).toBe(true)
+    expect(useSessionsStore.getState().sessions[session.id].notes[0].title).toBe('new title')
   })
 
   it('deleteNote removes the matching note only', () => {

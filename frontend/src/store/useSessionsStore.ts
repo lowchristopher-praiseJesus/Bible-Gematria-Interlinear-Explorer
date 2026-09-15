@@ -18,8 +18,8 @@ interface SessionsState {
   /** Drops the message at `fromMessageId` and everything after it — used to
    * discard a response before regenerating it. */
   truncateMessagesFrom: (sessionId: string, fromMessageId: string) => void
-  addNote: (sessionId: string, body: string) => Note | null
-  updateNote: (sessionId: string, noteId: string, body: string) => void
+  addNote: (sessionId: string, body: string, title?: string) => Note | null
+  updateNote: (sessionId: string, noteId: string, body: string, title?: string) => boolean
   deleteNote: (sessionId: string, noteId: string) => void
   /** Bring a conversation in from a share link as a new local session,
    * flagged `imported`. Does not change the active session. */
@@ -33,6 +33,16 @@ interface SessionsState {
 }
 
 export const MAX_NOTES_PER_SESSION = 5
+
+/**
+ * Rough cap on a single note's serialized size (title + HTML body,
+ * embedded images included as base64). Approximated as UTF-16 code unit
+ * count, which is close enough to bytes for the mostly-ASCII HTML/base64
+ * content notes hold — the point is to stop one note from single-handedly
+ * blowing the shared localStorage quota (see `setItemWithQuotaGuard`
+ * below), not to account precisely.
+ */
+export const MAX_NOTE_SIZE_CHARS = 2_000_000
 
 export const MODE_LABELS: Record<SessionMode, string> = {
   reading_plan: 'Bible in a Year',
@@ -107,6 +117,7 @@ function sanitizeNotes(notes: unknown, cap = true): Note[] {
     out.push({
       id: candidate.id as string,
       body: candidate.body as string,
+      title: typeof candidate.title === 'string' ? candidate.title : undefined,
       createdAt: typeof candidate.createdAt === 'number' ? candidate.createdAt : Date.now(),
       updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now(),
     })
@@ -442,11 +453,12 @@ export const useSessionsStore = create<SessionsState>()(
           }
         }),
 
-      addNote: (sessionId, body) => {
+      addNote: (sessionId, body, title) => {
         const existing = get().sessions[sessionId]
         if (!existing || existing.notes.length >= MAX_NOTES_PER_SESSION) return null
+        if ((title?.length ?? 0) + body.length > MAX_NOTE_SIZE_CHARS) return null
         const now = Date.now()
-        const note: Note = { id: genNoteId(), createdAt: now, updatedAt: now, body }
+        const note: Note = { id: genNoteId(), createdAt: now, updatedAt: now, body, title }
         set((state) => ({
           sessions: {
             ...state.sessions,
@@ -517,22 +529,23 @@ export const useSessionsStore = create<SessionsState>()(
         return count
       },
 
-      updateNote: (sessionId, noteId, body) =>
-        set((state) => {
-          const existing = state.sessions[sessionId]
-          if (!existing) return state
-          return {
-            sessions: {
-              ...state.sessions,
-              [sessionId]: {
-                ...existing,
-                notes: existing.notes.map((n) =>
-                  n.id === noteId ? { ...n, body, updatedAt: Date.now() } : n
-                ),
-              },
+      updateNote: (sessionId, noteId, body, title) => {
+        if ((title?.length ?? 0) + body.length > MAX_NOTE_SIZE_CHARS) return false
+        const existing = get().sessions[sessionId]
+        if (!existing) return false
+        set((state) => ({
+          sessions: {
+            ...state.sessions,
+            [sessionId]: {
+              ...existing,
+              notes: existing.notes.map((n) =>
+                n.id === noteId ? { ...n, body, title, updatedAt: Date.now() } : n
+              ),
             },
-          }
-        }),
+          },
+        }))
+        return true
+      },
 
       deleteNote: (sessionId, noteId) =>
         set((state) => {

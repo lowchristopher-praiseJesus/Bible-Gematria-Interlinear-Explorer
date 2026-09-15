@@ -113,7 +113,7 @@ describe('ArtifactPane', () => {
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     const notes = useSessionsStore.getState().sessions[session.id].notes
     expect(notes).toHaveLength(1)
-    expect(notes[0].body).toBe('drafted body')
+    expect(notes[0].body).toBe('<p>drafted body</p>')
   })
 
   it('titles the pane "Note" while a note is active', () => {

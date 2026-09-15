@@ -77,6 +77,28 @@ function ensureStorage(name: 'localStorage' | 'sessionStorage'): void {
 ensureStorage('localStorage')
 ensureStorage('sessionStorage')
 
+// jsdom implements no layout engine, so `Range`/`Element` carry none of the
+// geometry methods ProseMirror (the engine behind the Tiptap note editor)
+// calls on every keystroke to scroll the selection into view. Stub them
+// with zero rects rather than skip rich-text interaction tests entirely —
+// this is the standard workaround the Tiptap/ProseMirror test suites use
+// for jsdom.
+if (typeof Range !== 'undefined') {
+  const zeroRect = (): DOMRect => ({
+    x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0,
+    toJSON: () => ({}),
+  })
+  Range.prototype.getClientRects = () => ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList
+  Range.prototype.getBoundingClientRect = zeroRect
+}
+if (typeof document !== 'undefined' && !document.elementFromPoint) {
+  document.elementFromPoint = () => null
+}
+
 // jsdom ships no `matchMedia`; the shell's viewport-adaptive behaviour
 // (mobile drawer / sheet vs. desktop columns) needs it. Default to the
 // desktop branch (`matches: false`); a test that needs the compact branch

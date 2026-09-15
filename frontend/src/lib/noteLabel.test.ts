@@ -17,4 +17,16 @@ describe('noteLabel', () => {
   it('falls back to "Untitled note" for a whitespace-only body', () => {
     expect(noteLabel({ body: '   \n\t\n  ' })).toBe('Untitled note')
   })
+
+  it('prefers a non-empty title over the body', () => {
+    expect(noteLabel({ title: 'Grace', body: '<p>ignored</p>' })).toBe('Grace')
+  })
+
+  it('falls back to the body when title is empty or whitespace', () => {
+    expect(noteLabel({ title: '   ', body: '<p>Real content</p>' })).toBe('Real content')
+  })
+
+  it('strips HTML tags from a rich-text body before deriving the label', () => {
+    expect(noteLabel({ body: '<p><strong>Bold</strong> start</p>' })).toBe('Bold start')
+  })
 })
