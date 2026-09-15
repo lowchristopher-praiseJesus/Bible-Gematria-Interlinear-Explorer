@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
+import { pickDefaultTranslationCode, translationLabel } from '@/lib/translationLabel'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { useTranslationSettingsStore } from '@/store/useTranslationSettingsStore'
 import { VerseFullscreen } from './VerseFullscreen'
 
 export interface VerseBubbleData {
@@ -12,15 +14,11 @@ interface Props {
   data: VerseBubbleData
 }
 
-function translationLabel(code: string): string {
-  const abbr = code.split('-')[1] ?? code
-  return abbr.toUpperCase()
-}
-
 export function VerseBubble({ data }: Props) {
   const translations = data.translations ?? {}
   const codes = Object.keys(translations)
-  const defaultCode = codes.find((c) => c.endsWith('-KJV')) ?? codes[0]
+  const preferredAbbr = useTranslationSettingsStore((s) => s.defaultTranslationAbbr)
+  const defaultCode = pickDefaultTranslationCode(codes, preferredAbbr)
   const [selected, setSelected] = useState(defaultCode)
   const [fullscreen, setFullscreen] = useState(false)
   const openArtifact = useArtifactStore((s) => s.openArtifact)

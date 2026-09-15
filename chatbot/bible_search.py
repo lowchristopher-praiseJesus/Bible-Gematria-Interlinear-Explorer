@@ -16,6 +16,21 @@ import dataset
 DB_PATH = f"sqlite:///{Path(__file__).resolve().parent.parent / 'Complete.db'}"
 ROW_RESULT_LIMIT = 20000
 
+# USFM 3.0 book codes in canonical 66-book order — matches Complete.db's
+# `bnum` (1-indexed) by position. Kept local rather than importing
+# mybibletoolbox-code's book_codes.py per this module's independence from
+# that dependency (see module docstring).
+_USFM_ORDER = [
+    "GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA",
+    "1KI", "2KI", "1CH", "2CH", "EZR", "NEH", "EST", "JOB", "PSA", "PRO",
+    "ECC", "SNG", "ISA", "JER", "LAM", "EZK", "DAN", "HOS", "JOL", "AMO",
+    "OBA", "JON", "MIC", "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL",
+    "MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH",
+    "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM", "HEB", "JAS",
+    "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV",
+]
+_USFM_TO_BNUM = {code: i + 1 for i, code in enumerate(_USFM_ORDER)}
+
 _TAG_RE = re.compile(r"</?(?:i|divine|inscription|psalmheader|headingletter|colophon)>")
 
 
@@ -138,6 +153,27 @@ def search_english_sync(query: str) -> Dict[str, Any]:
         "results": results,
         "truncated": len(rows) == ROW_RESULT_LIMIT,
     }
+
+
+def fetch_cuv_simplified_sync(usfm_book: str, chapter: int, verse: int) -> Optional[str]:
+    """Look up the local CUV Simplified (和合本) text for a canonical verse.
+
+    Local-only, independent of the external BibleHub/eBible fetch used for
+    every other translation — there's no other free digital source for this
+    specific edition to fetch it from remotely, so it lives in Complete.db.
+    Returns None for an unrecognized book or a verse this edition has no
+    text for (see Complete.db import notes: ~0.2% of verses are blank in
+    the source transcription).
+    """
+    bnum = _USFM_TO_BNUM.get(usfm_book.upper())
+    if bnum is None:
+        return None
+    db = dataset.connect(DB_PATH)
+    row = db["Complete"].find_one(bnum=bnum, cnum=chapter, vnum=verse)
+    if row is None:
+        return None
+    text = row.get("CUV_Simplified")
+    return text or None
 
 
 def random_verse_sync() -> tuple:

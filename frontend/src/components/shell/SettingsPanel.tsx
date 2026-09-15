@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { CalendarDays, Check, Download, Eye, EyeOff, KeyRound, RotateCcw, Settings, Trash2, Upload, X } from 'lucide-react'
+import { BookOpenText, CalendarDays, Check, Download, Eye, EyeOff, KeyRound, RotateCcw, Settings, Trash2, Upload, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { useThemeStore, type ThemeId } from '@/store/useThemeStore'
@@ -7,6 +7,7 @@ import { stripPersistHeavyFields, useSessionsStore } from '@/store/useSessionsSt
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useReadingPlanStore, type ReadingPlanProgress } from '@/store/useReadingPlanStore'
 import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
+import { useTranslationSettingsStore } from '@/store/useTranslationSettingsStore'
 
 // `swatch` mirrors the surface / accent / text tokens each theme sets in
 // index.css — it exists only so a card can preview itself. Keep the three
@@ -50,6 +51,23 @@ const PLANS: { id: ReadingPlanProgress['plan']; label: string }[] = [
   { id: 'canonical', label: 'Canonical (book order)' },
 ]
 
+// A curated subset of the 20+ codes fetch_verse_translations can return —
+// full names here since the settings list has room, unlike the compact
+// dropdown abbreviations shown on each verse box (see translationLabel.ts).
+// Matched by abbreviation suffix, not full code, so one choice applies
+// across languages (see useTranslationSettingsStore).
+const TRANSLATIONS: { abbr: string; label: string }[] = [
+  { abbr: 'KJV', label: 'King James Version' },
+  { abbr: 'ASV', label: 'American Standard Version' },
+  { abbr: 'ESV', label: 'English Standard Version' },
+  { abbr: 'NIV', label: 'New International Version' },
+  { abbr: 'NLT', label: 'New Living Translation' },
+  { abbr: 'NASB', label: 'New American Standard Bible' },
+  { abbr: 'WEB', label: 'World English Bible' },
+  { abbr: 'YLT', label: "Young's Literal Translation" },
+  { abbr: 'CUV', label: '中文和合本 (Chinese Union Version)' },
+]
+
 // The destructive-ish actions in here (wiping chats, switching plan,
 // restarting the day count) all discard something the user can't get
 // back, so each is armed by a first click and only acts on the second.
@@ -75,6 +93,8 @@ export function SettingsPanel() {
   const clearApiKey = useVoiceSettingsStore((s) => s.clearApiKey)
   const useOpenAiForResponses = useVoiceSettingsStore((s) => s.useOpenAiForResponses)
   const setUseOpenAiForResponses = useVoiceSettingsStore((s) => s.setUseOpenAiForResponses)
+  const defaultTranslationAbbr = useTranslationSettingsStore((s) => s.defaultTranslationAbbr)
+  const setDefaultTranslationAbbr = useTranslationSettingsStore((s) => s.setDefaultTranslationAbbr)
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   const [restoreStatus, setRestoreStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
@@ -264,6 +284,40 @@ export function SettingsPanel() {
                     )
                   })}
                 </div>
+              </section>
+
+              {/* ── Translation ────────────────────────────────────────── */}
+              <section className="flex flex-col gap-3">
+                <SectionLabel icon={<BookOpenText className="h-3.5 w-3.5" aria-hidden="true" />}>
+                  Default Translation
+                </SectionLabel>
+                <div className="overflow-hidden rounded-xl border border-[var(--color-theme-border)]">
+                  {TRANSLATIONS.map((t, i) => {
+                    const active = defaultTranslationAbbr === t.abbr
+                    return (
+                      <button
+                        key={t.abbr}
+                        type="button"
+                        onClick={() => setDefaultTranslationAbbr(t.abbr)}
+                        aria-pressed={active}
+                        className={cn(
+                          'flex min-h-11 w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm transition-colors',
+                          i > 0 && 'border-t border-[var(--color-theme-border)]',
+                          active
+                            ? 'bg-[var(--color-theme-accent)]/10 font-medium text-[var(--color-theme-accent)]'
+                            : 'hover:bg-[var(--color-surface-alt)]',
+                        )}
+                      >
+                        <span>{t.label}</span>
+                        {active && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                  Verse boxes show this translation by default when available for that verse,
+                  falling back to KJV otherwise. You can still switch translations per verse.
+                </p>
               </section>
 
               {/* ── Bible in a Year ────────────────────────────────────── */}

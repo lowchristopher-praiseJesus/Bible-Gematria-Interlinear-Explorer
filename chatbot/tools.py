@@ -68,6 +68,16 @@ async def fetch_verse_translations(
         translations = await _run_in_thread(_fetch_verse, book, chapter, verse)
         if languages:
             translations = await _run_in_thread(_filter_by_languages, translations, languages)
+
+        # CUV Simplified (和合本) comes from Complete.db, not the external
+        # BibleHub/eBible fetch above — merged in after the language filter
+        # so it survives every existing call site's hardcoded eng-only
+        # `languages` filter rather than being stripped by it.
+        cuv_text = await _run_in_thread(fetch_cuv_simplified_sync, book, chapter, verse)
+        if cuv_text:
+            translations = dict(translations)
+            translations["zho-CUV"] = cuv_text
+
         _step.set_response(translations)
         return translations
 
@@ -115,6 +125,7 @@ async def fetch_strongs(
 # /api/gematria and /api/english directly instead of duplicating a route here.
 # ---------------------------------------------------------------------------
 from chatbot.bible_search import (
+    fetch_cuv_simplified_sync,
     list_passage_verses_sync,
     random_verse_sync,
     search_english_sync,

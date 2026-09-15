@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
+import { translationLabel } from '@/lib/translationLabel'
 import { fetchInterlinear } from '@/lib/chatApi'
 import {
   useVerseFontScaleStore,
@@ -34,11 +35,6 @@ const BASE_REF_LABEL_REM = 0.7
 
 function rem(base: number, scale: number): string {
   return `${base * scale}rem`
-}
-
-function translationLabel(code: string): string {
-  const abbr = code.split('-')[1] ?? code
-  return abbr.toUpperCase()
 }
 
 function stripStrongsTags(html: string): string {

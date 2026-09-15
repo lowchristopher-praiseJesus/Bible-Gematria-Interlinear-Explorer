@@ -88,6 +88,7 @@ $(document).ready(function() {
 			var versedata = $('.reference').text();
 			if (getCookie('bible_select') == 'kjv_select') { versedata += ' (KJV) — ' + $('#KJV_verse').text(); }
 			else if (getCookie('bible_select') == 'av_select') { versedata += ' (1611 Authorized Version) — ' + $('#av_verse').text(); }
+			else if (getCookie('bible_select') == 'cuv_select') { versedata += ' (和合本, CUV) — ' + $('#cuv_verse').text(); }
 			else { versedata += ' (KJV) — ' + $('#KJV_verse').text(); }
 			versedata += '\n' + $('#verse_info').text() + ' — Total = ' + $('#total').attr('value');
 
@@ -331,6 +332,7 @@ $(document).ready(function() {
 		$('#versedisplay').html(data);
 		$('#av_select').css('font-weight', '400');
 		$('#kjv_select').css('font-weight', '300');
+		$('#cuv_select').css('font-weight', '300');
 
 		setCookie('bible_select', 'av_select', '189');
 	});
@@ -341,8 +343,20 @@ $(document).ready(function() {
 		$('#versedisplay').html(data);
 		$('#kjv_select').css('font-weight', '400');
 		$('#av_select').css('font-weight', '300');
+		$('#cuv_select').css('font-weight', '300');
 
 		setCookie('bible_select', 'kjv_select', '189');
+	});
+
+	$('#cuv_select').click(function() {	// Chinese Union Version is clicked
+		var data = $('#cuv_verse').html();
+
+		$('#versedisplay').html(data);
+		$('#cuv_select').css('font-weight', '400');
+		$('#kjv_select').css('font-weight', '300');
+		$('#av_select').css('font-weight', '300');
+
+		setCookie('bible_select', 'cuv_select', '189');
 	});
 
 	$('#TR1894').click(function() {

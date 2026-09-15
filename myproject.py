@@ -363,6 +363,7 @@ def explorer_view(versenum, previous_versenum, next_versenum, cookie, cookie2):
 	vnum = row['vnum']
 	text_1769 = row['text_1769']
 	text_AV_1611 = row['text_AV_1611']
+	CUV_Simplified = row['CUV_Simplified'] or ''
 	wordnum = row['wordnum']
 	letternum = row['letternum']
 	total = row['total']
@@ -606,6 +607,7 @@ def explorer_view(versenum, previous_versenum, next_versenum, cookie, cookie2):
 
 	kjv_select_class = 'class="regular" '
 	av_select_class = 'class="regular" '
+	cuv_select_class = 'class="regular" '
 
 	versedisplay_text = ''
 	versedisplay2_text = Original
@@ -618,12 +620,18 @@ def explorer_view(versenum, previous_versenum, next_versenum, cookie, cookie2):
 		kjv_select_class = ''
 		versedisplay_text = text_AV_1611
 
+	elif cookie == 'cuv_select':
+		kjv_select_class = ''
+		av_select_class = ''
+		versedisplay_text = CUV_Simplified
+
 	if cookie2 == 'Stephanus1550' and Language == 'Greek':
 		versedisplay2_text = Stephanus
 		original_title = original_title.replace('dot dot-hide', 'dot')
 
 	page = page_head.replace('{{{TITLE}}}', 'Bible Gematria Explorer | ' + ref) + """<div id="KJV_verse" hidden>""" + text_1769 + """</div>
-<div id="av_verse" hidden>""" + text_AV_1611 + '</div>' + Greek_verses + """
+<div id="av_verse" hidden>""" + text_AV_1611 + """</div>
+<div id="cuv_verse" hidden>""" + CUV_Simplified + '</div>' + Greek_verses + """
 
 """ + AllStrongsNumbersHTML + """
 
@@ -631,7 +639,7 @@ def explorer_view(versenum, previous_versenum, next_versenum, cookie, cookie2):
 <table class="m_2 box">
 	<thead>
 		<tr>
-			<th class="light"><span class="arrows"><a href="/explorer?versenumber=""" + str(previous_versenum) + '"' + """ class="arrow la"></a><span class="reference">""" + ref + """</span><a href="/explorer?versenumber=""" + str(next_versenum) + '"' + """ class="arrow ra"></a></span><span """ + kjv_select_class + """id="kjv_select">Modern KJV</span><span class="dash">—</span><span """ + av_select_class + """id="av_select" title="1611 Authorized Version">Authorized Version</span></th>
+			<th class="light"><span class="arrows"><a href="/explorer?versenumber=""" + str(previous_versenum) + '"' + """ class="arrow la"></a><span class="reference">""" + ref + """</span><a href="/explorer?versenumber=""" + str(next_versenum) + '"' + """ class="arrow ra"></a></span><span """ + kjv_select_class + """id="kjv_select">Modern KJV</span><span class="dash">—</span><span """ + av_select_class + """id="av_select" title="1611 Authorized Version">Authorized Version</span><span class="dash">—</span><span """ + cuv_select_class + """id="cuv_select" title="和合本, Chinese Union Version (Simplified)">中文和合本</span></th>
 		</tr>
 	</thead>
 	<tbody>
@@ -1472,6 +1480,7 @@ def explorer_api_data(versenum, previous_versenum, next_versenum):
 	vnum = row['vnum']
 	text_1769 = row['text_1769']
 	text_AV_1611 = row['text_AV_1611']
+	CUV_Simplified = row['CUV_Simplified'] or ''
 	wordnum = row['wordnum']
 	letternum = row['letternum']
 	total = row['total']

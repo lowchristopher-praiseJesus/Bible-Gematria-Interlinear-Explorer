@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { fetchChapter } from '@/lib/chatApi'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
+import { pickDefaultTranslationCode, translationLabel } from '@/lib/translationLabel'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { useTranslationSettingsStore } from '@/store/useTranslationSettingsStore'
 import { VerseFullscreen, type VerseFullscreenVerse } from './VerseFullscreen'
 import type { ChapterResponse } from '@/types/api'
 import type { ArtifactLink } from '@/types/session'
@@ -11,11 +13,6 @@ interface Props {
 }
 
 type Status = 'idle' | 'loading' | 'ready' | 'error'
-
-function translationLabel(code: string): string {
-  const abbr = code.split('-')[1] ?? code
-  return abbr.toUpperCase()
-}
 
 function collectTranslationCodes(data: ChapterResponse): string[] {
   const codes = new Set<string>()
@@ -49,9 +46,14 @@ export function ChapterReadingBubble({ link }: Props) {
   const [backgroundStatus, setBackgroundStatus] = useState<Status>('idle')
   const [data, setData] = useState<ChapterResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [translation, setTranslation] = useState<string | null>(null)
+  // null means "no manual pick yet" — the displayed translation is then
+  // derived from the user's default-translation setting below, so it
+  // upgrades on its own once the background fetch adds more translations
+  // (the fast paint is KJV-only) without needing an effect to sync it.
+  const [manualTranslation, setManualTranslation] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const openArtifact = useArtifactStore((s) => s.openArtifact)
+  const preferredAbbr = useTranslationSettingsStore((s) => s.defaultTranslationAbbr)
 
   async function toggle() {
     setExpanded((prev) => !prev)
@@ -62,8 +64,6 @@ export function ChapterReadingBubble({ link }: Props) {
     try {
       fastResult = await fetchChapter(reference, { fast: true })
       setData(fastResult)
-      const codes = collectTranslationCodes(fastResult)
-      setTranslation(codes.find((c) => c.endsWith('-KJV')) ?? codes[0] ?? null)
       setStatus('ready')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -88,6 +88,13 @@ export function ChapterReadingBubble({ link }: Props) {
   const label = link.label.replace(/\s*▸\s*$/, '')
   const passageLabel = label.replace(/^Read\s+/, '')
   const translationCodes = useMemo(() => (data ? collectTranslationCodes(data) : []), [data])
+  const translation =
+    manualTranslation && translationCodes.includes(manualTranslation)
+      ? manualTranslation
+      : translationCodes.length > 0
+        ? pickDefaultTranslationCode(translationCodes, preferredAbbr)
+        : null
+
   const fullscreenVerses: VerseFullscreenVerse[] = useMemo(
     () => (data ? data.verses.map((v) => ({ reference: v.ref, translations: v.translations })) : []),
     [data]
@@ -121,7 +128,7 @@ export function ChapterReadingBubble({ link }: Props) {
                   {translationCodes.length > 0 && translation && (
                     <select
                       value={translation}
-                      onChange={(e) => setTranslation(e.target.value)}
+                      onChange={(e) => setManualTranslation(e.target.value)}
                       aria-label="Translation"
                       className="text-xs border border-[var(--color-theme-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)]"
                     >
