@@ -51,6 +51,7 @@ export const MODE_LABELS: Record<SessionMode, string> = {
   topic: 'Topical Study',
   freeform: 'Ask Anything',
   devotional: 'Devotional',
+  socratic: 'Socratic Study',
 }
 
 function deriveTitle(mode: SessionMode, modeParams: ModeParams): string {

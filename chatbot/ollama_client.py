@@ -368,17 +368,24 @@ async def call_ollama_with_context(
     research_data: str,
     conversation_history: Optional[List[Dict]] = None,
     page_context: Optional[str] = None,
+    system_prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Send `message` to Ollama with `research_data` as grounding context in
     the system prompt. Shared by chat_with_ollama() (verse-reference-scanned
-    research data) and chatbot.wiki_qa.answer() (wiki-search research data)
-    so the HTTP call and its error handling exist in exactly one place."""
+    research data), chatbot.wiki_qa.answer() (wiki-search research data), and
+    chatbot.socratic.answer() (passage-grounded research data) so the HTTP
+    call and its error handling exist in exactly one place.
+
+    `system_prompt`, when given, replaces the default biblical-research-
+    assistant persona entirely (still followed by `research_data`) — used by
+    callers like chatbot.socratic that need a different persona rather than
+    just different grounding data."""
     err = llm_unconfigured_error()
     if err:
         return {"type": "error", "message": err, "data": None}
 
     messages = []
-    system_prompt = _SYSTEM_PROMPT_BASE
+    system_prompt = system_prompt or _SYSTEM_PROMPT_BASE
     if page_context:
         system_prompt += f"\nThe user is currently viewing {page_context} in the Bible Explorer. Assume questions like \"this verse\" or \"explain this\" refer to it unless the message clearly names a different passage.\n"
     system_prompt += research_data + "\n---\n"

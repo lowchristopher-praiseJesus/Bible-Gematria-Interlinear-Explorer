@@ -30,7 +30,7 @@ from chatbot.tools import (
 )
 from chatbot.book_context import get_book_context
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader, wiki_qa
+from chatbot import wiki_loader, wiki_qa, socratic
 from chatbot.router import (
     build_mode_primer,
     route_deterministic,
@@ -254,6 +254,14 @@ async def post_chat(request: ChatRequest):
             result = await wiki_qa.answer(series_id, request.message, history, concept_slug=concept_slug)
             return _with_trace(result)
 
+        # Every turn in a Socratic Study session — not just the primer —
+        # needs the Socratic persona and passage grounding, so it never
+        # falls through to the generic deterministic/Ollama-fallback path.
+        if request.mode == "socratic":
+            reference = (request.mode_params or {}).get("reference")
+            result = await socratic.answer(reference, request.message, history)
+            return _with_trace(result)
+
         result = await route_deterministic(
             request.message, history=history, page_context=request.page_context, mode=request.mode
         )
@@ -403,6 +411,15 @@ async def _stream_chat_response(
         if series_id:
             concept_slug = (request.mode_params or {}).get("concept_slug")
             result = await wiki_qa.answer(series_id, request.message, history, concept_slug=concept_slug)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        # Same special case as post_chat(): every turn in a Socratic Study
+        # session needs the Socratic persona and passage grounding.
+        if request.mode == "socratic":
+            reference = (request.mode_params or {}).get("reference")
+            result = await socratic.answer(reference, request.message, history)
             _note_outcome(result)
             yield await sse_event("final", {"result": result})
             return

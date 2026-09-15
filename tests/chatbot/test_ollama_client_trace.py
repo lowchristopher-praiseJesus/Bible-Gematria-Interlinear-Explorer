@@ -57,6 +57,38 @@ async def test_call_ollama_records_llm_step_with_tokens(monkeypatch):
     assert step["tokens"] == {"prompt": 812, "completion": 40, "total": 852}
 
 
+@pytest.mark.asyncio
+async def test_call_ollama_with_context_custom_system_prompt_overrides_base(monkeypatch):
+    _ollama(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {"content": "A probing question."}})
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(oc.httpx, "AsyncClient", patched_client)
+
+    rec = TraceRecorder("/chat", "what do you notice?")
+    token = current_recorder.set(rec)
+    try:
+        result = await oc.call_ollama_with_context(
+            "what do you notice?", research_data="DATA", system_prompt="You are a Socratic partner."
+        )
+    finally:
+        current_recorder.reset(token)
+
+    assert result["type"] == "chat"
+    step = rec.finalize("chat")["steps"][0]
+    assert step["request"]["system"].startswith("You are a Socratic partner.")
+    assert "biblical research assistant" not in step["request"]["system"]
+    assert "DATA" in step["request"]["system"]
+
+
 def test_extract_tokens_by_provider():
     assert oc._extract_tokens("ollama", {"prompt_eval_count": 5, "eval_count": 7}) == (5, 7)
     assert oc._extract_tokens("nvidia", {"usage": {"prompt_tokens": 9, "completion_tokens": 3}}) == (9, 3)

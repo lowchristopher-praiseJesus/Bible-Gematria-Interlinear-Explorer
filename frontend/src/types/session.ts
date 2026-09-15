@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic'
 
 export interface ModeParams {
   plan?: 'chronological' | 'canonical'

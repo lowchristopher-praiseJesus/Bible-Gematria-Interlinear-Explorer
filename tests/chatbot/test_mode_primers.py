@@ -269,6 +269,71 @@ async def test_verse_primer_abbreviated_verse_range(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_socratic_primer_random_reference_when_none_given(monkeypatch):
+    # "Surprise me" is the only way the frontend calls this primer with no
+    # reference (a freeform-typed passage never hits the primer at all — it
+    # goes straight to socratic.answer(), which has its own "ask the user"
+    # fallback) — so an empty reference here means pick one at random, the
+    # same as "verse" mode's "Surprise me".
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": "In the beginning..."}
+
+    async def fake_random_verse():
+        return ("Genesis", 1, 1)
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    monkeypatch.setattr("chatbot.router.random_verse", fake_random_verse)
+    result = await build_mode_primer("socratic", {})
+    assert result["type"] == "verse"
+    assert result["data"]["reference"] == "GEN 1:1"
+    assert result["data"]["translations"] == {"eng-KJV": "In the beginning..."}
+    assert "In the beginning..." in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_socratic_primer_with_reference(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": "For God so loved the world..."}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    result = await build_mode_primer("socratic", {"reference": "JHN 3:16"})
+    assert result["type"] == "verse"
+    assert "JHN 3:16" in result["message"]
+    assert "For God so loved the world..." in result["message"]
+    assert result["data"]["reference"] == "JHN 3:16"
+    assert result["data"]["translations"] == {"eng-KJV": "For God so loved the world..."}
+    # John has curated book context, so it's offered alongside the passage.
+    artifact_types = [a["type"] for a in result["artifacts"]]
+    assert "book_context" in artifact_types
+    assert "interlinear" in artifact_types
+
+
+@pytest.mark.asyncio
+async def test_socratic_primer_full_name_reference_normalized(monkeypatch):
+    calls = []
+
+    async def fake_fetch(reference, languages=None):
+        calls.append(reference)
+        return {"eng-KJV": "For God so loved the world..."}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    result = await build_mode_primer("socratic", {"reference": "John 3:16"})
+    assert calls == ["JHN 3:16"]
+    assert result["data"]["reference"] == "JHN 3:16"
+
+
+@pytest.mark.asyncio
+async def test_socratic_primer_verse_range_skips_single_verse_fetch(monkeypatch):
+    async def fake_fetch(reference, languages=None):
+        raise AssertionError("a range can't go through the single-verse fetch path")
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    result = await build_mode_primer("socratic", {"reference": "1 Thessalonians 4:13-18"})
+    assert result["data"]["reference"] == "1TH 4:13-18"
+    assert result["artifacts"][0]["type"] == "chapter"
+
+
+@pytest.mark.asyncio
 async def test_devotional_primer_user_source_asks_for_a_verse_or_theme():
     result = await build_mode_primer("devotional", {"source": "user"})
     assert result["type"] == "chat"

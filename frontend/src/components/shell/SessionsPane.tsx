@@ -4,6 +4,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  HelpCircle,
   Inbox,
   MessageCircle,
   Plus,
@@ -31,7 +32,7 @@ interface Props {
 // Fixed order (matching the mode picker) rather than sorting sections by
 // recency — the point is a stable place to find "all my Parable Study
 // chats", not a shuffling list of headers.
-const MODE_ORDER: SessionMode[] = ['reading_plan', 'parable', 'verse', 'topic', 'devotional', 'freeform']
+const MODE_ORDER: SessionMode[] = ['reading_plan', 'parable', 'verse', 'topic', 'devotional', 'socratic', 'freeform']
 
 const MODE_ICONS: Record<SessionMode, LucideIcon> = {
   reading_plan: CalendarDays,
@@ -40,6 +41,7 @@ const MODE_ICONS: Record<SessionMode, LucideIcon> = {
   topic: Search,
   freeform: MessageCircle,
   devotional: BookHeart,
+  socratic: HelpCircle,
 }
 
 function groupByMode(sessions: Session[]): Partial<Record<SessionMode, Session[]>> {

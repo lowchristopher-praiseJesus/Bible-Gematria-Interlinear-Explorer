@@ -113,6 +113,34 @@ describe('ChatPane', () => {
     expect(screen.getByText('For God so loved the world...')).toBeInTheDocument()
   })
 
+  it('persists a socratic turn\'s resolved reference into modeParams, surviving history truncation', async () => {
+    // Regression for a reported "context gets lost" bug: history sent to
+    // the backend is only the last 6 messages, so once the primer turn
+    // (the only place the passage was ever named) scrolls out of that
+    // window, the backend can't rediscover it unless the frontend has
+    // already persisted the reference into modeParams itself.
+    const session = useSessionsStore.getState().createSession('socratic', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'm1',
+      role: 'assistant',
+      text: '**MAT 27:31** — what do you notice first?',
+      type: 'verse',
+      data: { reference: 'MAT 27:31', translations: { 'eng-KJV': 'And after that they had mocked him...' } },
+    })
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({
+      type: 'verse',
+      message: 'Why would the soldiers do that?',
+      data: { reference: 'MAT 27:31', translations: { 'eng-KJV': 'And after that they had mocked him...' } },
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), "I'm stuck — give me a hint.")
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(await screen.findByText('Why would the soldiers do that?')).toBeInTheDocument()
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.reference).toBe('MAT 27:31')
+  })
+
   it('renders a boxed VerseBubble for every verse in a "verses"-type message, not just the first', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {

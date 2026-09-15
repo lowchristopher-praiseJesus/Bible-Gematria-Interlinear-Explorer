@@ -33,6 +33,7 @@ describe('ModePickerScreen', () => {
     expect(screen.getByRole('button', { name: /parable study/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /verse of the day/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /topical study/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /socratic study/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /ask anything/i })).toBeInTheDocument()
   })
 
@@ -160,6 +161,17 @@ describe('ModePickerScreen', () => {
       { label: "I'll choose", modeParams: { source: 'user' } },
       { label: 'Pick one for me', modeParams: { source: 'system' } },
     ])
+  })
+
+  it('selecting Socratic Study offers a "Surprise me" choice inline', async () => {
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /socratic study/i }))
+
+    const session = firstSession()
+    expect(session.mode).toBe('socratic')
+    expect(session.messages[0]).toMatchObject({ role: 'user', text: '🤔 Socratic Study' })
+    expect(session.messages[1].choicesStatus).toBe('ready')
+    expect(session.messages[1].choices).toEqual([{ label: 'Surprise me', modeParams: {} }])
   })
 
   it('typing directly into the landing input starts a freeform session with that message', async () => {

@@ -1174,6 +1174,53 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
             "follow_up_questions": _generate_follow_ups("verse", None, ref),
         }
 
+    if mode == "socratic":
+        reference = mode_params.get("reference")
+        if not reference:
+            # "Surprise me" is the only way the frontend reaches this primer
+            # with no reference — a freeform-typed passage never calls the
+            # primer at all, it goes straight to socratic.answer(), which has
+            # its own "ask the user" fallback — so pick one at random here,
+            # the same as "verse" mode's "Surprise me".
+            book, chapter, verse = await random_verse()
+            reference = _format_reference("", book, str(chapter), str(verse))
+
+        resolved = _resolve_verse_reference(reference)
+        ref = resolved if resolved else reference
+        is_range = ":" in ref and "-" in ref.split(":", 1)[1]
+
+        translations = None
+        verse_text = None
+        if not is_range:
+            try:
+                translations = await fetch_verse_translations(ref, languages=["eng"])
+            except Exception:
+                translations = None
+            verse_text = (translations or {}).get("eng-KJV") or next(iter((translations or {}).values()), None)
+
+        opener = f"**{ref}**" + (f' — "{verse_text}"' if verse_text else "")
+        message = (
+            f"{opener}\n\nBefore I say anything about it — what do you notice first? "
+            "What question does this passage seem to be answering?"
+        )
+        # A single resolved verse gets the same "verse" response shape
+        # (translations attached) that every other mode uses to show the
+        # verse box in chat — a range has no single-verse translations to
+        # show, so it stays a plain chat turn with a chapter-reading artifact.
+        data = (
+            {"reference": ref, "translations": translations, "book_context": get_book_context(ref.split(" ")[0].upper())}
+            if translations
+            else {"reference": ref}
+        )
+        return {
+            "type": "verse" if translations else "chat",
+            "message": message,
+            "data": data,
+            "route": "Mode primer → socratic",
+            "artifacts": _reading_artifacts(ref),
+            "follow_up_questions": ["I'm stuck — give me a hint.", "What's the historical context here?"],
+        }
+
     if mode == "devotional":
         source = mode_params.get("source", "user")
         if source == "system":

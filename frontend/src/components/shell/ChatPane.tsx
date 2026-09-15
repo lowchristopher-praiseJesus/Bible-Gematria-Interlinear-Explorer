@@ -40,6 +40,18 @@ function errorMessage(err: unknown): string {
 // History sent to the backend needs the real text swapped back in, or a
 // follow-up turn (e.g. voice mode's "read out the devotion") reaches the
 // LLM with no devotional content to answer from.
+// Socratic mode's passage reference is essential session state established
+// once (by the primer's random pick, or a message naming a new passage) —
+// unlike other modes, later turns' own text rarely repeats it, so once the
+// turn that named it scrolls out of the 6-message history window sent to
+// the backend, the passage is unrecoverable there. Every socratic response
+// carries the reference it settled on in `data.reference`, so persist it
+// into modeParams here rather than relying on the backend to rediscover it
+// from a truncated history each time.
+function socraticReference(data: unknown): string | undefined {
+  return (data as { reference?: string | null } | undefined)?.reference ?? undefined
+}
+
 function toHistory(messages: SessionMessage[]): { role: string; text: string }[] {
   return messages.map((m) => {
     const devotional = m.artifacts?.find((a) => a.type === 'devotional')
@@ -346,6 +358,10 @@ export function ChatPane({ sessionId }: Props) {
           },
           useOpenAiLlm ? { openAiApiKey: openaiApiKey ?? undefined } : undefined
         )
+        if (session.mode === 'socratic') {
+          const ref = socraticReference(response?.data)
+          if (ref) updateModeParams(sessionId, { reference: ref })
+        }
         if (voiceTurn) {
           // Against the id captured when THIS turn's transcript arrived —
           // another utterance may have opened a newer delegation while this
@@ -359,7 +375,7 @@ export function ChatPane({ sessionId }: Props) {
         setLoading(false)
       }
     },
-    [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn]
+    [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn, updateModeParams]
   )
 
   const voiceMode = useVoiceMode({
@@ -421,17 +437,21 @@ export function ChatPane({ sessionId }: Props) {
       setRegeneratingId(assistantMessageId)
       truncateMessagesFrom(sessionId, assistantMessageId)
       try {
-        await streamAssistantReply(genId(), {
+        const response = await streamAssistantReply(genId(), {
           message: userMessage.text,
           history,
           mode: session.mode,
           mode_params: { ...session.modeParams },
         })
+        if (session.mode === 'socratic') {
+          const ref = socraticReference(response?.data)
+          if (ref) updateModeParams(sessionId, { reference: ref })
+        }
       } finally {
         setRegeneratingId(null)
       }
     },
-    [session, sessionId, regeneratingId, truncateMessagesFrom, streamAssistantReply]
+    [session, sessionId, regeneratingId, truncateMessagesFrom, streamAssistantReply, updateModeParams]
   )
 
   // Finalizes a "which option?" prompt: merges the picked modeParams into
@@ -478,6 +498,10 @@ export function ChatPane({ sessionId }: Props) {
             followUpQuestions: response.follow_up_questions,
             trace: response.trace,
           })
+          if (session.mode === 'socratic') {
+            const ref = socraticReference(response.data)
+            if (ref) updateModeParams(sessionId, { reference: ref })
+          }
         }
       } catch (err) {
         appendMessage(sessionId, {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowUp, BookHeart, BookOpen, CalendarDays, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
+import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -251,6 +251,19 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
             }
           >
             <BookHeart className="h-4 w-4 shrink-0" aria-hidden="true" /> Devotional
+          </button>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithChoices(
+                'socratic',
+                '🤔 Socratic Study',
+                "Name a passage you want to interrogate, or just start typing what's on your mind.",
+                [{ label: 'Surprise me', modeParams: {} }]
+              )
+            }
+          >
+            <HelpCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Socratic Study
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
             <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything
