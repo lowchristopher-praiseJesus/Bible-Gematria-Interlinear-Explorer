@@ -13,13 +13,14 @@ import { VerseGroupBubble } from './VerseGroupBubble'
 import { StrongsBubble } from './StrongsBubble'
 import { StudyBubble } from './StudyBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
+import { PhaseList } from '@/components/chatbot/PhaseList'
 import { PromptChips } from './PromptChips'
 import { ChatNotesMenu } from './ChatNotesMenu'
 import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
 import { useVoiceMode, type UseVoiceModeResult } from './useVoiceMode'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
-import type { ArtifactLink, DevotionalArtifactParams, MessageChoice, SessionMessage } from '@/types/session'
+import type { ArtifactLink, DevotionalArtifactParams, MessageChoice, SessionMessage, PhaseResult } from '@/types/session'
 
 interface Props {
   sessionId: string
@@ -50,6 +51,19 @@ function errorMessage(err: unknown): string {
 // from a truncated history each time.
 function socraticReference(data: unknown): string | undefined {
   return (data as { reference?: string | null } | undefined)?.reference ?? undefined
+}
+
+// Hermeneutics persists both the resolved passage and the run digest into
+// modeParams, so a later turn is answered from the completed run instead of
+// re-running the eight phases.
+function hermeneuticsParams(data: unknown): { reference?: string; runDigest?: string } {
+  const d = data as { reference?: string; runDigest?: string } | undefined
+  const patch: { reference?: string; runDigest?: string } = {}
+  if (d?.reference) patch.reference = d.reference
+  // Only a fresh run returns a digest; a follow-up turn returns none, and
+  // must not clear the one the session already holds.
+  if (d?.runDigest) patch.runDigest = d.runDigest
+  return patch
 }
 
 function toHistory(messages: SessionMessage[]): { role: 'user' | 'assistant'; text: string }[] {
@@ -210,7 +224,16 @@ export function ChatPane({ sessionId }: Props) {
         // an explicit `undefined` is still an argument, and tests/mocks
         // elsewhere assert postChatStream's exact call shape for the
         // (far more common) non-voice-override path.
-        const handlers = opts?.devotional ? {} : { onChunk: (text: string) => put({ text }) }
+        const collected: PhaseResult[] = []
+        const handlers = opts?.devotional
+          ? {}
+          : {
+              onChunk: (text: string) => put({ text }),
+              onPhase: (phase: PhaseResult) => {
+                collected.push(phase)
+                put({ phases: [...collected] })
+              },
+            }
         const response = opts?.openAiApiKey
           ? await postChatStream(payload, handlers, opts.openAiApiKey)
           : await postChatStream(payload, handlers)
@@ -364,6 +387,10 @@ export function ChatPane({ sessionId }: Props) {
           const ref = socraticReference(response?.data)
           if (ref) updateModeParams(sessionId, { reference: ref })
         }
+        if (session.mode === 'hermeneutics') {
+          const patch = hermeneuticsParams(response?.data)
+          if (Object.keys(patch).length) updateModeParams(sessionId, patch)
+        }
         if (voiceTurn) {
           // Against the id captured when THIS turn's transcript arrived —
           // another utterance may have opened a newer delegation while this
@@ -449,6 +476,10 @@ export function ChatPane({ sessionId }: Props) {
           const ref = socraticReference(response?.data)
           if (ref) updateModeParams(sessionId, { reference: ref })
         }
+        if (session.mode === 'hermeneutics') {
+          const patch = hermeneuticsParams(response?.data)
+          if (Object.keys(patch).length) updateModeParams(sessionId, patch)
+        }
       } finally {
         setRegeneratingId(null)
       }
@@ -503,6 +534,10 @@ export function ChatPane({ sessionId }: Props) {
           if (session.mode === 'socratic') {
             const ref = socraticReference(response.data)
             if (ref) updateModeParams(sessionId, { reference: ref })
+          }
+          if (session.mode === 'hermeneutics') {
+            const patch = hermeneuticsParams(response.data)
+            if (Object.keys(patch).length) updateModeParams(sessionId, patch)
           }
         }
       } catch (err) {
@@ -750,6 +785,7 @@ export function ChatPane({ sessionId }: Props) {
                     </div>
                   )}
                 </div>
+                {!!msg.phases?.length && <PhaseList phases={msg.phases} />}
                 {!msg.choicesStatus && (
                   <div className="flex items-center gap-0.5 text-[var(--color-text-secondary)]">
                     <button
