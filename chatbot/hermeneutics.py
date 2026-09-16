@@ -19,7 +19,7 @@ from chatbot.data.parables import PARABLES
 from chatbot.ollama_client import simple_completion
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
 from chatbot.socratic import _detect_reference, _reference_from_history
-from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english
+from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english, fetch_verse_translations
 
 MAX_PASSAGE_VERSES = 25
 
@@ -329,3 +329,64 @@ async def build_grounding(
     # is the verification pass in verify_witnesses() rather than a prompt
     # block built up front.
     return ""
+
+
+_WITNESS_LINE_RE = re.compile(r"^WITNESSES:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
+_VERDICT_LINE_RE = re.compile(
+    r"^VERDICT:\s*(heart|cross|grace)\s*=\s*(pass|fail)\s*[—\-:]?\s*(.*)$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def parse_marker(phase_text: str, marker: str) -> Optional[str]:
+    """The value of a `MARKER: value` line, lowercased, or None."""
+    match = re.search(rf"^{marker}:\s*(.+)$", phase_text, re.MULTILINE | re.IGNORECASE)
+    return match.group(1).strip().lower() if match else None
+
+
+def parse_verdicts(phase_text: str) -> List[Dict[str, Any]]:
+    """Phase 8's three verdicts. Prose without markers yields [] — the
+    report then shows no badges rather than inventing passes."""
+    return [
+        {
+            "test": test.lower(),
+            "passed": outcome.lower() == "pass",
+            "reason": reason.strip(),
+        }
+        for test, outcome, reason in _VERDICT_LINE_RE.findall(phase_text)
+    ]
+
+
+async def verify_witnesses(phase_text: str) -> Tuple[List[Dict[str, Any]], int]:
+    """Resolve and fetch each reference Phase 4 proposed.
+
+    Returns (verified citations, count dropped). A reference that doesn't
+    resolve, or whose text can't be fetched, is dropped — the model must
+    not be able to cite a verse that isn't there.
+    """
+    match = _WITNESS_LINE_RE.search(phase_text)
+    if not match:
+        return [], 0
+
+    citations: List[Dict[str, Any]] = []
+    dropped = 0
+    for raw in match.group(1).split(","):
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        resolved = _resolve_verse_reference(candidate)
+        if not resolved:
+            dropped += 1
+            continue
+        try:
+            translations = await fetch_verse_translations(resolved, languages=["eng"])
+        except Exception:
+            translations = None
+        text = (translations or {}).get("eng-KJV") or next(
+            iter((translations or {}).values()), None
+        )
+        if not text:
+            dropped += 1
+            continue
+        citations.append({"reference": resolved, "text": text, "verified": True})
+    return citations, dropped
