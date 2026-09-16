@@ -13,10 +13,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from chatbot.bible_search import list_passage_verses_sync
+from chatbot.book_context import get_book_context
+from chatbot.data.hermeneutic_rulings import render_rulings, rulings_for
 from chatbot.data.parables import PARABLES
 from chatbot.ollama_client import simple_completion
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
 from chatbot.socratic import _detect_reference, _reference_from_history
+from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english
 
 MAX_PASSAGE_VERSES = 25
 
@@ -211,3 +214,118 @@ async def resolve_passage(
     if explicit:
         return Resolution(explicit, "reference")
     return await resolve_description(message)
+
+
+# Divine titles are detected by Strong's number rather than by asking the
+# model to spot them in transliteration.
+_DIVINE_TITLES = {
+    "H430": ("Elohim", "God as Creator, Judge and Power — known to the world at large"),
+    "H3068": ("Yahweh", "the covenant-keeping LORD of unmerited grace and personal redemption"),
+}
+
+_SECTION_LABELS = {
+    "literary_context": "Literary Context",
+    "historical_setting": "Historical Setting",
+    "author_and_audience": "Author and Audience",
+    "immediate_purpose": "Immediate Purpose",
+}
+
+
+async def passage_text_for(usfm: str, chapter: int, start: int, end: int) -> str:
+    """The passage's KJV text, verse-numbered, straight from Complete.db."""
+    book_name = _USFM_TO_BOOK.get(usfm.upper(), usfm)
+    verses = list_passage_verses_sync(book_name, chapter, start, end)
+    return " ".join(f"{v['vnum']} {v['kjv']}" for v in verses if v.get("kjv"))
+
+
+async def _interlinear_for_range(
+    usfm: str, chapter: int, start: int, end: int
+) -> List[Dict[str, Any]]:
+    rows = []
+    for verse in range(start, end + 1):
+        row = await fetch_interlinear(usfm, chapter, verse)
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _key_phrases(passage_text: str) -> List[str]:
+    """Up to three multi-word phrases worth cross-referencing. Deliberately
+    crude: the phrases only seed english_search, and the model judges what
+    comes back."""
+    cleaned = re.sub(r"\d+", " ", passage_text)
+    phrases = re.findall(r"\b(?:[a-z]{4,}\s+){1,2}[a-z]{4,}\b", cleaned.lower())
+    return list(dict.fromkeys(phrases))[:3]
+
+
+async def build_grounding(
+    kind: str, usfm: str, chapter: int, start: int, end: int, passage_text: str
+) -> str:
+    if kind == "none":
+        return ""
+
+    if kind == "book_context":
+        ctx = get_book_context(usfm.upper())
+        if not ctx:
+            return ""
+        parts = []
+        for key, label in _SECTION_LABELS.items():
+            value = ctx.get("sections", {}).get(key)
+            if value:
+                parts.append(f"{label}: {value}")
+        return "\n".join(parts)
+
+    if kind == "lexical":
+        rows = await _interlinear_for_range(usfm, chapter, start, end)
+        numbers = [w["strongs"] for row in rows for w in row["words"]]
+        entries = await fetch_strongs_local(numbers)
+        lines = ["STRONG'S DATA FOR THIS PASSAGE:"]
+        for number, entry in entries.items():
+            translit = (
+                entry.get("transliteration1")
+                or entry.get("transliteration")
+                or ""
+            )
+            lines.append(
+                f"- {number} {translit} "
+                f"({entry.get('root', '')}): {entry.get('meaning', '')}"
+            )
+        for phrase in _key_phrases(passage_text):
+            found = await search_english(phrase)
+            refs = [r["ref"] for r in found.get("results", [])[:6]]
+            if refs:
+                lines.append(f"OTHER OCCURRENCES of {phrase!r}: {', '.join(refs)}")
+        rulings = render_rulings(rulings_for(passage_text))
+        if rulings:
+            lines.append("")
+            lines.append(rulings)
+        return "\n".join(lines)
+
+    if kind == "roots":
+        rows = await _interlinear_for_range(usfm, chapter, start, end)
+        lines = ["ROOT MEANINGS IN THIS PASSAGE:"]
+        seen = set()
+        for row in rows:
+            for root in row["roots"]:
+                key = root["strongs"]
+                if key in seen:
+                    continue
+                seen.add(key)
+                lines.append(
+                    f"- {key} {root['translit']} ({root['root']}) = {root['english']}"
+                )
+        titles = [
+            f"- {name} ({number}): {gloss}"
+            for number, (name, gloss) in _DIVINE_TITLES.items()
+            if number in seen
+        ]
+        if titles:
+            lines.append("")
+            lines.append("DIVINE TITLES PRESENT IN THIS PASSAGE:")
+            lines.extend(titles)
+        return "\n".join(lines)
+
+    # "witnesses" needs the model's proposals first, so Phase 4's grounding
+    # is the verification pass in verify_witnesses() rather than a prompt
+    # block built up front.
+    return ""
