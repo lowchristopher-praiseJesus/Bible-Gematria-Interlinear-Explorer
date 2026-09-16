@@ -64,3 +64,56 @@ def test_list_passage_verses_range():
 def test_list_passage_verses_unknown_book_or_chapter():
     assert list_passage_verses_sync("Not A Book", 1) == []
     assert list_passage_verses_sync("Job", 999) == []
+
+
+from chatbot.bible_search import fetch_interlinear_sync, fetch_strongs_entries_sync
+
+
+def test_fetch_interlinear_returns_original_word_alignment():
+    result = fetch_interlinear_sync("GEN", 1, 1)
+    assert result["ref"] == "Genesis 1:1"
+    # Original_Words_SN for Genesis 1:1 holds 7 entries, brace-wrapped.
+    assert [w["strongs"] for w in result["words"]] == [
+        "H7225", "H1254", "H430", "H853", "H8064", "H853", "H776",
+    ]
+    assert result["words"][0]["translit"] == "bəreyshiyt"
+    assert result["words"][0]["value"] == 913
+
+
+def test_fetch_interlinear_returns_root_alignment_separately():
+    result = fetch_interlinear_sync("GEN", 1, 1)
+    # Roots align with KJV_SN (6 entries), NOT with Original_Words_SN (7).
+    assert [r["strongs"] for r in result["roots"]] == [
+        "H7225", "H430", "H1254", "H8064", "H853", "H776",
+    ]
+    assert result["roots"][1]["translit"] == "ʾelohiym"
+    assert "God" in result["roots"][1]["english"]
+
+
+def test_fetch_interlinear_strips_markup_from_english():
+    result = fetch_interlinear_sync("GEN", 1, 1)
+    assert all("<" not in r["english"] for r in result["roots"])
+
+
+def test_fetch_interlinear_unknown_book_returns_none():
+    assert fetch_interlinear_sync("ZZZ", 1, 1) is None
+
+
+def test_fetch_interlinear_missing_verse_returns_none():
+    assert fetch_interlinear_sync("GEN", 1, 999) is None
+
+
+def test_fetch_strongs_entries_returns_entries_by_number():
+    entries = fetch_strongs_entries_sync(["H430", "H1254"])
+    assert set(entries) == {"H430", "H1254"}
+    assert entries["H430"]["transliteration1"] == "ʾelohiym"
+    assert "God" in entries["H430"]["meaning"]
+
+
+def test_fetch_strongs_entries_skips_unknown_numbers():
+    entries = fetch_strongs_entries_sync(["H430", "H999999"])
+    assert set(entries) == {"H430"}
+
+
+def test_fetch_strongs_entries_of_nothing_is_empty():
+    assert fetch_strongs_entries_sync([]) == {}

@@ -211,3 +211,90 @@ def list_passage_verses_sync(
         kjv = _remove_tags(row["text_1769"]) if row["text_1769"] else None
         verses.append({"versenumber": row["id"], "vnum": row["vnum"], "ref": row["ref"], "kjv": kjv})
     return verses
+
+
+# ---------------------------------------------------------------------------
+# Interlinear + Strong's (Complete.db direct)
+#
+# A Complete row carries TWO different word alignments that must not be
+# mixed: Original_Words_SN / _Translit / _values align with each other
+# (every original-language word, 7 for Genesis 1:1), while KJV_SN / Root /
+# Root_Translit / Root_val align with each other (one per KJV phrase, 6 for
+# Genesis 1:1). They differ in both length and order.
+# ---------------------------------------------------------------------------
+
+def _split_braced(value: Optional[str]) -> List[str]:
+    """Split a `{~a~b~}`-wrapped multi-value column (myproject.py:380)."""
+    if not value:
+        return []
+    return [p for p in value.strip("{").strip("}").strip("~").split("~") if p]
+
+
+def _split_tilde(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    return value.split("~")
+
+
+_SN_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def fetch_interlinear_sync(
+    usfm_book: str, chapter: int, verse: int
+) -> Optional[Dict[str, Any]]:
+    """Per-word original-language data for one verse.
+
+    Returns None for an unknown book or a verse that isn't in Complete.db.
+    """
+    bnum = _USFM_TO_BNUM.get(usfm_book.upper())
+    if bnum is None:
+        return None
+    db = dataset.connect(DB_PATH)
+    row = db["Complete"].find_one(bnum=bnum, cnum=chapter, vnum=verse)
+    if row is None:
+        return None
+
+    word_sns = _split_braced(row.get("Original_Words_SN"))
+    word_translits = _split_tilde(row.get("Original_Words_Translit"))
+    word_values = _split_braced(row.get("Original_Words_values"))
+    words = []
+    for i, sn in enumerate(word_sns):
+        raw_value = word_values[i] if i < len(word_values) else ""
+        words.append({
+            "strongs": sn,
+            "translit": word_translits[i] if i < len(word_translits) else "",
+            "value": int(raw_value) if raw_value.isdigit() else None,
+        })
+
+    root_sns = _split_tilde(row.get("KJV_SN"))
+    roots_text = _split_tilde(row.get("Root"))
+    root_translits = _split_tilde(row.get("Root_Translit"))
+    kjv_phrases = _split_tilde(row.get("KJV_Text"))
+    roots = []
+    for i, sn in enumerate(root_sns):
+        english = kjv_phrases[i] if i < len(kjv_phrases) else ""
+        roots.append({
+            "strongs": sn,
+            "root": roots_text[i] if i < len(roots_text) else "",
+            "translit": root_translits[i] if i < len(root_translits) else "",
+            "english": _SN_TAG_RE.sub("", english).strip(),
+        })
+
+    return {"ref": row["ref"], "words": words, "roots": roots}
+
+
+def fetch_strongs_entries_sync(numbers: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Strong's entries keyed by number. Unknown numbers are skipped.
+
+    The local, dependency-free counterpart to chatbot.tools.fetch_strongs,
+    which reaches the same data through the external mybibletoolbox package.
+    """
+    if not numbers:
+        return {}
+    db = dataset.connect(DB_PATH)
+    entries: Dict[str, Dict[str, Any]] = {}
+    for number in dict.fromkeys(numbers):  # de-duplicate, keep order
+        row = db["Strongs_"].find_one(StrongsNumber=number)
+        if row is not None:
+            entries[number] = _strongs_row_to_dict(row)
+    return entries
