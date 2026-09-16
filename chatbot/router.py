@@ -1221,6 +1221,53 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
             "follow_up_questions": ["I'm stuck — give me a hint.", "What's the historical context here?"],
         }
 
+    if mode == "hermeneutics":
+        reference = mode_params.get("reference")
+        if not reference and mode_params.get("surprise"):
+            book, chapter, verse = await random_verse()
+            reference = _format_reference("", book, str(chapter), str(verse))
+        if not reference:
+            return {
+                "type": "chat",
+                "message": (
+                    "Which passage would you like me to run through the eight phases? "
+                    "Give me a verse or a short range — for example **Romans 8:1** or "
+                    "**1 Thessalonians 4:15-18**."
+                ),
+                "data": None,
+                "route": "Mode primer → hermeneutics",
+                "follow_up_questions": [],
+            }
+
+        ref = _resolve_verse_reference(reference) or reference
+        is_range = ":" in ref and "-" in ref.split(":", 1)[1]
+        translations = None
+        if not is_range:
+            try:
+                translations = await fetch_verse_translations(ref, languages=["eng"])
+            except Exception:
+                translations = None
+
+        message = (
+            f"**{ref}** — I'll take this through all eight phases: context and audience, "
+            "semantics, record versus truth, witnesses, priority, covenant, typology, and "
+            "the validation tests. Say **go** when you're ready."
+        )
+        data = (
+            {"reference": ref, "translations": translations,
+             "book_context": get_book_context(ref.split(" ")[0].upper())}
+            if translations
+            else {"reference": ref}
+        )
+        return {
+            "type": "verse" if translations else "chat",
+            "message": message,
+            "data": data,
+            "route": "Mode primer → hermeneutics",
+            "artifacts": _reading_artifacts(ref),
+            "follow_up_questions": ["go"],
+        }
+
     if mode == "devotional":
         source = mode_params.get("source", "user")
         if source == "system":

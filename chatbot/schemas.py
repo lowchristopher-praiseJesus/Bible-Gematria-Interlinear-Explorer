@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Optional conversation ID for context")
     history: Optional[List["HistoryMessage"]] = Field(None, description="Recent conversation turns for context")
     page_context: Optional[str] = Field(None, description="Verse reference currently displayed on the Explorer page (e.g. 'John 3:16')")
-    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, socratic, freeform")
+    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, socratic, hermeneutics, freeform")
     mode_params: Optional[Dict[str, Any]] = Field(None, description="Mode-specific parameters, e.g. {'plan': 'chronological', 'day_index': 0}")
     use_openai_llm: Optional[bool] = Field(
         None,

@@ -360,3 +360,23 @@ async def test_devotional_primer_defaults_to_user_source():
 async def test_freeform_primer():
     result = await build_mode_primer("freeform", {})
     assert result["type"] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_hermeneutics_primer_with_no_reference_asks_for_a_passage():
+    result = await build_mode_primer("hermeneutics", {})
+    assert "passage" in result["message"].lower()
+    assert result["route"].endswith("hermeneutics")
+
+
+@pytest.mark.asyncio
+async def test_hermeneutics_primer_with_a_reference_names_the_passage():
+    result = await build_mode_primer("hermeneutics", {"reference": "Romans 8:1"})
+    assert "ROM 8:1" in result["message"] or "Romans 8:1" in result["message"]
+    assert result["data"]["reference"] == "ROM 8:1"
+
+
+@pytest.mark.asyncio
+async def test_hermeneutics_primer_surprise_me_picks_a_passage():
+    result = await build_mode_primer("hermeneutics", {"surprise": True})
+    assert result["data"]["reference"]
