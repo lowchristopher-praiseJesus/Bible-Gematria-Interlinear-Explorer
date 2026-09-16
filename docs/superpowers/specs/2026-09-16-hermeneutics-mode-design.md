@@ -1,13 +1,13 @@
-# Hermeneutics Mode Design Spec
+# Deep Study Mode Design Spec
 
 **Date:** 2026-09-16
 **Status:** Approved for planning
 
 ## Purpose
 
-Add a **Hermeneutics** study mode alongside the existing modes (Bible in a
-Year, Verse of the Day, Parable Study, Topical Study, Devotional, Socratic
-Study, Ask Anything). The user names a passage; the backend runs it through
+Add a **Deep Study** mode alongside the existing modes (Bible in a Year,
+Verse of the Day, Parable Study, Topical Study, Devotional, Socratic Study,
+Ask Anything). The user names a passage; the backend runs it through
 a fixed 8-phase interpretive methodology, streaming each phase into the chat
 as it completes, and finishes with a **Final Verified Interpretation**. The
 completed run is also written to the artifact pane as one scrollable report.
@@ -44,12 +44,33 @@ on contested passages (Hebrews 6:4–6, Galatians 5:4, Job 1:21). This is the
 intended behaviour of the mode, recorded here so it is understood as a
 deliberate product decision rather than an accident of prompting.
 
+### Naming
+
+The mode is **"Deep Study"** to the user and **`hermeneutics`** in the code.
+The codebase already separates the two (`reading_plan` → "Bible in a Year",
+`verse` → "Verse of the Day", `topic` → "Topical Study"), so the identifier
+stays precise for developers while the label stays in register with every
+other mode name — plain English, no jargon.
+
+"Deep Study" was chosen over "Hermeneutics" (the only term in the picker a
+newcomer would have to look up) and over the method names in this tradition
+— "Berean Study", "Rightly Dividing", "Search the Scriptures". Those last
+ones are deliberately held in reserve: Acts 17:11's Bereans "searched the
+scriptures daily whether those things were so", which is claim-testing —
+precisely what this mode *redirects away from* (see *A claim is not a
+passage*). Naming it Berean would invite the one input that gets bounced, and
+the name properly belongs to a future claim-verification mode.
+
+The icon is `Layers`, reading as the eight stacked phases. A scales icon was
+rejected for implying the mode passes judgement, which Phase 8 deliberately
+does not.
+
 ## Scope
 
 **In scope:**
 
-- A new `'hermeneutics'` member of `SessionMode`, with `MODE_LABELS`,
-  `MODE_ORDER` and icon entries.
+- A new `'hermeneutics'` member of `SessionMode`, with `MODE_LABELS`
+  (`→ 'Deep Study'`), `MODE_ORDER` and `Layers` icon entries.
 - A new `'hermeneutics_report'` member of the `ArtifactLink` type union,
   carrying the finished report inline (no fetch on open), exactly as
   `'devotional'` does.
@@ -64,8 +85,8 @@ deliberate product decision rather than an accident of prompting.
   (`chatbot/data/hermeneutic_rulings.py`).
 - New dependency-free `Complete.db` lookups in `chatbot/bible_search.py`:
   per-word interlinear data and local Strong's entries.
-- A **Hermeneutics** starter button in `ModePickerScreen`, a `PhaseList`
-  chat component, and a `HermeneuticsArtifact` pane component.
+- A **Deep Study** starter button in `ModePickerScreen`, a `PhaseList` chat
+  component, and a `HermeneuticsArtifact` pane component.
 - Description-based passage resolution (curated parable lookup, then an LLM
   fallback) with the resolved reference echoed back to the user, and
   classification of a doctrinal claim as something to redirect rather than
@@ -115,7 +136,7 @@ current contract assumes one answer per turn:
 
 ### Mode lifecycle
 
-1. The user picks **Hermeneutics** from `ModePickerScreen`. `startWithChoices`
+1. The user picks **Deep Study** from `ModePickerScreen`. `startWithChoices`
    posts a prompt asking for a passage, with a **"Surprise me"** pill (the
    same affordance Socratic Study offers).
 2. The primer (`build_mode_primer`, `chatbot/router.py`) resolves the
@@ -415,13 +436,13 @@ report travels inline on the link, so opening the pane fetches nothing.
 
 ### `frontend/src/components/shell/ModePickerScreen.tsx`
 
-A **Hermeneutics** starter bubble using the existing `startWithChoices`,
-offering a **"Surprise me"** pill.
+A **Deep Study** starter bubble (`Layers` icon) using the existing
+`startWithChoices`, offering a **"Surprise me"** pill.
 
 ### `frontend/src/components/shell/SessionsPane.tsx` / `useSessionsStore.ts`
 
-`'hermeneutics'` in `MODE_ORDER`, a `Scale` lucide icon, and a
-`'Hermeneutics'` label.
+`'hermeneutics'` in `MODE_ORDER`, a `Layers` lucide icon, and a
+`'Deep Study'` label.
 
 ## Data flow
 

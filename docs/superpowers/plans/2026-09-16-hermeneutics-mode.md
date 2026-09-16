@@ -1,8 +1,8 @@
-# Hermeneutics Mode Implementation Plan
+# Deep Study Mode Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a **Hermeneutics** study mode that runs a passage through a fixed 8-phase interpretive methodology, streaming each phase into the chat and writing the finished report to the artifact pane.
+**Goal:** Add a **Deep Study** mode that runs a passage through a fixed 8-phase interpretive methodology, streaming each phase into the chat and writing the finished report to the artifact pane.
 
 **Architecture:** A new async-generator orchestrator (`chatbot/hermeneutics.py`) runs one LLM call per phase via `simple_completion()`, feeding each phase the passage text, the prior phases' output, and its own grounding. Phases 2, 4 and 7 perform real `Complete.db` lookups (interlinear words, Strong's entries, English full-text search, witness-verse verification); the rest run on model knowledge. Each completed phase is emitted to the browser as a new additive `phase` SSE event on `/chat/stream`, ahead of the single `final` event that carries the assembled report plus an inline artifact link.
 
@@ -22,6 +22,7 @@
 - Phase 8 **never blocks, retries, or suppresses** a report. A failed test is disclosed, not enforced.
 - Passage scope: a single verse or a range of **at most 25 verses**. Anything larger gets a narrowing reply, never a truncated run. The cap is set by the parable corpus — 12 of the 42 entries in `chatbot/data/parables.py` exceed 12 verses, the longest (The Prodigal Son, Luke 15:11-32) being 22.
 - A passage may be named by **reference** or by **description** ("the parable of the ten virgins"). Any resolution the user did not type verbatim is echoed back to them.
+- **The user-facing name is "Deep Study"; the internal identifier is `hermeneutics`.** This follows the existing split (`reading_plan` → "Bible in a Year", `verse` → "Verse of the Day", `topic` → "Topical Study"). So `SessionMode`'s value, `chatbot/hermeneutics.py`, `HermeneuticsArtifact`, the `hermeneutics_report` artifact type and every `route` string all keep the `hermeneutics` spelling — only `MODE_LABELS` and the picker button say "Deep Study". Do not rename the identifier to match the label.
 - Every git commit message ends with the line `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 - The existing SSE contract must be preserved exactly: zero or more `stream` events, then **exactly one** `final`, then a terminal `trace`. The new `phase` event is additive only.
 
@@ -3396,7 +3397,7 @@ EOF
 
 ---
 
-### Task 16: Mode picker and sidebar
+### Task 16: Mode picker and sidebar ("Deep Study")
 
 **Files:**
 - Modify: `frontend/src/components/shell/ModePickerScreen.tsx` (add beside the Socratic Study button at ~:258), `frontend/src/components/shell/SessionsPane.tsx` (`MODE_ORDER` :35, `MODE_ICONS` :44), `frontend/src/store/useSessionsStore.ts` (`MODE_LABELS` :47)
@@ -3411,14 +3412,14 @@ EOF
 Append to `frontend/src/components/shell/ModePickerScreen.test.tsx`:
 
 ```tsx
-it('offers a Hermeneutics starter', () => {
+it('offers a Deep Study starter', () => {
   renderModePicker()
-  expect(screen.getByRole('button', { name: /hermeneutics/i })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /deep study/i })).toBeInTheDocument()
 })
 
 it('creates a hermeneutics session with a Surprise me choice', async () => {
   renderModePicker()
-  await userEvent.click(screen.getByRole('button', { name: /hermeneutics/i }))
+  await userEvent.click(screen.getByRole('button', { name: /deep study/i }))
   const session = useSessionsStore.getState().sessions[0]
   expect(session.mode).toBe('hermeneutics')
   expect(screen.getByRole('button', { name: /surprise me/i })).toBeInTheDocument()
@@ -3430,21 +3431,22 @@ Match the existing tests' helper names (`renderModePicker` above stands in for w
 Append to `frontend/src/components/shell/SessionsPane.test.tsx`:
 
 ```tsx
-it('groups hermeneutics sessions under their own heading', () => {
+it('groups Deep Study sessions under their own heading', () => {
   useSessionsStore.getState().createSession('hermeneutics', {})
   renderSessionsPane()
-  expect(screen.getByText('Hermeneutics')).toBeInTheDocument()
+  // The label differs from the mode id on purpose — see Global Constraints.
+  expect(screen.getByText('Deep Study')).toBeInTheDocument()
 })
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd frontend && npm test -- ModePickerScreen SessionsPane`
-Expected: FAIL — no Hermeneutics button; `MODE_LABELS` has no `hermeneutics` key (a TypeScript error once `SessionMode` includes it — which is the point: the `Record<SessionMode, …>` maps force every site to be updated).
+Expected: FAIL — no Deep Study button; `MODE_LABELS` has no `hermeneutics` key (a TypeScript error once `SessionMode` includes it — which is the point: the `Record<SessionMode, …>` maps force every site to be updated).
 
 - [ ] **Step 3: Write the implementation**
 
-In `ModePickerScreen.tsx`, after the Socratic Study button (import `Scale` from `lucide-react`):
+In `ModePickerScreen.tsx`, after the Socratic Study button (import `Layers` from `lucide-react`):
 
 ```tsx
           <button
@@ -3452,21 +3454,21 @@ In `ModePickerScreen.tsx`, after the Socratic Study button (import `Scale` from 
             onClick={() =>
               startWithChoices(
                 'hermeneutics',
-                '⚖️ Hermeneutics',
+                '📚 Deep Study',
                 'Name a passage and I\'ll run it through all eight phases — context, semantics, witnesses, covenant, typology and the validation tests.',
                 [{ label: 'Surprise me', modeParams: { surprise: true } }]
               )
             }
           >
-            <Scale className="h-4 w-4 shrink-0" aria-hidden="true" /> Hermeneutics
+            <Layers className="h-4 w-4 shrink-0" aria-hidden="true" /> Deep Study
           </button>
 ```
 
 Add `surprise?: boolean` to `ModeParams` in `frontend/src/types/session.ts`, and map it in `toWireModeParams` (`chatApi.ts`) as `surprise → surprise`.
 
-In `SessionsPane.tsx`: add `'hermeneutics'` to `MODE_ORDER` immediately after `'socratic'`, and `hermeneutics: Scale` to `MODE_ICONS` (importing `Scale`).
+In `SessionsPane.tsx`: add `'hermeneutics'` to `MODE_ORDER` immediately after `'socratic'`, and `hermeneutics: Layers` to `MODE_ICONS` (importing `Layers`). `Layers` reads as the eight stacked phases; a scales icon would imply the mode passes judgement, which Phase 8 deliberately does not.
 
-In `useSessionsStore.ts`: add `hermeneutics: 'Hermeneutics'` to `MODE_LABELS`.
+In `useSessionsStore.ts`: add `hermeneutics: 'Deep Study'` to `MODE_LABELS`.
 
 - [ ] **Step 4: Run the full frontend suite**
 
@@ -3478,7 +3480,7 @@ Expected: PASS across the board. `Record<SessionMode, …>` exhaustiveness means
 ```bash
 git add frontend/src/components/shell/ModePickerScreen.tsx frontend/src/components/shell/ModePickerScreen.test.tsx frontend/src/components/shell/SessionsPane.tsx frontend/src/components/shell/SessionsPane.test.tsx frontend/src/store/useSessionsStore.ts frontend/src/types/session.ts frontend/src/lib/chatApi.ts
 git commit -m "$(cat <<'EOF'
-feat(hermeneutics): mode picker entry and sidebar grouping
+feat(hermeneutics): Deep Study picker entry and sidebar grouping
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -3536,7 +3538,7 @@ Start the app per `CHATBOT_SETUP.md`, then in the UI:
 Add to `CLAUDE.md`, after the "Devotional 'Pick one for me'" section:
 
 ```markdown
-## Hermeneutics mode
+## Deep Study mode (internal id `hermeneutics`)
 
 Runs a passage (a verse or a range of at most 25 verses — see
 `MAX_PASSAGE_VERSES`, sized to fit every curated parable) through a fixed
