@@ -66,11 +66,17 @@ deliberate product decision rather than an accident of prompting.
   per-word interlinear data and local Strong's entries.
 - A **Hermeneutics** starter button in `ModePickerScreen`, a `PhaseList`
   chat component, and a `HermeneuticsArtifact` pane component.
+- Description-based passage resolution (curated parable lookup, then an LLM
+  fallback) with the resolved reference echoed back to the user.
 
 **Out of scope:**
 
 - Resumable runs. A mid-run disconnect keeps the phases already delivered;
   recovery is the existing regenerate button. (See *Approaches considered*.)
+- Fixing the same description gap in **Socratic Study**, which also accepts
+  only regex-matched references today. `resolve_description` is deliberately
+  kept local to `chatbot/hermeneutics.py`; promoting it to a shared module
+  is a separate, easy follow-up once it has proved itself here.
 - Chapter-length or whole-book runs. A chapter request is answered with a
   narrow-it-down reply.
 - User-editable rulings. `RULINGS` is a curated code module, edited by
@@ -110,18 +116,55 @@ current contract assumes one answer per turn:
 2. The primer (`build_mode_primer`, `chatbot/router.py`) resolves the
    passage. "Surprise me" draws from `random_verse()` as Socratic's primer
    does.
-3. Naming a passage runs the pipeline on `/chat/stream`.
+3. Naming a passage runs the pipeline on `/chat/stream`. The passage may be
+   named as a reference ("1 Thessalonians 4:15-18") **or described**
+   ("the parable of the ten virgins") — see *Naming a passage* below.
 4. Once the report lands, `runDigest` is persisted into `modeParams`.
    Subsequent turns are ordinary grounded Q&A carrying that digest.
 5. Naming a **new** passage in a later turn starts a fresh run.
 
+### Naming a passage
+
+A user should not have to know chapter and verse to use the mode. Resolution
+runs in three steps, first hit wins:
+
+1. **Explicit reference** — `_detect_reference` (the regex path Socratic
+   Study already uses), covering "John 3:16", "1 Thess 4:15-18", "Gen 1".
+2. **Curated parable lookup** — a name match against the 42 entries in
+   `chatbot/data/parables.py`, which already map names to references.
+   Matching is normalised, so "the parable of the ten virgins", "ten
+   virgins" and "the 10 virgins" all resolve to `MAT 25:1-13`. This is a
+   local table lookup: no LLM call, no failure mode.
+3. **LLM fallback** — anything else ("the armour of God", "where Paul talks
+   about his thorn") goes to one short completion that returns a reference,
+   following `devotional.pick_verse_for_theme()`'s existing shape: parse the
+   reply with `_find_flexible_verse_refs`, retry once, and give up cleanly
+   rather than guessing.
+
+**A resolution the user did not type verbatim is always echoed back** — "Reading
+that as **Matthew 25:1-13** — running it now." A wrong guess is then visible
+and correctable on the next turn instead of silently analysing the wrong
+passage. An explicit reference needs no echo.
+
+If all three steps fail, the mode asks for a reference rather than running
+on a guess.
+
 ### Passage scope
 
-A single verse or a verse range of **at most 12 verses**. A chapter-sized or
+A single verse or a verse range of **at most 25 verses**. A chapter-sized or
 longer request is answered with a narrowing question ("That's 31 verses —
 which part carries the point you're after?") rather than a run. This caps
 Phase 2 and Phase 7 lookups, which scale with the number of original-language
-words, and keeps a run inside a few minutes.
+words.
+
+The limit is set by the parable corpus, which is the natural stress case for
+named passages: **12 of the 42 curated parables exceed 12 verses**, including
+the Ten Virgins (Matthew 25:1-13, 13 verses) that Phase 5's own worked
+example turns on, and the Prodigal Son (Luke 15:11-32) at 22. A cap of 25
+admits every one of them while still refusing chapter-length input. The cost
+is that the slowest phases roughly double on a long passage versus a short
+one, which is accepted: a mode whose most-requested passages need a
+second clarifying turn is worse than a mode that is sometimes slow.
 
 ### Phase execution
 
@@ -187,8 +230,17 @@ endpoints behaviourally identical matches how every other mode works today.
 (`_detect_reference`, `_resolve_verse_reference`, `_ref_from_history`), and
 its `route` string convention.
 
-Also owns: passage-scope enforcement, the post-report Q&A path (answering
-from `runDigest` instead of re-running), and digest construction.
+Also owns: passage-scope enforcement, description resolution
+(`resolve_description`, using `chatbot/data/parables.py`'s existing name →
+reference table and then a `simple_completion` fallback), the post-report
+Q&A path (answering from `runDigest` instead of re-running), and digest
+construction.
+
+### `chatbot/data/parables.py`
+
+Read, not modified. Its 42 `{id, name, reference}` entries are already the
+name → reference table description resolution needs; no parallel list is
+introduced.
 
 ### `chatbot/hermeneutics_phases.py` (new)
 
@@ -320,12 +372,14 @@ offering a **"Surprise me"** pill.
 ## Data flow
 
 ```
-User: "Run 1 Thessalonians 4:15-18"
+User: "Run the parable of the ten virgins"
   │
   ├─ ChatPane → postChatStream(mode: 'hermeneutics', mode_params: {…})
   │
   ├─ api.py → hermeneutics.run()
-  │     ├─ scope check (≤ 12 verses)      → else narrowing reply
+  │     ├─ resolve: reference regex → parables table → LLM fallback
+  │     │     "ten virgins" → MAT 25:1-13, echoed back to the user
+  │     ├─ scope check (≤ 25 verses)      → else narrowing reply
   │     ├─ llm_unconfigured_error()       → else fail fast
   │     ├─ passage KJV + get_book_context()
   │     │
@@ -361,6 +415,16 @@ Later turn: "So does this contradict Matthew 25?"
   message. The run is not resumable (the accepted cost of approach A);
   recovery is the existing regenerate button.
 - **Passage out of scope** — a narrowing question, never a truncated run.
+- **A description that resolves to nothing** — the LLM fallback returns no
+  parseable reference after one retry, so the mode asks for a reference
+  rather than running on a guess. It never falls back to a random verse
+  (`devotional.pick_verse_for_theme` does, because a devotional on *some*
+  verse is still useful; an eight-phase analysis of a passage the user did
+  not ask about is not).
+- **A description that resolves to the wrong passage** — unavoidable with an
+  LLM fallback, so it is made visible: any non-verbatim resolution is echoed
+  back ("Reading that as **Matthew 25:1-13**"), and naming a different
+  passage on the next turn starts a fresh run.
 
 ## Testing
 
@@ -386,10 +450,22 @@ TDD throughout: each test below is written before the code it covers.
 - Phase 8 `FAILED` is reported without retry and without suppressing the
   report.
 - A chapter-sized request returns the narrowing reply instead of running.
-- A range longer than 12 verses is refused.
+- A range longer than 25 verses is refused; a 25-verse range is accepted.
+- Every curated parable's reference is within the cap (a regression guard on
+  the two settings that collided: the cap and the parable corpus).
 - A post-report turn answers from `runDigest` instead of re-running.
 - A phase that raises does not abort the run; its `status` is `error` and
   later phases still execute.
+
+`test_hermeneutics_description.py`
+
+- "the parable of the ten virgins", "ten virgins" and "the 10 virgins" all
+  resolve to `MAT 25:1-13` from the curated table, with no LLM call.
+- An explicit reference in the message wins over a description in it.
+- An unrecognised description falls through to the LLM fallback, and an
+  unparseable reply after one retry resolves to nothing rather than a guess.
+- A resolution the user did not type verbatim is echoed back in the reply;
+  an explicit reference is not.
 
 `test_bible_search.py`
 

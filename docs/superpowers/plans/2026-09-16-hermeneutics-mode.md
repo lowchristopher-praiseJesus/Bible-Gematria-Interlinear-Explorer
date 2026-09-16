@@ -20,7 +20,8 @@
 - Strong's numbers are prefixed `H` (Hebrew) / `G` (Greek).
 - Reference format throughout the chatbot is USFM + space, e.g. `"1TH 4:15-18"`, `"GEN 1:1"`.
 - Phase 8 **never blocks, retries, or suppresses** a report. A failed test is disclosed, not enforced.
-- Passage scope: a single verse or a range of **at most 12 verses**. Anything larger gets a narrowing reply, never a truncated run.
+- Passage scope: a single verse or a range of **at most 25 verses**. Anything larger gets a narrowing reply, never a truncated run. The cap is set by the parable corpus — 12 of the 42 entries in `chatbot/data/parables.py` exceed 12 verses, the longest (The Prodigal Son, Luke 15:11-32) being 22.
+- A passage may be named by **reference** or by **description** ("the parable of the ten virgins"). Any resolution the user did not type verbatim is echoed back to them.
 - Every git commit message ends with the line `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 - The existing SSE contract must be preserved exactly: zero or more `stream` events, then **exactly one** `final`, then a terminal `trace`. The new `phase` event is additive only.
 
@@ -34,7 +35,8 @@
 | `chatbot/bible_search.py` (modify) | `fetch_interlinear_sync`, `fetch_strongs_entries_sync` — dependency-free `Complete.db` readers. |
 | `chatbot/tools.py` (modify) | `fetch_interlinear`, `fetch_strongs_local` — async, `record_tool`-instrumented wrappers. |
 | `chatbot/hermeneutics_phases.py` (new) | The eight `PhaseSpec` definitions: prompts, grounding kind, token budget. Prose-heavy, no orchestration logic. |
-| `chatbot/hermeneutics.py` (new) | Orchestration: scope check, reference resolution, `run()` generator, Phase 4 verification, Phase 8 verdict parsing, synthesis, post-report Q&A, digest. |
+| `chatbot/data/parables.py` (read only) | Existing 42-entry name → reference table, reused for description resolution. Not modified. |
+| `chatbot/hermeneutics.py` (new) | Orchestration: scope check, reference and description resolution, `run()` generator, Phase 4 verification, Phase 8 verdict parsing, synthesis, post-report Q&A, digest. |
 | `chatbot/router.py` (modify) | `mode == "hermeneutics"` primer branch. |
 | `chatbot/api.py` (modify) | Dispatch on both endpoints; emit `phase` SSE events. |
 | `chatbot/schemas.py` (modify) | Mode description + `PhaseEvent` schema. |
@@ -781,7 +783,7 @@ EOF
 
 ---
 
-### Task 5: Passage scope and reference resolution
+### Task 5: Passage scope and passage resolution
 
 **Files:**
 - Create: `chatbot/hermeneutics.py`
@@ -790,10 +792,12 @@ EOF
 **Interfaces:**
 - Consumes: `_resolve_verse_reference`, `_format_reference` (`chatbot/router.py`); `_detect_reference`, `_reference_from_history` (`chatbot/socratic.py`); `random_verse` (`chatbot/tools.py`).
 - Produces:
-  - `MAX_PASSAGE_VERSES = 12`
+  - `MAX_PASSAGE_VERSES = 25`
   - `parse_scope(reference: str) -> Tuple[str, int, int, int]` → `(usfm, chapter, start_verse, end_verse)`; raises `ScopeError` for a bare chapter or an over-long range.
   - `class ScopeError(Exception)` with a `.message` carrying the user-facing narrowing reply.
-  - `resolve_passage(message: str, reference: Optional[str], history: Optional[List[Dict[str, str]]]) -> Optional[str]`
+  - `async resolve_passage(message, reference, history) -> Tuple[Optional[str], bool]` — `(reference, was_described)`. `was_described` is True when the passage came from a description rather than something the user typed verbatim, and is what makes the run echo its reading back.
+  - `async resolve_description(text: str) -> Optional[str]` — curated parable lookup, then a one-retry LLM fallback.
+  - `find_parable_reference(text: str) -> Optional[str]` — the local table lookup, no LLM call.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -813,14 +817,31 @@ def test_parse_scope_range():
     assert hermeneutics.parse_scope("1TH 4:15-18") == ("1TH", 4, 15, 18)
 
 
-def test_parse_scope_allows_a_twelve_verse_range():
-    assert hermeneutics.parse_scope("ROM 8:1-12") == ("ROM", 8, 1, 12)
+def test_parse_scope_allows_the_longest_curated_parable():
+    # The Prodigal Son, Luke 15:11-32 — 22 verses, the corpus maximum.
+    assert hermeneutics.parse_scope("LUK 15:11-32") == ("LUK", 15, 11, 32)
 
 
-def test_parse_scope_rejects_a_thirteen_verse_range():
+def test_parse_scope_allows_a_twenty_five_verse_range():
+    assert hermeneutics.parse_scope("ROM 8:1-25") == ("ROM", 8, 1, 25)
+
+
+def test_parse_scope_rejects_a_twenty_six_verse_range():
     with pytest.raises(hermeneutics.ScopeError) as exc:
-        hermeneutics.parse_scope("ROM 8:1-13")
-    assert "13 verses" in exc.value.message
+        hermeneutics.parse_scope("ROM 8:1-26")
+    assert "26 verses" in exc.value.message
+
+
+def test_every_curated_parable_is_within_the_cap():
+    """The cap and the parable corpus are two settings that can silently
+    collide — this is the guard that they have not."""
+    from chatbot.data.parables import PARABLES
+    from chatbot.router import _resolve_verse_reference
+
+    for parable in PARABLES:
+        resolved = _resolve_verse_reference(parable["reference"])
+        assert resolved, f"{parable['id']}: reference does not resolve"
+        hermeneutics.parse_scope(resolved)  # raises ScopeError if over
 
 
 def test_parse_scope_rejects_a_bare_chapter_and_says_how_long_it_is():
@@ -887,7 +908,7 @@ from chatbot.bible_search import list_passage_verses_sync
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference
 from chatbot.socratic import _detect_reference, _reference_from_history
 
-MAX_PASSAGE_VERSES = 12
+MAX_PASSAGE_VERSES = 25
 
 _SCOPE_RE = re.compile(r"^([1-3]?[A-Z]{2,3})\s+(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$")
 
@@ -975,7 +996,7 @@ Note: `_USFM_TO_BOOK` is imported from `chatbot/router.py`, where `chatbot/socra
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python3 -m pytest tests/chatbot/test_hermeneutics_scope.py -v`
-Expected: PASS (10 tests)
+Expected: PASS (13 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -983,6 +1004,242 @@ Expected: PASS (10 tests)
 git add chatbot/hermeneutics.py tests/chatbot/test_hermeneutics_scope.py
 git commit -m "$(cat <<'EOF'
 feat(hermeneutics): passage scope enforcement and reference resolution
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+- [ ] **Step 6: Write the failing description-resolution test**
+
+A user should not have to know chapter and verse to use the mode. Create `tests/chatbot/test_hermeneutics_description.py`:
+
+```python
+import pytest
+
+from chatbot import hermeneutics
+
+
+def test_parable_lookup_matches_the_full_name():
+    assert hermeneutics.find_parable_reference("the parable of the ten virgins") == "MAT 25:1-13"
+
+
+def test_parable_lookup_matches_a_bare_name():
+    assert hermeneutics.find_parable_reference("ten virgins") == "MAT 25:1-13"
+
+
+def test_parable_lookup_matches_digits_for_number_words():
+    assert hermeneutics.find_parable_reference("the 10 virgins") == "MAT 25:1-13"
+
+
+def test_parable_lookup_matches_inside_a_sentence():
+    assert hermeneutics.find_parable_reference(
+        "Could you run the prodigal son for me?"
+    ) == "LUK 15:11-32"
+
+
+def test_parable_lookup_ignores_an_unrelated_message():
+    assert hermeneutics.find_parable_reference("what does grace mean?") is None
+
+
+def test_parable_lookup_does_not_match_on_a_single_common_word():
+    # "The Lost Sheep" and "The Lost Coin" both contain "lost"; one weak
+    # token must not pick a parable arbitrarily.
+    assert hermeneutics.find_parable_reference("I feel lost") is None
+
+
+async def test_resolve_description_prefers_the_table_over_the_llm(monkeypatch):
+    async def explode(*args, **kwargs):
+        raise AssertionError("the table should have answered without an LLM call")
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", explode)
+    assert await hermeneutics.resolve_description("the ten virgins") == "MAT 25:1-13"
+
+
+async def test_resolve_description_falls_back_to_the_llm(monkeypatch):
+    async def fake(system_prompt, user_prompt, *, max_tokens=64):
+        return "Ephesians 6:10-18"
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", fake)
+    assert await hermeneutics.resolve_description("the armour of God") == "EPH 6:10-18"
+
+
+async def test_resolve_description_retries_once_then_gives_up(monkeypatch):
+    calls = []
+
+    async def unparseable(system_prompt, user_prompt, *, max_tokens=64):
+        calls.append(1)
+        return "I'm not sure which passage you mean."
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", unparseable)
+    assert await hermeneutics.resolve_description("something vague") is None
+    assert len(calls) == 2, "one retry, then give up"
+
+
+async def test_resolve_description_never_guesses_a_random_verse(monkeypatch):
+    async def empty(system_prompt, user_prompt, *, max_tokens=64):
+        return ""
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", empty)
+    # Unlike devotional.pick_verse_for_theme, which falls back to a random
+    # verse: an eight-phase analysis of a passage the user did not ask about
+    # is worse than asking them.
+    assert await hermeneutics.resolve_description("???") is None
+
+
+async def test_resolve_passage_flags_a_described_passage(monkeypatch):
+    async def explode(*args, **kwargs):
+        raise AssertionError("no LLM call expected")
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", explode)
+    resolved, described = await hermeneutics.resolve_passage(
+        "run the parable of the ten virgins", reference=None, history=None
+    )
+    assert resolved == "MAT 25:1-13"
+    assert described is True
+
+
+async def test_resolve_passage_does_not_flag_an_explicit_reference():
+    resolved, described = await hermeneutics.resolve_passage(
+        "run Romans 8:1", reference=None, history=None
+    )
+    assert resolved == "ROM 8:1"
+    assert described is False
+
+
+async def test_resolve_passage_prefers_an_explicit_reference_over_a_description(monkeypatch):
+    async def explode(*args, **kwargs):
+        raise AssertionError("no LLM call expected")
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", explode)
+    resolved, described = await hermeneutics.resolve_passage(
+        "the parable of the ten virgins — actually, Matthew 25:1", reference=None, history=None
+    )
+    assert resolved == "MAT 25:1"
+    assert described is False
+```
+
+- [ ] **Step 7: Run the tests to verify they fail**
+
+Run: `python3 -m pytest tests/chatbot/test_hermeneutics_description.py -v`
+Expected: FAIL — `AttributeError: module 'chatbot.hermeneutics' has no attribute 'find_parable_reference'`
+
+- [ ] **Step 8: Write the description-resolution implementation**
+
+Replace `resolve_passage` in `chatbot/hermeneutics.py` with the version below, and add the two new functions above it. New imports: `PARABLES` from `chatbot.data.parables`, `simple_completion` from `chatbot.ollama_client`, and `_find_flexible_verse_refs`, `_format_reference` from `chatbot.router`.
+
+```python
+# Parable names use number words ("Ten Virgins", "Two Sons") while users
+# often type digits.
+_NUMBER_WORDS = {
+    "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
+    "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
+}
+
+# Words carried by so many parable names that matching on them alone would
+# pick a parable arbitrarily.
+_WEAK_TOKENS = {"the", "of", "a", "and", "parable", "story", "lost", "good", "great", "rich", "wise"}
+
+
+def _tokens(text: str) -> set:
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return {_NUMBER_WORDS.get(w, w) for w in words}
+
+
+def find_parable_reference(text: str) -> Optional[str]:
+    """A curated parable named in `text`, as a USFM reference.
+
+    Matches when every distinctive word of the parable's name appears in
+    the message, so "the parable of the ten virgins", "ten virgins" and
+    "the 10 virgins" all hit. A name whose only tokens are weak ones
+    cannot match at all.
+    """
+    message_tokens = _tokens(text)
+    best: Optional[Tuple[int, str]] = None
+    for parable in PARABLES:
+        name_tokens = _tokens(parable["name"])
+        distinctive = name_tokens - _WEAK_TOKENS
+        if not distinctive or not distinctive <= message_tokens:
+            continue
+        # Prefer the most specific name when two parables both match
+        # (e.g. "The Lost Sheep" vs "The Lost Coin" given both words).
+        if best is None or len(distinctive) > best[0]:
+            best = (len(distinctive), parable["reference"])
+    if best is None:
+        return None
+    return _resolve_verse_reference(best[1])
+
+
+_DESCRIPTION_SYSTEM_PROMPT = (
+    "You identify which Bible passage a description refers to. Reply with only "
+    "the reference and nothing else."
+)
+
+
+async def resolve_description(text: str) -> Optional[str]:
+    """A passage described rather than cited, as a USFM reference.
+
+    The curated parable table answers first (no LLM call). Anything else
+    gets one short completion plus one retry. Unlike
+    devotional.pick_verse_for_theme(), a failure returns None rather than a
+    random verse: an eight-phase analysis of a passage the user did not ask
+    about is worse than asking them which passage they meant.
+    """
+    from_table = find_parable_reference(text)
+    if from_table:
+        return from_table
+
+    ask = (
+        f"Which Bible passage is this describing: '{text}'? "
+        "Reply with only the reference, e.g. `Ephesians 6:10-18`. "
+        "If you cannot tell, reply with the word NONE."
+    )
+    for _ in range(2):
+        reply = await simple_completion(_DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=64)
+        refs = _find_flexible_verse_refs(reply or "")
+        if refs:
+            return _format_reference(*refs[0])
+    return None
+
+
+async def resolve_passage(
+    message: str,
+    reference: Optional[str],
+    history: Optional[List[Dict[str, str]]],
+) -> Tuple[Optional[str], bool]:
+    """(the passage this turn is about, whether it came from a description).
+
+    A passage named in *this* message always wins over the one the session
+    was previously grounded on — the same precedence socratic.answer()
+    uses. A description is only consulted when no explicit reference is
+    available anywhere, so "the ten virgins — actually, Matthew 25:1" runs
+    the verse the user corrected themselves to.
+    """
+    explicit = (
+        _detect_reference(message)
+        or reference
+        or _reference_from_history(history or [])
+    )
+    if explicit:
+        return explicit, False
+    described = await resolve_description(message)
+    return described, bool(described)
+```
+
+- [ ] **Step 9: Run the tests to verify they pass**
+
+Run: `python3 -m pytest tests/chatbot/test_hermeneutics_description.py tests/chatbot/test_hermeneutics_scope.py -v`
+Expected: PASS. Note that the four `resolve_passage` tests written in Step 1 now unpack a tuple — update them to `resolved, _ = await hermeneutics.resolve_passage(...)` as part of this step.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add chatbot/hermeneutics.py tests/chatbot/test_hermeneutics_description.py tests/chatbot/test_hermeneutics_scope.py
+git commit -m "$(cat <<'EOF'
+feat(hermeneutics): resolve a passage from a description, not just a reference
+
+The curated parable table answers first with no LLM call; anything else
+gets one short completion plus a retry, and gives up rather than guessing.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -1392,7 +1649,7 @@ EOF
 
 **Interfaces:**
 - Consumes: everything from Tasks 4–7; `simple_completion`, `llm_unconfigured_error` (`chatbot/ollama_client.py`).
-- Produces: `async run(reference, message, history) -> AsyncIterator[Dict[str, Any]]`, yielding `{"kind": "phase", "phase": {...}}` per phase and finally `{"kind": "final", "result": {...ChatResponse-shaped...}}`. A phase dict is `{"index", "title", "status", "markdown", "citations"?, "verdicts"?}`.
+- Produces: `async run(reference, message, history) -> AsyncIterator[Dict[str, Any]]`, yielding `{"kind": "phase", "phase": {...}}` per phase and finally `{"kind": "final", "result": {...ChatResponse-shaped...}}`. A phase dict is `{"index", "title", "status", "markdown", "citations"?, "verdicts"?, "audience"?, "speaker"?}`. **Index 0 is reserved** for the echo-back notice emitted when the passage came from a description; it is not a phase, never enters the report or the digest, and the frontend renders it as a plain line.
 - Produces: `build_digest(phases: List[Dict[str, Any]], summary: str) -> str`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1463,6 +1720,33 @@ async def test_run_final_carries_the_synthesis_and_an_artifact(fake_llm):
     assert artifact["type"] == "hermeneutics_report"
     assert artifact["params"]["reference"] == "1TH 4:15-18"
     assert len(artifact["params"]["phases"]) == 8
+
+
+async def test_a_described_passage_is_echoed_back_before_any_phase(monkeypatch, fake_llm):
+    async def from_table(text):
+        return "MAT 25:1-13"
+
+    monkeypatch.setattr(hermeneutics, "resolve_description", from_table)
+    events = await _collect(None, message="run the parable of the ten virgins")
+    first = events[0]["phase"]
+    assert first["index"] == 0
+    assert "MAT 25:1-13" in first["markdown"]
+    assert events[1]["phase"]["index"] == 1, "the notice precedes phase 1"
+
+
+async def test_the_echo_notice_is_not_part_of_the_report(monkeypatch, fake_llm):
+    async def from_table(text):
+        return "MAT 25:1-13"
+
+    monkeypatch.setattr(hermeneutics, "resolve_description", from_table)
+    events = await _collect(None, message="run the parable of the ten virgins")
+    report_phases = events[-1]["result"]["artifacts"][0]["params"]["phases"]
+    assert [p["index"] for p in report_phases] == [1, 2, 3, 4, 5, 6, 7, 8]
+
+
+async def test_an_explicit_reference_is_not_echoed_back(fake_llm):
+    events = await _collect("1TH 4:15-18")
+    assert events[0]["phase"]["index"] == 1, "no notice for a reference the user typed"
 
 
 async def test_run_carries_audience_and_speaker_forward(fake_llm):
@@ -1609,7 +1893,7 @@ async def run(
         })
         return
 
-    resolved = await resolve_passage(message, reference, history)
+    resolved, was_described = await resolve_passage(message, reference, history)
     if not resolved:
         yield _final({
             "type": "chat",
@@ -1629,6 +1913,19 @@ async def run(
             "route": "hermeneutics → out of scope",
         })
         return
+
+    # A passage the user described rather than cited is echoed back before
+    # any phase runs, so a wrong reading is visible immediately instead of
+    # ninety seconds later with the report. Index 0 keeps this on the
+    # existing `phase` event rather than inventing a second event type; the
+    # frontend renders index 0 as a plain notice, not a collapsible phase.
+    if was_described:
+        yield {"kind": "phase", "phase": {
+            "index": 0,
+            "title": "Passage",
+            "status": "done",
+            "markdown": f"Reading that as **{resolved}** — running it now.",
+        }}
 
     passage_text = await passage_text_for(usfm, chapter, start, end)
     completed: List[Dict[str, Any]] = []
@@ -1726,7 +2023,7 @@ async def run(
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python3 -m pytest tests/chatbot/test_hermeneutics_run.py -v`
-Expected: PASS (13 tests)
+Expected: PASS (16 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -1750,7 +2047,7 @@ EOF
 
 **Interfaces:**
 - Consumes: `call_ollama_with_context`, `generate_llm_follow_ups` (`chatbot/ollama_client.py`); `run` (Task 8).
-- Produces: `async answer(reference, message, history, run_digest=None) -> Dict[str, Any]` — the buffered entry point — and `async stream(reference, message, history, run_digest=None) -> AsyncIterator[Dict[str, Any]]` — the streaming one. Both re-run only when there is no digest, or when the message names a *new* passage.
+- Produces: `async answer(reference, message, history, run_digest=None) -> Dict[str, Any]` — the buffered entry point — and `async stream(reference, message, history, run_digest=None) -> AsyncIterator[Dict[str, Any]]` — the streaming one. Both re-run only when there is no digest, or when the message names a *new* passage (by reference **or** by curated parable name — the LLM fallback is not used on a follow-up turn).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1820,6 +2117,30 @@ async def test_a_new_passage_starts_a_fresh_run(monkeypatch, fake_chat):
     assert result["message"] == "ran"
 
 
+async def test_a_newly_named_parable_starts_a_fresh_run(monkeypatch, fake_chat):
+    ran = {}
+
+    async def fake_run(reference, message, history=None):
+        ran["called"] = True
+        yield {"kind": "final", "result": {"type": "chat", "message": "ran", "data": None}}
+
+    monkeypatch.setattr(hermeneutics, "run", fake_run)
+    result = await hermeneutics.answer(
+        "1TH 4:15-18", "now do the prodigal son", history=None, run_digest=DIGEST
+    )
+    assert ran.get("called"), "a parable named by description is a new passage"
+    assert result["message"] == "ran"
+
+
+async def test_a_vague_question_stays_on_the_digest(no_rerun, fake_chat):
+    # Only the table is consulted here, never the LLM fallback — a vague
+    # follow-up is a question about the passage in hand.
+    result = await hermeneutics.answer(
+        "1TH 4:15-18", "what about the bit with the trumpet?", history=None, run_digest=DIGEST
+    )
+    assert result["type"] == "chat"
+
+
 async def test_no_digest_means_run_the_pipeline(monkeypatch, fake_chat):
     async def fake_run(reference, message, history=None):
         yield {"kind": "final", "result": {"type": "chat", "message": "ran", "data": None}}
@@ -1855,7 +2176,16 @@ Answer from those findings. Be concise — a short paragraph. Do not re-run the 
 
 
 def _is_new_passage(message: str, current: Optional[str]) -> bool:
-    named = _detect_reference(message)
+    """True when this follow-up turn actually names a different passage.
+
+    Consults the parable table as well as the reference regex, so "now do
+    the prodigal son" starts a fresh run instead of being answered from the
+    previous passage's digest. The LLM fallback is deliberately NOT used
+    here — it would cost a completion on every follow-up turn, and a
+    description vague enough to need it is more likely a question about the
+    passage in hand than a request for a new one.
+    """
+    named = _detect_reference(message) or find_parable_reference(message)
     return bool(named) and named != current
 
 
@@ -2271,6 +2601,9 @@ Add `'hermeneutics_report'` to the `ArtifactLink['type']` union, and append:
  * SSE event and stored on the assistant message so a reload — or a share —
  * shows the finished run. */
 export interface PhaseResult {
+  /** 1-8 for a real phase. 0 is the "reading that as X" notice shown when
+   * the passage was resolved from a description; it renders as a plain
+   * line and never appears in the report. */
   index: number
   title: string
   status: 'running' | 'done' | 'error'
@@ -2419,6 +2752,15 @@ describe('PhaseList', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/sin-consciousness/i)
   })
 
+  it('renders an index-0 notice as a plain line, not a collapsible phase', () => {
+    render(<PhaseList phases={[done({
+      index: 0, title: 'Passage', markdown: 'Reading that as **MAT 25:1-13**.',
+    })]} />)
+    expect(screen.getByText(/reading that as/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByText(/phase 0/i)).not.toBeInTheDocument()
+  })
+
   it('renders nothing for an empty phase list', () => {
     const { container } = render(<PhaseList phases={[]} />)
     expect(container).toBeEmptyDOMElement()
@@ -2502,9 +2844,17 @@ export function PhaseList({ phases }: { phases: PhaseResult[] }) {
   const failed = phases.flatMap((p) => p.verdicts ?? []).filter((v) => !v.passed)
   return (
     <div className="flex flex-col gap-1.5">
-      {phases.map((phase) => (
-        <Phase key={phase.index} phase={phase} />
-      ))}
+      {phases.map((phase) =>
+        // Index 0 is the "reading that as X" notice a described passage
+        // gets — a line to read, not a phase to open.
+        phase.index === 0 ? (
+          <div key={phase.index} className="text-xs text-[var(--color-text-secondary)]">
+            {renderMarkdown(phase.markdown)}
+          </div>
+        ) : (
+          <Phase key={phase.index} phase={phase} />
+        )
+      )}
       {failed.length > 0 && (
         <div role="status" className="flex items-start gap-2 rounded-md bg-[var(--color-surface-alt)] px-2.5 py-2 text-xs">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-amber)]" aria-hidden="true" />
@@ -2528,7 +2878,7 @@ If `--color-red` or `--color-amber` are not defined in `frontend/src/index.css`,
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd frontend && npm test -- PhaseList && npx tsc -b`
-Expected: PASS (7 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -2952,8 +3302,15 @@ Start the app per `CHATBOT_SETUP.md`, then in the UI:
 2. **Hebrews 6:4–6** — Phase 5 should set the obscure passage under the clear declaration, not the reverse.
 3. **Job 1:21** — Phase 3 should return `SPEAKER: human` and classify the line as recorded, not doctrinal.
 4. **Genesis 1** — the narrowing reply, not a run.
-5. Ask a follow-up after a completed run ("why does the audience matter?") — it must answer from the digest, and the phases must **not** re-run. Confirm in the trace pane.
-6. Reload the page mid-session — the completed phases are still rendered.
+5. **"the parable of the ten virgins"** — resolves from the curated table with
+   no LLM call, echoes "Reading that as **MAT 25:1-13**" *before* Phase 1
+   appears, and runs all eight phases (13 verses, within the 25-verse cap).
+6. **"the armour of God"** — not a parable, so it exercises the LLM fallback;
+   expect Ephesians 6:10-18 and the same echo-back.
+7. **"the bit where that guy does the thing"** — resolves to nothing; expect a
+   request for a reference, never a run on a guessed passage.
+8. Ask a follow-up after a completed run ("why does the audience matter?") — it must answer from the digest, and the phases must **not** re-run. Confirm in the trace pane.
+9. Reload the page mid-session — the completed phases are still rendered.
 
 - [ ] **Step 3: Document the mode**
 
@@ -2962,8 +3319,9 @@ Add to `CLAUDE.md`, after the "Devotional 'Pick one for me'" section:
 ```markdown
 ## Hermeneutics mode
 
-Runs a passage (a verse or a range of at most 12 verses — see
-`MAX_PASSAGE_VERSES`) through a fixed 8-phase interpretive methodology,
+Runs a passage (a verse or a range of at most 25 verses — see
+`MAX_PASSAGE_VERSES`, sized to fit every curated parable) through a fixed
+8-phase interpretive methodology,
 one LLM call per phase, orchestrated by `chatbot/hermeneutics.py` with
 the prompts in `chatbot/hermeneutics_phases.py`. Phases 2, 4 and 7 are
 grounded in real `Complete.db` lookups (interlinear words and Strong's
@@ -2977,6 +3335,16 @@ event — the `stream` / single `final` / terminal `trace` contract is
 otherwise unchanged — and stored on the assistant message, so a reload or
 a share link shows the finished run. The whole report also opens in the
 artifact pane (`hermeneutics_report`, carried inline like `devotional`).
+
+A passage can be named by reference **or described** ("the parable of the
+ten virgins"): resolution tries the reference regex, then a normalised name
+match against the existing `chatbot/data/parables.py` table (no LLM call),
+then one short LLM completion with a single retry. A resolution the user did
+not type verbatim is echoed back before Phase 1 runs, as an index-0 `phase`
+event. Resolution failure asks for a reference rather than guessing. Note
+that the 25-verse cap is sized to the parable corpus — 12 of the 42 parables
+exceed 12 verses, the longest being the Prodigal Son at 22 — so lowering it
+would start rejecting named parables.
 
 The curated idiom rulings in `chatbot/data/hermeneutic_rulings.py` are
 injected only when their trigger phrases match the passage. Every proof
