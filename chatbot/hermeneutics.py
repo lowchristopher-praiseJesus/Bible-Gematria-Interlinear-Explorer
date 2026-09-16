@@ -9,10 +9,13 @@ docs/superpowers/specs/2026-09-16-hermeneutics-mode-design.md.
 """
 
 import re
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from chatbot.bible_search import list_passage_verses_sync
-from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference
+from chatbot.data.parables import PARABLES
+from chatbot.ollama_client import simple_completion
+from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
 from chatbot.socratic import _detect_reference, _reference_from_history
 
 MAX_PASSAGE_VERSES = 25
@@ -81,18 +84,130 @@ def parse_scope(reference: str) -> Tuple[str, int, int, int]:
     return usfm, chapter, start, end
 
 
+# Parable names use number words ("Ten Virgins", "Two Sons") while users
+# often type digits.
+_NUMBER_WORDS = {
+    "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
+    "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
+}
+
+# Words carried by so many parable names that matching on them alone would
+# pick a parable arbitrarily.
+_WEAK_TOKENS = {"the", "of", "a", "and", "parable", "story", "lost", "good", "great", "rich", "wise"}
+
+
+def _tokens(text: str) -> set:
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return {_NUMBER_WORDS.get(w, w) for w in words}
+
+
+def find_parable_reference(text: str) -> Optional[str]:
+    """A curated parable named in `text`, as a USFM reference.
+
+    Matches when every distinctive word of the parable's name appears in
+    the message, so "the parable of the ten virgins", "ten virgins" and
+    "the 10 virgins" all hit. A name whose only tokens are weak ones
+    cannot match at all.
+    """
+    message_tokens = _tokens(text)
+    best: Optional[Tuple[int, str]] = None
+    for parable in PARABLES:
+        name_tokens = _tokens(parable["name"])
+        distinctive = name_tokens - _WEAK_TOKENS
+        if not distinctive or not distinctive <= message_tokens:
+            continue
+        # Prefer the most specific name when two parables both match
+        # (e.g. "The Lost Sheep" vs "The Lost Coin" given both words).
+        if best is None or len(distinctive) > best[0]:
+            best = (len(distinctive), parable["reference"])
+    if best is None:
+        return None
+    return _resolve_verse_reference(best[1])
+
+
+_DESCRIPTION_SYSTEM_PROMPT = (
+    "You identify which Bible passage a description refers to. Reply with only "
+    "the reference and nothing else."
+)
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """What this turn's message turned out to be about.
+
+    `source` drives what happens next:
+      reference   — the user cited it; run, no echo needed
+      description — resolved from a description; run, echoed back first
+      claim       — a proposition to test, not a passage; offer the passage
+                    that bears on it and run nothing
+      none        — nothing found; ask
+    """
+    reference: Optional[str]
+    source: str
+
+
+async def resolve_description(text: str) -> Resolution:
+    """Classify a message that carries no explicit reference.
+
+    The curated parable table answers first (no LLM call). Anything else
+    gets one short completion plus one retry, and that same call also
+    distinguishes a passage description from a doctrinal *claim* — the
+    classification is free, since the call is being made either way.
+
+    Unlike devotional.pick_verse_for_theme(), a failure returns nothing
+    rather than a random verse: an eight-phase analysis of a passage the
+    user did not ask about is worse than asking them which passage they
+    meant.
+    """
+    from_table = find_parable_reference(text)
+    if from_table:
+        return Resolution(from_table, "description")
+
+    ask = (
+        f"Input: '{text}'\n\n"
+        "If this DESCRIBES a Bible passage, reply with only the reference, "
+        "e.g. `Ephesians 6:10-18`.\n"
+        "If this asserts a doctrinal CLAIM to be tested rather than naming a "
+        "passage, reply `CLAIM: <reference of the passage that bears on it "
+        "most directly>`, or just `CLAIM` if no single passage does.\n"
+        "If you cannot tell, reply `NONE`."
+    )
+    for _ in range(2):
+        reply = (await simple_completion(_DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=64)) or ""
+        refs = _find_flexible_verse_refs(reply)
+        bearing = _format_reference(*refs[0]) if refs else None
+        if reply.strip().upper().startswith("CLAIM"):
+            return Resolution(bearing, "claim")
+        if refs:
+            return Resolution(bearing, "description")
+    return Resolution(None, "none")
+
+
 async def resolve_passage(
     message: str,
     reference: Optional[str],
     history: Optional[List[Dict[str, str]]],
-) -> Optional[str]:
-    """The passage this turn is about.
+) -> Resolution:
+    """What passage (if any) this turn is about.
 
     A passage named in *this* message always wins over the one the session
-    was previously grounded on — the same precedence socratic.answer() uses.
+    was previously grounded on — the same precedence socratic.answer()
+    uses. Classification is only reached when no explicit reference is
+    available anywhere, so "the ten virgins — actually, Matthew 25:1" runs
+    the verse the user corrected themselves to, and "verify this claim from
+    1 Thess 4:16 — ..." runs the verse they cited rather than stopping to
+    argue about the claim.
     """
-    return (
-        _detect_reference(message)
-        or reference
-        or _reference_from_history(history or [])
-    )
+    explicit = _detect_reference(message)
+    if not explicit:
+        # Try flexible matching for abbreviated book names like "1 Thess"
+        refs = _find_flexible_verse_refs(message)
+        if refs:
+            explicit = _format_reference(*refs[0])
+    if not explicit:
+        explicit = reference
+    if not explicit:
+        explicit = _reference_from_history(history or [])
+    if explicit:
+        return Resolution(explicit, "reference")
+    return await resolve_description(message)

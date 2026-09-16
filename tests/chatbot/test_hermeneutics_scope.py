@@ -55,21 +55,22 @@ async def test_resolve_passage_prefers_a_reference_named_this_turn():
     resolved = await hermeneutics.resolve_passage(
         "Actually, run Romans 8:1", reference="1TH 4:15-18", history=None
     )
-    assert resolved == "ROM 8:1"
+    assert resolved.reference == "ROM 8:1"
 
 
 async def test_resolve_passage_falls_back_to_the_session_reference():
     resolved = await hermeneutics.resolve_passage(
         "what about the covenant here?", reference="1TH 4:15-18", history=None
     )
-    assert resolved == "1TH 4:15-18"
+    assert resolved.reference == "1TH 4:15-18"
 
 
 async def test_resolve_passage_falls_back_to_history():
     history = [{"role": "user", "text": "Let's look at John 3:16"}]
     resolved = await hermeneutics.resolve_passage("go on", reference=None, history=history)
-    assert resolved == "JHN 3:16"
+    assert resolved.reference == "JHN 3:16"
 
 
 async def test_resolve_passage_returns_none_when_no_passage_anywhere():
-    assert await hermeneutics.resolve_passage("hello", reference=None, history=[]) is None
+    result = await hermeneutics.resolve_passage("hello", reference=None, history=[])
+    assert result.reference is None
