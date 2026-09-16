@@ -10,16 +10,17 @@ docs/superpowers/specs/2026-09-16-hermeneutics-mode-design.md.
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from chatbot.bible_search import list_passage_verses_sync
 from chatbot.book_context import get_book_context
 from chatbot.data.hermeneutic_rulings import render_rulings, rulings_for
 from chatbot.data.parables import PARABLES
-from chatbot.ollama_client import simple_completion
+from chatbot.ollama_client import llm_unconfigured_error, simple_completion
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
 from chatbot.socratic import _detect_reference, _reference_from_history
 from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english, fetch_verse_translations
+from chatbot.hermeneutics_phases import PHASES, SYNTHESIS_PROMPT
 
 MAX_PASSAGE_VERSES = 25
 
@@ -393,3 +394,208 @@ async def verify_witnesses(phase_text: str) -> Tuple[List[Dict[str, Any]], int]:
             continue
         citations.append({"reference": resolved, "text": text, "verified": True})
     return citations, dropped
+
+
+MIN_WITNESSES = 2
+
+
+def _final(result: Dict[str, Any]) -> Dict[str, Any]:
+    return {"kind": "final", "result": result}
+
+
+def build_digest(phases: List[Dict[str, Any]], summary: str) -> str:
+    """The compact carry-forward a post-report turn answers from, instead
+    of re-running the pipeline."""
+    lines = [f"{p['index']}. {p['title']}: {p['markdown'][:400]}" for p in phases]
+    lines.append(f"Final verified interpretation: {summary}")
+    return "\n".join(lines)
+
+
+async def run(
+    reference: Optional[str],
+    message: str,
+    history: Optional[List[Dict[str, str]]] = None,
+) -> AsyncIterator[Dict[str, Any]]:
+    """Run the eight phases, yielding each as it completes, then the final
+    assembled report."""
+    llm_error = llm_unconfigured_error()
+    if llm_error:
+        yield _final({
+            "type": "error", "message": llm_error, "data": None,
+            "route": "hermeneutics → LLM unconfigured",
+        })
+        return
+
+    resolution = await resolve_passage(message, reference, history)
+    resolved = resolution.reference
+    was_described = resolution.source == "description"
+
+    # A claim is not a passage. Running the eight phases on whatever single
+    # verse an LLM associates with a proposition answers a question the user
+    # did not ask, while looking exactly as authoritative as a real run —
+    # the worst output this mode can produce. Say what it is and offer the
+    # passage that bears on it instead.
+    if resolution.source == "claim":
+        offer = (
+            f" The passage that bears on it most directly is **{resolved}** — "
+            "shall I run that?"
+            if resolved
+            else " Which passage would you like me to run on it?"
+        )
+        yield _final({
+            "type": "chat",
+            "message": (
+                "That's a claim to test rather than a passage to interpret, and I run "
+                "the eight phases over one passage at a time." + offer
+            ),
+            "data": {"reference": resolved},
+            "route": "hermeneutics → claim, not a passage",
+            "follow_up_questions": ([f"Run {resolved}"] if resolved else []),
+        })
+        return
+
+    if not resolved:
+        yield _final({
+            "type": "chat",
+            "message": "Which passage would you like me to run? Give me a verse or a "
+                       "short range — for example \"Romans 8:1\" or "
+                       "\"1 Thessalonians 4:15-18\".",
+            "data": None,
+            "route": "hermeneutics → no passage",
+        })
+        return
+
+    try:
+        usfm, chapter, start, end = parse_scope(resolved)
+    except ScopeError as exc:
+        yield _final({
+            "type": "chat", "message": exc.message, "data": {"reference": resolved},
+            "route": "hermeneutics → out of scope",
+        })
+        return
+
+    # Nothing downstream checks that the passage exists: an LLM-resolved
+    # description, or a typo'd reference, can name a chapter or verse range
+    # Complete.db has no text for, and every phase would then run on an
+    # empty string and produce a confident, wholly ungrounded report. Phase
+    # 4 already refuses to cite a verse it cannot fetch; the passage the
+    # whole run is about gets the same guarantee. Checked BEFORE the
+    # echo-back, so an unusable resolution never announces itself as though
+    # the run were starting.
+    passage_text = await passage_text_for(usfm, chapter, start, end)
+    if not passage_text.strip():
+        yield _final({
+            "type": "chat",
+            "message": (
+                f"I couldn't find any text for **{resolved}**"
+                + (" — I may have read your description wrong." if was_described else ".")
+                + " Could you give me the reference you have in mind?"
+            ),
+            "data": {"reference": resolved},
+            "route": "hermeneutics → passage has no text",
+        })
+        return
+
+    # A passage the user described rather than cited is echoed back before
+    # any phase runs, so a wrong reading is visible immediately instead of
+    # ninety seconds later with the report. Index 0 keeps this on the
+    # existing `phase` event rather than inventing a second event type; the
+    # frontend renders index 0 as a plain notice, not a collapsible phase.
+    if was_described:
+        yield {"kind": "phase", "phase": {
+            "index": 0,
+            "title": "Passage",
+            "status": "done",
+            "markdown": f"Reading that as **{resolved}** — running it now.",
+        }}
+
+    completed: List[Dict[str, Any]] = []
+
+    for spec in PHASES:
+        phase: Dict[str, Any] = {
+            "index": spec.index, "title": spec.title, "status": "done", "markdown": "",
+        }
+        try:
+            grounding = await build_grounding(
+                spec.grounding, usfm, chapter, start, end, passage_text
+            )
+            prior = "\n\n".join(
+                f"PHASE {p['index']} ({p['title']}):\n{p['markdown']}" for p in completed
+            )
+            user_prompt = (
+                f"PASSAGE: {resolved}\n\nTEXT (KJV): {passage_text}\n\n"
+                + (f"{grounding}\n\n" if grounding else "")
+                + (f"FINDINGS SO FAR:\n{prior}\n\n" if prior else "")
+                + "Carry out your phase now."
+            )
+            phase["markdown"] = await simple_completion(
+                spec.system_prompt, user_prompt, max_tokens=spec.max_tokens
+            )
+            if spec.index == 1:
+                phase["audience"] = parse_marker(phase["markdown"], "AUDIENCE")
+            if spec.index == 3:
+                phase["speaker"] = parse_marker(phase["markdown"], "SPEAKER")
+            if spec.index == 4:
+                citations, dropped = await verify_witnesses(phase["markdown"])
+                phase["citations"] = citations
+                if len(citations) < MIN_WITNESSES:
+                    phase["markdown"] += (
+                        "\n\n_Note: fewer than two proposed witnesses could be "
+                        f"verified against the text ({dropped} dropped as unresolvable). "
+                        "Weigh this interpretation accordingly._"
+                    )
+                elif dropped:
+                    phase["markdown"] += (
+                        f"\n\n_{dropped} proposed reference(s) did not resolve and were dropped._"
+                    )
+            if spec.index == 8:
+                phase["verdicts"] = parse_verdicts(phase["markdown"])
+        except Exception as exc:  # a slow provider must not discard the run
+            phase["status"] = "error"
+            phase["markdown"] = f"This phase could not be completed: {type(exc).__name__}: {exc}"
+
+        completed.append(phase)
+        yield {"kind": "phase", "phase": phase}
+
+    missing = [p["index"] for p in completed if p["status"] == "error"]
+    findings = "\n\n".join(
+        f"PHASE {p['index']} ({p['title']}):\n{p['markdown']}"
+        for p in completed if p["status"] == "done"
+    )
+    try:
+        summary = await simple_completion(
+            SYNTHESIS_PROMPT,
+            f"PASSAGE: {resolved}\n\nTEXT (KJV): {passage_text}\n\nPHASE FINDINGS:\n{findings}",
+            max_tokens=900,
+        )
+    except Exception as exc:
+        summary = f"The summary could not be generated: {type(exc).__name__}: {exc}"
+    if missing:
+        summary += (
+            "\n\n_Phases "
+            + ", ".join(str(i) for i in missing)
+            + " could not be completed, so this summary rests on the remainder._"
+        )
+
+    verdicts = next((p.get("verdicts") for p in completed if p["index"] == 8), None) or []
+    has_failed = any(not v["passed"] for v in verdicts)
+
+    yield _final({
+        "type": "chat",
+        "message": summary,
+        "data": {
+            "reference": resolved,
+            "hasFailedVerdict": has_failed,
+            "runDigest": build_digest(completed, summary),
+        },
+        "route": f"hermeneutics → {len(completed)} phases",
+        "artifacts": [{
+            "type": "hermeneutics_report",
+            "label": "Open full report ▸",
+            "params": {"reference": resolved, "phases": completed, "summary": summary},
+        }],
+        "follow_up_questions": [
+            "Which phase is doing the most work here?",
+            "What would change if this were addressed to the Church instead?",
+        ],
+    })
