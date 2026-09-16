@@ -126,6 +126,8 @@ async def fetch_strongs(
 # ---------------------------------------------------------------------------
 from chatbot.bible_search import (
     fetch_cuv_simplified_sync,
+    fetch_interlinear_sync,
+    fetch_strongs_entries_sync,
     list_passage_verses_sync,
     random_verse_sync,
     search_english_sync,
@@ -165,5 +167,26 @@ async def list_passage_verses(
         {"args": {"book_name": book_name, "chapter": chapter, "start_verse": start_verse, "end_verse": end_verse}},
     ) as _step:
         result = await _run_in_thread(list_passage_verses_sync, book_name, chapter, start_verse, end_verse)
+        _step.set_response(result)
+        return result
+
+
+async def fetch_interlinear(
+    usfm_book: str, chapter: int, verse: int
+) -> Optional[Dict[str, Any]]:
+    with record_tool(
+        "fetch_interlinear",
+        {"args": {"book": usfm_book, "chapter": chapter, "verse": verse}},
+    ) as _step:
+        result = await _run_in_thread(fetch_interlinear_sync, usfm_book, chapter, verse)
+        _step.set_response(result)
+        return result
+
+
+async def fetch_strongs_local(numbers: List[str]) -> Dict[str, Any]:
+    """Strong's entries straight from Complete.db — the dependency-free
+    counterpart to fetch_strongs(), which goes through mybibletoolbox."""
+    with record_tool("fetch_strongs_local", {"args": {"numbers": numbers}}) as _step:
+        result = await _run_in_thread(fetch_strongs_entries_sync, numbers)
         _step.set_response(result)
         return result

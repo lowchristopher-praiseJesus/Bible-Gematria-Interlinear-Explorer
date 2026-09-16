@@ -24,3 +24,18 @@ async def test_random_verse_wrapper_returns_valid_book():
     assert isinstance(book, str) and book
     assert chapter >= 1
     assert verse >= 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_interlinear_wrapper_returns_words():
+    from chatbot.tools import fetch_interlinear
+    result = await fetch_interlinear("GEN", 1, 1)
+    assert result["ref"] == "Genesis 1:1"
+    assert result["words"][0]["strongs"] == "H7225"
+
+
+@pytest.mark.asyncio
+async def test_fetch_strongs_local_wrapper_returns_entries():
+    from chatbot.tools import fetch_strongs_local
+    entries = await fetch_strongs_local(["H430"])
+    assert "H430" in entries
