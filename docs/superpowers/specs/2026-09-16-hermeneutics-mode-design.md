@@ -67,12 +67,17 @@ deliberate product decision rather than an accident of prompting.
 - A **Hermeneutics** starter button in `ModePickerScreen`, a `PhaseList`
   chat component, and a `HermeneuticsArtifact` pane component.
 - Description-based passage resolution (curated parable lookup, then an LLM
-  fallback) with the resolved reference echoed back to the user.
+  fallback) with the resolved reference echoed back to the user, and
+  classification of a doctrinal claim as something to redirect rather than
+  run.
 
 **Out of scope:**
 
 - Resumable runs. A mid-run disconnect keeps the phases already delivered;
   recovery is the existing regenerate button. (See *Approaches considered*.)
+- A claim-verification pipeline. A claim is detected and redirected here; a
+  mode that actually adjudicates one across multiple passages (Phases 4, 5
+  and 6 over a candidate set) is a separate spec.
 - Fixing the same description gap in **Socratic Study**, which also accepts
   only regex-matched references today. `resolve_description` is deliberately
   kept local to `chatbot/hermeneutics.py`; promoting it to a shared module
@@ -147,6 +152,38 @@ runs in three steps, first hit wins:
    follows `devotional.pick_verse_for_theme()`'s existing shape: parse the
    reply with `_find_flexible_verse_refs`, retry once, and give up cleanly
    rather than guessing.
+
+### A claim is not a passage
+
+The same LLM call that resolves a description also classifies the input, at
+no extra cost, because some messages name no passage at all:
+
+> "Verify this claim — Patriarchs like Abraham and Moses will get their
+> resurrected body at the same time as Christ's Church."
+
+Left to the fallback, that resolves to whatever single verse the model
+associates with the proposition, and the mode streams eight phases about
+*that* verse. The user asked a yes/no question and gets an essay on a passage
+they never named — output that looks exactly as authoritative as a real run.
+It is the worst failure this mode can produce, and the echo-back alone does
+not prevent it, since a resolution is easy to read as confirmation rather
+than substitution.
+
+So a claim is **redirected, never run**: the mode says what it is and offers
+the passage that bears on it most directly ("That's a claim to test rather
+than a passage to interpret… The passage that bears on it most directly is
+**1 Thessalonians 4:13-18** — shall I run that?"), with that run offered as a
+follow-up pill. A claim that *cites* a passage ("verify this claim from
+1 Thess 4:16 — …") is not redirected: the explicit reference wins, and the
+run proceeds on the verse the user named.
+
+The shape mismatch behind this is worth recording. Phases 1, 2, 3, 6 and 7
+are passage-oriented — they need one text. Phases 4 (witnesses) and 5 (clear
+vs. obscure) are inherently *claim*-oriented: they are exactly the machinery
+for testing a proposition across several passages. A claim-verification
+pipeline reusing those phases is a natural successor to this spec, and is
+deliberately left to its own design conversation once Phase 4's real output
+can be seen.
 
 **A resolution the user did not type verbatim is always echoed back** — "Reading
 that as **Matthew 25:1-13** — running it now." A wrong guess is then visible
@@ -394,8 +431,9 @@ User: "Run the parable of the ten virgins"
   ├─ ChatPane → postChatStream(mode: 'hermeneutics', mode_params: {…})
   │
   ├─ api.py → hermeneutics.run()
-  │     ├─ resolve: reference regex → parables table → LLM fallback
-  │     │     "ten virgins" → MAT 25:1-13, echoed back to the user
+  │     ├─ resolve: reference regex → parables table → LLM classify
+  │     │     "ten virgins"     → MAT 25:1-13, echoed back
+  │     │     "verify this claim…" → claim → redirect, run nothing
   │     ├─ scope check (≤ 25 verses)      → else narrowing reply
   │     ├─ llm_unconfigured_error()       → else fail fast
   │     ├─ passage KJV text               → empty? ask, never run
@@ -440,6 +478,9 @@ Later turn: "So does this contradict Matthew 25?"
   (`devotional.pick_verse_for_theme` does, because a devotional on *some*
   verse is still useful; an eight-phase analysis of a passage the user did
   not ask about is not).
+- **A claim rather than a passage** — redirected with the bearing passage
+  offered as a follow-up, and no phases run. Never a best-effort run on a
+  verse the user did not name.
 - **A resolved passage with no text in `Complete.db`** — the run stops before
   Phase 1 and asks for the reference, naming the description as the likely
   culprit when one was used. Never a partial or empty-grounded run: an
@@ -490,6 +531,10 @@ TDD throughout: each test below is written before the code it covers.
   unparseable reply after one retry resolves to nothing rather than a guess.
 - A resolution the user did not type verbatim is echoed back in the reply;
   an explicit reference is not.
+- A doctrinal claim is classified as a claim, redirected with the bearing
+  passage offered, and runs no phases; a claim that cites a passage runs that
+  passage instead; a parable request is never classified as a claim, since
+  the table answers before any classification.
 - A resolved passage with no text in `Complete.db` stops the run before
   Phase 1, and stops it *before* the echo-back, whether the reference was
   described or typed.

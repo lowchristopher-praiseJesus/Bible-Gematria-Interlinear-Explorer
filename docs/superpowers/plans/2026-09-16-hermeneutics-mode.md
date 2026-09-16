@@ -795,8 +795,9 @@ EOF
   - `MAX_PASSAGE_VERSES = 25`
   - `parse_scope(reference: str) -> Tuple[str, int, int, int]` → `(usfm, chapter, start_verse, end_verse)`; raises `ScopeError` for a bare chapter or an over-long range.
   - `class ScopeError(Exception)` with a `.message` carrying the user-facing narrowing reply.
-  - `async resolve_passage(message, reference, history) -> Tuple[Optional[str], bool]` — `(reference, was_described)`. `was_described` is True when the passage came from a description rather than something the user typed verbatim, and is what makes the run echo its reading back.
-  - `async resolve_description(text: str) -> Optional[str]` — curated parable lookup, then a one-retry LLM fallback.
+  - `@dataclass Resolution(reference: Optional[str], source: str)` where `source` is `"reference"` | `"description"` | `"claim"` | `"none"`.
+  - `async resolve_passage(message, reference, history) -> Resolution`.
+  - `async resolve_description(text: str) -> Resolution` — curated parable lookup, then a one-retry LLM call that both resolves a description **and** distinguishes a doctrinal claim from a passage.
   - `find_parable_reference(text: str) -> Optional[str]` — the local table lookup, no LLM call.
 
 - [ ] **Step 1: Write the failing test**
@@ -1092,19 +1093,17 @@ async def test_resolve_passage_flags_a_described_passage(monkeypatch):
         raise AssertionError("no LLM call expected")
 
     monkeypatch.setattr(hermeneutics, "simple_completion", explode)
-    resolved, described = await hermeneutics.resolve_passage(
+    res = await hermeneutics.resolve_passage(
         "run the parable of the ten virgins", reference=None, history=None
     )
-    assert resolved == "MAT 25:1-13"
-    assert described is True
+    assert res.reference == "MAT 25:1-13"
+    assert res.source == "description"
 
 
 async def test_resolve_passage_does_not_flag_an_explicit_reference():
-    resolved, described = await hermeneutics.resolve_passage(
-        "run Romans 8:1", reference=None, history=None
-    )
-    assert resolved == "ROM 8:1"
-    assert described is False
+    res = await hermeneutics.resolve_passage("run Romans 8:1", reference=None, history=None)
+    assert res.reference == "ROM 8:1"
+    assert res.source == "reference"
 
 
 async def test_resolve_passage_prefers_an_explicit_reference_over_a_description(monkeypatch):
@@ -1112,11 +1111,70 @@ async def test_resolve_passage_prefers_an_explicit_reference_over_a_description(
         raise AssertionError("no LLM call expected")
 
     monkeypatch.setattr(hermeneutics, "simple_completion", explode)
-    resolved, described = await hermeneutics.resolve_passage(
+    res = await hermeneutics.resolve_passage(
         "the parable of the ten virgins — actually, Matthew 25:1", reference=None, history=None
     )
-    assert resolved == "MAT 25:1"
-    assert described is False
+    assert res.reference == "MAT 25:1"
+    assert res.source == "reference"
+
+
+async def test_resolve_passage_reports_nothing_found():
+    res = await hermeneutics.resolve_passage("hello there", reference=None, history=[])
+    assert res.reference is None
+    assert res.source == "none"
+
+
+# --- A claim is not a passage -------------------------------------------
+#
+# "Verify this claim — the patriarchs are raised with the Church" names no
+# passage at all. Without this branch the LLM fallback quietly picks one
+# verse and the mode analyses that instead, answering a question the user
+# did not ask while looking authoritative doing it.
+
+async def test_a_doctrinal_claim_is_classified_as_a_claim(monkeypatch):
+    async def classifies(system_prompt, user_prompt, *, max_tokens=64):
+        return "CLAIM: 1 Thessalonians 4:13-18"
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", classifies)
+    res = await hermeneutics.resolve_passage(
+        "Verify this claim - Patriarchs like Abraham and Moses will get their "
+        "resurrected body the same time as Christ's church",
+        reference=None, history=None,
+    )
+    assert res.source == "claim"
+    assert res.reference == "1TH 4:13-18", "the bearing passage is offered, not run"
+
+
+async def test_a_claim_with_no_suggested_passage_still_classifies(monkeypatch):
+    async def bare_claim(system_prompt, user_prompt, *, max_tokens=64):
+        return "CLAIM"
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", bare_claim)
+    res = await hermeneutics.resolve_passage("Is the rapture pre-tribulation?", reference=None, history=None)
+    assert res.source == "claim"
+    assert res.reference is None
+
+
+async def test_a_claim_that_cites_a_passage_runs_that_passage(monkeypatch):
+    async def explode(*args, **kwargs):
+        raise AssertionError("an explicit reference needs no LLM call")
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", explode)
+    res = await hermeneutics.resolve_passage(
+        "Verify this claim from 1 Thess 4:16 — the patriarchs rise with the Church",
+        reference=None, history=None,
+    )
+    assert res.source == "reference"
+    assert res.reference == "1TH 4:16"
+
+
+async def test_a_parable_request_is_never_classified_as_a_claim(monkeypatch):
+    async def explode(*args, **kwargs):
+        raise AssertionError("the table answers before any classification")
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", explode)
+    res = await hermeneutics.resolve_passage("the ten virgins", reference=None, history=None)
+    assert res.source == "description"
 ```
 
 - [ ] **Step 7: Run the tests to verify they fail**
@@ -1126,7 +1184,7 @@ Expected: FAIL — `AttributeError: module 'chatbot.hermeneutics' has no attribu
 
 - [ ] **Step 8: Write the description-resolution implementation**
 
-Replace `resolve_passage` in `chatbot/hermeneutics.py` with the version below, and add the two new functions above it. New imports: `PARABLES` from `chatbot.data.parables`, `simple_completion` from `chatbot.ollama_client`, and `_find_flexible_verse_refs`, `_format_reference` from `chatbot.router`.
+Replace `resolve_passage` in `chatbot/hermeneutics.py` with the version below, and add the new functions above it. New imports: `dataclass` from `dataclasses`, `PARABLES` from `chatbot.data.parables`, `simple_completion` from `chatbot.ollama_client`, and `_find_flexible_verse_refs`, `_format_reference` from `chatbot.router`.
 
 ```python
 # Parable names use number words ("Ten Virgins", "Two Sons") while users
@@ -1176,44 +1234,72 @@ _DESCRIPTION_SYSTEM_PROMPT = (
 )
 
 
-async def resolve_description(text: str) -> Optional[str]:
-    """A passage described rather than cited, as a USFM reference.
+@dataclass(frozen=True)
+class Resolution:
+    """What this turn's message turned out to be about.
+
+    `source` drives what happens next:
+      reference   — the user cited it; run, no echo needed
+      description — resolved from a description; run, echoed back first
+      claim       — a proposition to test, not a passage; offer the passage
+                    that bears on it and run nothing
+      none        — nothing found; ask
+    """
+    reference: Optional[str]
+    source: str
+
+
+async def resolve_description(text: str) -> Resolution:
+    """Classify a message that carries no explicit reference.
 
     The curated parable table answers first (no LLM call). Anything else
-    gets one short completion plus one retry. Unlike
-    devotional.pick_verse_for_theme(), a failure returns None rather than a
-    random verse: an eight-phase analysis of a passage the user did not ask
-    about is worse than asking them which passage they meant.
+    gets one short completion plus one retry, and that same call also
+    distinguishes a passage description from a doctrinal *claim* — the
+    classification is free, since the call is being made either way.
+
+    Unlike devotional.pick_verse_for_theme(), a failure returns nothing
+    rather than a random verse: an eight-phase analysis of a passage the
+    user did not ask about is worse than asking them which passage they
+    meant.
     """
     from_table = find_parable_reference(text)
     if from_table:
-        return from_table
+        return Resolution(from_table, "description")
 
     ask = (
-        f"Which Bible passage is this describing: '{text}'? "
-        "Reply with only the reference, e.g. `Ephesians 6:10-18`. "
-        "If you cannot tell, reply with the word NONE."
+        f"Input: '{text}'\n\n"
+        "If this DESCRIBES a Bible passage, reply with only the reference, "
+        "e.g. `Ephesians 6:10-18`.\n"
+        "If this asserts a doctrinal CLAIM to be tested rather than naming a "
+        "passage, reply `CLAIM: <reference of the passage that bears on it "
+        "most directly>`, or just `CLAIM` if no single passage does.\n"
+        "If you cannot tell, reply `NONE`."
     )
     for _ in range(2):
-        reply = await simple_completion(_DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=64)
-        refs = _find_flexible_verse_refs(reply or "")
+        reply = (await simple_completion(_DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=64)) or ""
+        refs = _find_flexible_verse_refs(reply)
+        bearing = _format_reference(*refs[0]) if refs else None
+        if reply.strip().upper().startswith("CLAIM"):
+            return Resolution(bearing, "claim")
         if refs:
-            return _format_reference(*refs[0])
-    return None
+            return Resolution(bearing, "description")
+    return Resolution(None, "none")
 
 
 async def resolve_passage(
     message: str,
     reference: Optional[str],
     history: Optional[List[Dict[str, str]]],
-) -> Tuple[Optional[str], bool]:
-    """(the passage this turn is about, whether it came from a description).
+) -> Resolution:
+    """What passage (if any) this turn is about.
 
     A passage named in *this* message always wins over the one the session
     was previously grounded on — the same precedence socratic.answer()
-    uses. A description is only consulted when no explicit reference is
+    uses. Classification is only reached when no explicit reference is
     available anywhere, so "the ten virgins — actually, Matthew 25:1" runs
-    the verse the user corrected themselves to.
+    the verse the user corrected themselves to, and "verify this claim from
+    1 Thess 4:16 — ..." runs the verse they cited rather than stopping to
+    argue about the claim.
     """
     explicit = (
         _detect_reference(message)
@@ -1221,25 +1307,26 @@ async def resolve_passage(
         or _reference_from_history(history or [])
     )
     if explicit:
-        return explicit, False
-    described = await resolve_description(message)
-    return described, bool(described)
+        return Resolution(explicit, "reference")
+    return await resolve_description(message)
 ```
 
 - [ ] **Step 9: Run the tests to verify they pass**
 
 Run: `python3 -m pytest tests/chatbot/test_hermeneutics_description.py tests/chatbot/test_hermeneutics_scope.py -v`
-Expected: PASS. Note that the four `resolve_passage` tests written in Step 1 now unpack a tuple — update them to `resolved, _ = await hermeneutics.resolve_passage(...)` as part of this step.
+Expected: PASS. Note that the four `resolve_passage` tests written in Step 1 now get a `Resolution` back rather than a bare string — update them to `(await hermeneutics.resolve_passage(...)).reference` as part of this step.
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add chatbot/hermeneutics.py tests/chatbot/test_hermeneutics_description.py tests/chatbot/test_hermeneutics_scope.py
 git commit -m "$(cat <<'EOF'
-feat(hermeneutics): resolve a passage from a description, not just a reference
+feat(hermeneutics): resolve a passage from a description, and spot a claim
 
 The curated parable table answers first with no LLM call; anything else
-gets one short completion plus a retry, and gives up rather than guessing.
+gets one short completion plus a retry, which also distinguishes a
+doctrinal claim from a passage so a claim is redirected rather than
+silently analysed as whatever verse the model associates with it.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -1831,6 +1918,40 @@ async def test_an_erroring_phase_does_not_abort_the_run(monkeypatch, fake_llm):
     assert events[-1]["kind"] == "final"
 
 
+async def test_a_claim_is_redirected_not_analysed(monkeypatch, fake_llm):
+    \"\"\"The failure this guards against: "verify this claim ..." silently
+    becoming an eight-phase report about one verse the user never named.\"\"\"
+    async def classify(text):
+        return hermeneutics.Resolution("1TH 4:13-18", "claim")
+
+    monkeypatch.setattr(hermeneutics, "resolve_description", classify)
+    events = await _collect(None, message="Verify this claim - the patriarchs rise with the Church")
+    assert len(events) == 1, "no phases run for a claim"
+    result = events[0]["result"]
+    assert "claim to test rather than a passage" in result["message"]
+    assert "1TH 4:13-18" in result["message"]
+    assert result["follow_up_questions"] == ["Run 1TH 4:13-18"]
+
+
+async def test_a_claim_with_no_bearing_passage_asks_for_one(monkeypatch, fake_llm):
+    async def classify(text):
+        return hermeneutics.Resolution(None, "claim")
+
+    monkeypatch.setattr(hermeneutics, "resolve_description", classify)
+    events = await _collect(None, message="Is the rapture pre-tribulation?")
+    assert len(events) == 1
+    assert "Which passage" in events[0]["result"]["message"]
+    assert events[0]["result"]["follow_up_questions"] == []
+
+
+async def test_a_claim_citing_a_passage_runs_it(fake_llm):
+    events = await _collect(
+        None, message="Verify this claim from 1 Thess 4:16 — the patriarchs rise with the Church"
+    )
+    phases = [e for e in events if e["kind"] == "phase"]
+    assert len(phases) == 8, "an explicit reference wins; the run proceeds"
+
+
 async def test_run_refuses_a_passage_with_no_text(monkeypatch, fake_llm):
     """An LLM-resolved description, or a typo'd reference, can name a
     passage Complete.db has no text for. Running the phases on an empty
@@ -1931,7 +2052,34 @@ async def run(
         })
         return
 
-    resolved, was_described = await resolve_passage(message, reference, history)
+    resolution = await resolve_passage(message, reference, history)
+    resolved = resolution.reference
+    was_described = resolution.source == "description"
+
+    # A claim is not a passage. Running the eight phases on whatever single
+    # verse an LLM associates with a proposition answers a question the user
+    # did not ask, while looking exactly as authoritative as a real run —
+    # the worst output this mode can produce. Say what it is and offer the
+    # passage that bears on it instead.
+    if resolution.source == "claim":
+        offer = (
+            f" The passage that bears on it most directly is **{resolved}** — "
+            "shall I run that?"
+            if resolved
+            else " Which passage would you like me to run on it?"
+        )
+        yield _final({
+            "type": "chat",
+            "message": (
+                "That's a claim to test rather than a passage to interpret, and I run "
+                "the eight phases over one passage at a time." + offer
+            ),
+            "data": {"reference": resolved},
+            "route": "hermeneutics → claim, not a passage",
+            "follow_up_questions": ([f"Run {resolved}"] if resolved else []),
+        })
+        return
+
     if not resolved:
         yield _final({
             "type": "chat",
@@ -2082,7 +2230,7 @@ async def run(
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python3 -m pytest tests/chatbot/test_hermeneutics_run.py -v`
-Expected: PASS (19 tests)
+Expected: PASS (22 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -3372,12 +3520,16 @@ Start the app per `CHATBOT_SETUP.md`, then in the UI:
    fresh run.
 8. **"the bit where that guy does the thing"** — resolves to nothing; expect a
    request for a reference, never a run on a guessed passage.
-9. **A reference that does not exist** (type "Matthew 14:900") — expect the
+9. **"Verify this claim - Patriarchs like Abraham and Moses will get their
+   resurrected body the same time as Christ's church"** — expect the claim
+   redirect with a suggested passage and **no** phases. Then click the
+   suggested "Run …" follow-up and confirm the run starts normally.
+10. **A reference that does not exist** (type "Matthew 14:900") — expect the
    "couldn't find any text" reply and **no** phases at all. This is the guard
    against a confident report about an empty passage; if any phase streams
    here, stop and fix it before shipping.
-10. Ask a follow-up after a completed run ("why does the audience matter?") — it must answer from the digest, and the phases must **not** re-run. Confirm in the trace pane.
-11. Reload the page mid-session — the completed phases are still rendered.
+11. Ask a follow-up after a completed run ("why does the audience matter?") — it must answer from the digest, and the phases must **not** re-run. Confirm in the trace pane.
+12. Reload the page mid-session — the completed phases are still rendered.
 
 - [ ] **Step 3: Document the mode**
 
@@ -3407,8 +3559,13 @@ A passage can be named by reference **or described** ("the parable of the
 ten virgins", "Jesus feeding the 5000"): resolution tries the reference
 regex, then a normalised name match against the existing
 `chatbot/data/parables.py` table (no LLM call), then one short LLM completion
-with a single retry. However it resolved, the passage is then checked to
-actually have text in `Complete.db` — an unresolvable or typo'd reference
+with a single retry. That same call also distinguishes a passage from a
+doctrinal **claim** ("verify this claim — the patriarchs rise with the
+Church"): a claim is never run, because the eight phases interpret one
+passage and a claim is a proposition to test across several. The mode says
+so and offers the passage that bears on it most directly. However it
+resolved, the passage is then checked to actually have text in
+`Complete.db` — an unresolvable or typo'd reference
 stops the run before Phase 1 rather than letting eight phases analyse an
 empty string. A resolution the user did
 not type verbatim is echoed back before Phase 1 runs, as an index-0 `phase`
@@ -3447,5 +3604,6 @@ EOF
 - **The `Original_Words_*` and `Root`/`KJV_SN` alignments are different lengths and different orders.** Genesis 1:1 has 7 original words and 6 root entries. Mixing them silently produces wrong Strong's-to-English pairings. The Task 2 tests pin both.
 - **`simple_completion` returns `""` on an unconfigured provider or any HTTP error** — it does not raise. Task 8 checks `llm_unconfigured_error()` up front for that reason; an empty phase body from a transient error still yields a phase with `status: "done"` and empty markdown, which the UI renders as an empty section. That is acceptable; do not add a retry.
 - **Do not add a Phase 8 retry loop.** It was explicitly considered and rejected — see the spec's *Phase 8 is disclosure, not enforcement*.
+- **A claim must never become a run.** "Verify this claim — X" names no passage, so without the `claim` branch the LLM fallback picks one verse and the mode analyses that, answering a question the user did not ask while looking exactly as authoritative as a real run. The redirect is the feature; do not "improve" it into a best-effort run.
 - **An empty `passage_text` is a stop condition, not a degraded run.** `list_passage_verses_sync` returns `[]` for a chapter or range `Complete.db` has no rows for, which becomes `""` — and every phase would happily run on it. The guard in Task 8 is the only thing standing between a hallucinated reference and eight phases of confident nonsense. Do not soften it into a warning.
 - **`_resolve_verse_reference` returns `None` for an unidentifiable book.** That is the mechanism by which a hallucinated witness gets dropped; do not "fix" it by falling back to the raw string.
