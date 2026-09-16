@@ -42,6 +42,7 @@ const MODE_ICONS: Record<SessionMode, LucideIcon> = {
   freeform: MessageCircle,
   devotional: BookHeart,
   socratic: HelpCircle,
+  hermeneutics: Search,
 }
 
 function groupByMode(sessions: Session[]): Partial<Record<SessionMode, Session[]>> {

@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics'
 
 export interface ModeParams {
   plan?: 'chronological' | 'canonical'
@@ -23,10 +23,13 @@ export interface ModeParams {
    *  the same slot instead of skipping a verse. */
   rotationSeed?: number
   rotationCursor?: number
+  /** Hermeneutics mode: the compact digest of a completed run. Its presence
+   * is what makes a later turn a follow-up rather than a fresh run. */
+  runDigest?: string
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report'
   label: string
   params: Record<string, unknown>
 }
@@ -36,6 +39,37 @@ export interface ArtifactLink {
 export interface DevotionalArtifactParams {
   reference: string
   text: string
+}
+
+/** One completed phase of a Hermeneutics run, delivered by the `phase`
+ * SSE event and stored on the assistant message so a reload — or a share —
+ * shows the finished run. */
+export interface PhaseResult {
+  /** 1-8 for a real phase. 0 is the "reading that as X" notice shown when
+   * the passage was resolved from a description; it renders as a plain
+   * line and never appears in the report. */
+  index: number
+  title: string
+  status: 'running' | 'done' | 'error'
+  markdown: string
+  /** Phase 1 only: the passage's primary addressee ('jew' | 'gentile' |
+   * 'church'), or null when the model omitted its marker line. */
+  audience?: string | null
+  /** Phase 3 only: who is speaking ('god' | 'prophet' | 'human' |
+   * 'adversary'), or null when the marker line was omitted. */
+  speaker?: string | null
+  /** Phase 4 only: witnesses that resolved and were fetched. */
+  citations?: { reference: string; text: string; verified: boolean }[]
+  /** Phase 8 only: the three validation-test verdicts. */
+  verdicts?: { test: string; passed: boolean; reason?: string }[]
+}
+
+/** Params for a `hermeneutics_report` ArtifactLink — the whole report
+ * travels inline (no fetch when the pane opens it), as the devotional does. */
+export interface HermeneuticsArtifactParams {
+  reference: string
+  phases: PhaseResult[]
+  summary: string
 }
 
 /** One clickable option in a "choice" prompt — e.g. Chronological vs
@@ -57,6 +91,7 @@ export interface SessionMessage extends ChatMessage {
   /** Label of the choice the user picked, once resolved — kept so the
    * pills can be re-rendered as answered instead of disappearing. */
   resolvedChoiceLabel?: string
+  phases?: PhaseResult[]
 }
 
 export interface Note {

@@ -252,3 +252,27 @@ describe('postChat trace passthrough', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('postChatStream phase events', () => {
+  it('calls onPhase for each phase event and still resolves with the final result', async () => {
+    mockStreamFetch([
+      'data: {"type":"phase","phase":{"index":1,"title":"Context","status":"done","markdown":"a"}}\n\n',
+      'data: {"type":"phase","phase":{"index":2,"title":"Semantics","status":"done","markdown":"b"}}\n\n',
+      'data: {"type":"final","result":{"type":"chat","message":"report"}}\n\n',
+      'data: {"type":"trace","trace":{}}\n\n',
+    ])
+    const phases: any[] = []
+    const result = await postChatStream({ message: 'run it' }, { onPhase: (p) => phases.push(p) })
+    expect(phases.map((p) => p.index)).toEqual([1, 2])
+    expect(phases[0].title).toBe('Context')
+    expect(result.message).toBe('report')
+  })
+
+  it('ignores phase events when no onPhase handler is given', async () => {
+    mockStreamFetch([
+      'data: {"type":"phase","phase":{"index":1,"title":"Context","status":"done","markdown":"a"}}\n\n',
+      'data: {"type":"final","result":{"type":"chat","message":"report"}}\n\n',
+    ])
+    await expect(postChatStream({ message: 'run it' })).resolves.toMatchObject({ message: 'report' })
+  })
+})

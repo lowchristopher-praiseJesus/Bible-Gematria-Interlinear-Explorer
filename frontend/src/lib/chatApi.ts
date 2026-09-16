@@ -7,7 +7,7 @@ import type {
   GematriaResponse,
   StrongsResponse,
 } from '@/types/api'
-import type { ArtifactLink, ModeParams } from '@/types/session'
+import type { ArtifactLink, ModeParams, PhaseResult } from '@/types/session'
 import type { Trace } from '@/types/trace'
 
 const CHAT_API = '/api/bible-chat'
@@ -31,7 +31,8 @@ interface ChatPayload {
  * keys the FastAPI backend expects on the wire
  * (dayIndex -> day_index, completedDays -> completed_days,
  *  parableId -> parable_id, seriesId -> series_id, conceptSlug -> concept_slug,
- *  rotationSeed -> rotation_seed, rotationCursor -> rotation_cursor).
+ *  rotationSeed -> rotation_seed, rotationCursor -> rotation_cursor,
+ *  runDigest -> run_digest).
  * Unknown keys pass through unchanged so the mapper stays forward-compatible.
  */
 export function toWireModeParams(params: ModeParams): Record<string, unknown> {
@@ -59,6 +60,9 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
         break
       case 'rotationCursor':
         out.rotation_cursor = value
+        break
+      case 'runDigest':
+        out.run_digest = value
         break
       default:
         out[key] = value
@@ -123,6 +127,9 @@ interface ChatStreamHandlers {
    * match, a mode primer, Topical Study's wiki Q&A) — those arrive
    * complete in the resolved result, same as postChat(). */
   onChunk?: (text: string) => void
+  /** Called once per completed phase of a Hermeneutics run, in order.
+   * Never called for any other mode. */
+  onPhase?: (phase: PhaseResult) => void
 }
 
 /**
@@ -178,6 +185,8 @@ export async function postChatStream(
     }
     if (event.type === 'stream') {
       handlers.onChunk?.(String(event.text ?? ''))
+    } else if (event.type === 'phase') {
+      handlers.onPhase?.(event.phase as PhaseResult)
     } else if (event.type === 'final') {
       result = event.result as ChatApiResponse
     } else if (event.type === 'trace') {
