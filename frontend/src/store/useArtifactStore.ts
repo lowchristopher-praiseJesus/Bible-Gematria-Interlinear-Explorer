@@ -50,6 +50,10 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
       // The finished devotional text travels inline on the link params
       // (set by the chat message that produced it) — nothing to fetch.
       return link.params
+    case 'hermeneutics_report':
+      // The whole report travels inline on the link params (set by the chat
+      // message that produced it) — nothing to fetch.
+      return link.params
     default:
       throw new Error(`Unknown artifact type: ${link.type}`)
   }

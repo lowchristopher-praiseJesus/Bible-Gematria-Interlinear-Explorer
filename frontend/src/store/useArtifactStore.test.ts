@@ -179,4 +179,15 @@ describe('useArtifactStore', () => {
     expect(useArtifactStore.getState().activeNote).toBeNull()
     expect(useArtifactStore.getState().activeArtifact).toEqual(verseLink)
   })
+
+  it('opens a hermeneutics report from inline params without fetching', async () => {
+    await useArtifactStore.getState().openArtifact({
+      type: 'hermeneutics_report',
+      label: 'Open full report ▸',
+      params: { reference: 'ROM 8:1', phases: [], summary: 's' },
+    })
+    const state = useArtifactStore.getState()
+    expect(state.status).toBe('ready')
+    expect((state.data as { reference: string }).reference).toBe('ROM 8:1')
+  })
 })

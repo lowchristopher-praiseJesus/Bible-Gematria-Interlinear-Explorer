@@ -4,6 +4,7 @@ import { BookContextArtifact } from '@/components/artifacts/BookContextArtifact'
 import { DevotionalArtifact } from '@/components/artifacts/DevotionalArtifact'
 import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtifact'
 import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
+import { HermeneuticsArtifact } from '@/components/artifacts/HermeneuticsArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
 import { StrongsArtifact } from '@/components/artifacts/StrongsArtifact'
 import { NoteEditor } from '@/components/shell/NoteEditor'
@@ -14,7 +15,7 @@ import type {
   GematriaResponse,
   StrongsResponse,
 } from '@/types/api'
-import type { DevotionalArtifactParams } from '@/types/session'
+import type { DevotionalArtifactParams, HermeneuticsArtifactParams } from '@/types/session'
 
 interface Props {
   onClose?: () => void
@@ -78,6 +79,9 @@ export function ArtifactPane({ onClose }: Props) {
                 {activeArtifact.type === 'english_search' && <EnglishSearchArtifact data={data as EnglishResponse} />}
                 {activeArtifact.type === 'devotional' && (
                   <DevotionalArtifact {...(data as DevotionalArtifactParams)} />
+                )}
+                {activeArtifact.type === 'hermeneutics_report' && (
+                  <HermeneuticsArtifact {...(data as HermeneuticsArtifactParams)} />
                 )}
               </>
             )}
