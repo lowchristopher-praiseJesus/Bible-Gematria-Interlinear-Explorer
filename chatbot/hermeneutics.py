@@ -333,9 +333,12 @@ async def build_grounding(
 
 _WITNESS_LINE_RE = re.compile(r"^WITNESSES:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
 _VERDICT_LINE_RE = re.compile(
-    r"^VERDICT:\s*(heart|cross|grace)\s*=\s*(pass|fail)\s*[—\-:]?\s*(.*)$",
+    r"^VERDICT:\s*(heart|cross|grace)\s*=\s*(pass|fail)[ \t]*[—\-:]?[ \t]*(.*)$",
     re.MULTILINE | re.IGNORECASE,
 )
+# Note: trailing whitespace after (pass|fail) and separator uses [ \t]* (horizontal only)
+# instead of \s* to prevent matching newlines, which would cause an empty reason to
+# consume the following VERDICT line as part of this verdict's reason.
 
 
 def parse_marker(phase_text: str, marker: str) -> Optional[str]:

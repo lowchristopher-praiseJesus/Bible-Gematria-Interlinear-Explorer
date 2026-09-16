@@ -60,6 +60,20 @@ def test_parse_verdicts_of_prose_without_markers_is_empty():
     assert hermeneutics.parse_verdicts("All three tests passed.") == []
 
 
+def test_parse_verdicts_survives_an_empty_reason():
+    """A verdict with no reason must not swallow the next line. Regression:
+    a trailing \\s* in the pattern consumed the following VERDICT line, which
+    made a FAILED test disappear from the report entirely."""
+    verdicts = hermeneutics.parse_verdicts(
+        "VERDICT: heart=pass —\n"
+        "VERDICT: cross=fail — reintroduces sin-consciousness\n"
+        "VERDICT: grace=pass — sins are not counted"
+    )
+    assert [v["test"] for v in verdicts] == ["heart", "cross", "grace"]
+    assert [v["passed"] for v in verdicts] == [True, False, True]
+    assert verdicts[0]["reason"] == ""
+
+
 def test_parse_marker_reads_audience():
     assert hermeneutics.parse_marker("prose\nAUDIENCE: church", "AUDIENCE") == "church"
 
