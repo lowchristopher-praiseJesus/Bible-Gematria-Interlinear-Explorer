@@ -121,3 +121,19 @@ class VoiceSessionRequest(BaseModel):
 class VoiceSessionResponse(BaseModel):
     session_id: str = Field(..., description="GPT-Live session id")
     sdp: str = Field(..., description="OpenAI's WebRTC SDP answer")
+
+
+class PhaseEvent(BaseModel):
+    """One `phase` SSE event from a Hermeneutics run — additive to the
+    existing stream/final/trace contract, ignored by clients that predate
+    it."""
+    index: int = Field(..., description="Phase number, 1-8")
+    title: str = Field(..., description="Phase title")
+    status: str = Field(..., description="running | done | error")
+    markdown: str = Field(..., description="The phase's findings as markdown")
+    citations: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Phase 4 only: verified witness references with their KJV text"
+    )
+    verdicts: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Phase 8 only: the three validation-test verdicts"
+    )

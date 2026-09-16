@@ -30,7 +30,7 @@ from chatbot.tools import (
 )
 from chatbot.book_context import get_book_context
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader, wiki_qa, socratic
+from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics
 from chatbot.router import (
     build_mode_primer,
     route_deterministic,
@@ -262,6 +262,17 @@ async def post_chat(request: ChatRequest):
             result = await socratic.answer(reference, request.message, history)
             return _with_trace(result)
 
+        # Every turn in a Hermeneutics session needs the phase pipeline (or
+        # its digest-backed follow-up path) — same special case Socratic
+        # Study makes above.
+        if request.mode == "hermeneutics":
+            params = request.mode_params or {}
+            result = await hermeneutics.answer(
+                params.get("reference"), request.message, history,
+                run_digest=params.get("run_digest"),
+            )
+            return _with_trace(result)
+
         result = await route_deterministic(
             request.message, history=history, page_context=request.page_context, mode=request.mode
         )
@@ -422,6 +433,21 @@ async def _stream_chat_response(
             result = await socratic.answer(reference, request.message, history)
             _note_outcome(result)
             yield await sse_event("final", {"result": result})
+            return
+
+        # Same special case, plus the additive `phase` event: each completed
+        # phase is pushed as it lands, ahead of the single `final`.
+        if request.mode == "hermeneutics":
+            params = request.mode_params or {}
+            async for event in hermeneutics.stream(
+                params.get("reference"), request.message, history,
+                run_digest=params.get("run_digest"),
+            ):
+                if event["kind"] == "phase":
+                    yield await sse_event("phase", {"phase": event["phase"]})
+                else:
+                    _note_outcome(event["result"])
+                    yield await sse_event("final", {"result": event["result"]})
             return
 
         result = await route_deterministic(
