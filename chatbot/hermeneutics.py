@@ -16,7 +16,7 @@ from chatbot.bible_search import list_passage_verses_sync
 from chatbot.book_context import get_book_context
 from chatbot.data.hermeneutic_rulings import render_rulings, rulings_for
 from chatbot.data.parables import PARABLES
-from chatbot.ollama_client import llm_unconfigured_error, simple_completion
+from chatbot.ollama_client import llm_unconfigured_error, simple_completion, call_ollama_with_context, generate_llm_follow_ups
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
 from chatbot.socratic import _detect_reference, _reference_from_history
 from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english, fetch_verse_translations
@@ -599,3 +599,65 @@ async def run(
             "What would change if this were addressed to the Church instead?",
         ],
     })
+
+
+FOLLOW_UP_SYSTEM_PROMPT = """You are a Biblical Hermeneutics Engine answering a follow-up question about a passage you have already analysed through an eight-phase methodology. The findings of that analysis are given below.
+
+Answer from those findings. Be concise — a short paragraph. Do not re-run the phases, do not re-list them, and do not introduce a verse reference the analysis did not establish."""
+
+
+def _is_new_passage(message: str, current: Optional[str]) -> bool:
+    """True when this follow-up turn actually names a different passage.
+
+    Consults the parable table as well as the reference regex, so "now do
+    the prodigal son" starts a fresh run instead of being answered from the
+    previous passage's digest. The LLM fallback is deliberately NOT used
+    here — it would cost a completion on every follow-up turn, and a
+    description vague enough to need it is more likely a question about the
+    passage in hand than a request for a new one.
+    """
+    named = _detect_reference(message) or find_parable_reference(message)
+    return bool(named) and named != current
+
+
+async def stream(
+    reference: Optional[str],
+    message: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    run_digest: Optional[str] = None,
+) -> AsyncIterator[Dict[str, Any]]:
+    """Phase events + final for a fresh run; a single final for a
+    follow-up answered from the digest."""
+    if run_digest and not _is_new_passage(message, reference):
+        result = await call_ollama_with_context(
+            message,
+            research_data=f"PASSAGE: {reference}\n\nANALYSIS FINDINGS:\n{run_digest}",
+            conversation_history=history,
+            system_prompt=FOLLOW_UP_SYSTEM_PROMPT,
+        )
+        result["route"] = "hermeneutics → follow-up from digest"
+        result.setdefault("data", {"reference": reference})
+        if result.get("type") == "chat" and result.get("message"):
+            follow_ups = await generate_llm_follow_ups(message, result["message"])
+            if follow_ups:
+                result["follow_up_questions"] = follow_ups
+        yield _final(result)
+        return
+
+    async for event in run(reference, message, history):
+        yield event
+
+
+async def answer(
+    reference: Optional[str],
+    message: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    run_digest: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Buffered entry point: drives the same pipeline and returns only the
+    final result, so POST /chat behaves identically to /chat/stream."""
+    result: Dict[str, Any] = {}
+    async for event in stream(reference, message, history, run_digest):
+        if event["kind"] == "final":
+            result = event["result"]
+    return result
