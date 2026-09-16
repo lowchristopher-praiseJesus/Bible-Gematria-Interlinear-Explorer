@@ -135,9 +135,16 @@ runs in three steps, first hit wins:
    Matching is normalised, so "the parable of the ten virgins", "ten
    virgins" and "the 10 virgins" all resolve to `MAT 25:1-13`. This is a
    local table lookup: no LLM call, no failure mode.
-3. **LLM fallback** — anything else ("the armour of God", "where Paul talks
-   about his thorn") goes to one short completion that returns a reference,
-   following `devotional.pick_verse_for_theme()`'s existing shape: parse the
+3. **LLM fallback** — anything else goes to one short completion that returns
+   a reference. This is the path for every non-parable episode ("Jesus
+   feeding the 5000", "the armour of God", "where Paul talks about his
+   thorn"). No curated table of such episodes is introduced: parables are a
+   closed set of 42, but narrative episodes have no natural boundary, so the
+   list would need endless maintenance and still miss things. An episode with
+   parallel gospel accounts (the feeding of the 5000 is in all four) resolves
+   to whichever the model picks; the echo-back makes that choice visible and
+   the user can name a different account on the next turn. The fallback
+   follows `devotional.pick_verse_for_theme()`'s existing shape: parse the
    reply with `_find_flexible_verse_refs`, retry once, and give up cleanly
    rather than guessing.
 
@@ -148,6 +155,16 @@ passage. An explicit reference needs no echo.
 
 If all three steps fail, the mode asks for a reference rather than running
 on a guess.
+
+**Whatever resolved it, the passage is then verified to have text** before any
+phase runs. `list_passage_verses_sync` returns nothing for a chapter or range
+`Complete.db` has no rows for, so an LLM-resolved description — or an
+explicit reference with a typo — can name a passage that does not exist, and
+every phase would then run on an empty string and produce a confident,
+wholly ungrounded report. Phase 4 already refuses to cite a witness it cannot
+fetch; the passage the entire run is about gets the same guarantee. The check
+runs *before* the echo-back, so an unusable resolution never announces itself
+as though the run were starting.
 
 ### Passage scope
 
@@ -381,7 +398,9 @@ User: "Run the parable of the ten virgins"
   │     │     "ten virgins" → MAT 25:1-13, echoed back to the user
   │     ├─ scope check (≤ 25 verses)      → else narrowing reply
   │     ├─ llm_unconfigured_error()       → else fail fast
-  │     ├─ passage KJV + get_book_context()
+  │     ├─ passage KJV text               → empty? ask, never run
+  │     ├─ echo the reading back (described passages only)
+  │     ├─ get_book_context()
   │     │
   │     ├─ Phase 1  ──► yield PhaseResult ──► SSE `phase` ──► PhaseList
   │     ├─ Phase 2  ── interlinear + Strong's + english_search + rulings_for()
@@ -421,6 +440,11 @@ Later turn: "So does this contradict Matthew 25?"
   (`devotional.pick_verse_for_theme` does, because a devotional on *some*
   verse is still useful; an eight-phase analysis of a passage the user did
   not ask about is not).
+- **A resolved passage with no text in `Complete.db`** — the run stops before
+  Phase 1 and asks for the reference, naming the description as the likely
+  culprit when one was used. Never a partial or empty-grounded run: an
+  eight-phase report about nothing is the worst output this mode can produce,
+  because it looks exactly like a good one.
 - **A description that resolves to the wrong passage** — unavoidable with an
   LLM fallback, so it is made visible: any non-verbatim resolution is echoed
   back ("Reading that as **Matthew 25:1-13**"), and naming a different
@@ -466,6 +490,9 @@ TDD throughout: each test below is written before the code it covers.
   unparseable reply after one retry resolves to nothing rather than a guess.
 - A resolution the user did not type verbatim is echoed back in the reply;
   an explicit reference is not.
+- A resolved passage with no text in `Complete.db` stops the run before
+  Phase 1, and stops it *before* the echo-back, whether the reference was
+  described or typed.
 
 `test_bible_search.py`
 

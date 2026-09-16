@@ -1831,6 +1831,44 @@ async def test_an_erroring_phase_does_not_abort_the_run(monkeypatch, fake_llm):
     assert events[-1]["kind"] == "final"
 
 
+async def test_run_refuses_a_passage_with_no_text(monkeypatch, fake_llm):
+    """An LLM-resolved description, or a typo'd reference, can name a
+    passage Complete.db has no text for. Running the phases on an empty
+    string would yield a confident report about nothing."""
+    async def empty_passage(usfm, chapter, start, end):
+        return ""
+
+    monkeypatch.setattr(hermeneutics, "passage_text_for", empty_passage)
+    events = await _collect("MAT 14:900-905")
+    assert len(events) == 1
+    assert events[0]["kind"] == "final"
+    assert "couldn't find any text" in events[0]["result"]["message"]
+
+
+async def test_an_empty_passage_is_caught_before_the_echo_back(monkeypatch, fake_llm):
+    async def empty_passage(usfm, chapter, start, end):
+        return ""
+
+    async def from_llm(text):
+        return "MAT 14:900-905"
+
+    monkeypatch.setattr(hermeneutics, "passage_text_for", empty_passage)
+    monkeypatch.setattr(hermeneutics, "resolve_description", from_llm)
+    events = await _collect(None, message="jesus feeding the 5000")
+    assert len(events) == 1, "no 'running it now' notice for a passage that cannot run"
+    assert "read your description wrong" in events[0]["result"]["message"]
+
+
+async def test_a_whitespace_only_passage_counts_as_empty(monkeypatch, fake_llm):
+    async def blank(usfm, chapter, start, end):
+        return "   \n  "
+
+    monkeypatch.setattr(hermeneutics, "passage_text_for", blank)
+    events = await _collect("ROM 8:1")
+    assert len(events) == 1
+    assert events[0]["result"]["route"].endswith("no text")
+
+
 async def test_run_refuses_a_chapter_with_a_narrowing_reply(fake_llm):
     events = await _collect("GEN 1")
     assert len(events) == 1
@@ -1914,6 +1952,28 @@ async def run(
         })
         return
 
+    # Nothing downstream checks that the passage exists: an LLM-resolved
+    # description, or a typo'd reference, can name a chapter or verse range
+    # Complete.db has no text for, and every phase would then run on an
+    # empty string and produce a confident, wholly ungrounded report. Phase
+    # 4 already refuses to cite a verse it cannot fetch; the passage the
+    # whole run is about gets the same guarantee. Checked BEFORE the
+    # echo-back, so an unusable resolution never announces itself as though
+    # the run were starting.
+    passage_text = await passage_text_for(usfm, chapter, start, end)
+    if not passage_text.strip():
+        yield _final({
+            "type": "chat",
+            "message": (
+                f"I couldn't find any text for **{resolved}**"
+                + (" — I may have read your description wrong." if was_described else ".")
+                + " Could you give me the reference you have in mind?"
+            ),
+            "data": {"reference": resolved},
+            "route": "hermeneutics → passage has no text",
+        })
+        return
+
     # A passage the user described rather than cited is echoed back before
     # any phase runs, so a wrong reading is visible immediately instead of
     # ninety seconds later with the report. Index 0 keeps this on the
@@ -1927,7 +1987,6 @@ async def run(
             "markdown": f"Reading that as **{resolved}** — running it now.",
         }}
 
-    passage_text = await passage_text_for(usfm, chapter, start, end)
     completed: List[Dict[str, Any]] = []
 
     for spec in PHASES:
@@ -2023,7 +2082,7 @@ async def run(
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python3 -m pytest tests/chatbot/test_hermeneutics_run.py -v`
-Expected: PASS (16 tests)
+Expected: PASS (19 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -3307,10 +3366,18 @@ Start the app per `CHATBOT_SETUP.md`, then in the UI:
    appears, and runs all eight phases (13 verses, within the 25-verse cap).
 6. **"the armour of God"** — not a parable, so it exercises the LLM fallback;
    expect Ephesians 6:10-18 and the same echo-back.
-7. **"the bit where that guy does the thing"** — resolves to nothing; expect a
+7. **"Jesus feeding the 5000"** — not a parable, so the LLM fallback answers.
+   Expect one of the four gospel accounts, echoed back before Phase 1. Name a
+   different account ("do John's account instead") and confirm it starts a
+   fresh run.
+8. **"the bit where that guy does the thing"** — resolves to nothing; expect a
    request for a reference, never a run on a guessed passage.
-8. Ask a follow-up after a completed run ("why does the audience matter?") — it must answer from the digest, and the phases must **not** re-run. Confirm in the trace pane.
-9. Reload the page mid-session — the completed phases are still rendered.
+9. **A reference that does not exist** (type "Matthew 14:900") — expect the
+   "couldn't find any text" reply and **no** phases at all. This is the guard
+   against a confident report about an empty passage; if any phase streams
+   here, stop and fix it before shipping.
+10. Ask a follow-up after a completed run ("why does the audience matter?") — it must answer from the digest, and the phases must **not** re-run. Confirm in the trace pane.
+11. Reload the page mid-session — the completed phases are still rendered.
 
 - [ ] **Step 3: Document the mode**
 
@@ -3337,9 +3404,13 @@ a share link shows the finished run. The whole report also opens in the
 artifact pane (`hermeneutics_report`, carried inline like `devotional`).
 
 A passage can be named by reference **or described** ("the parable of the
-ten virgins"): resolution tries the reference regex, then a normalised name
-match against the existing `chatbot/data/parables.py` table (no LLM call),
-then one short LLM completion with a single retry. A resolution the user did
+ten virgins", "Jesus feeding the 5000"): resolution tries the reference
+regex, then a normalised name match against the existing
+`chatbot/data/parables.py` table (no LLM call), then one short LLM completion
+with a single retry. However it resolved, the passage is then checked to
+actually have text in `Complete.db` — an unresolvable or typo'd reference
+stops the run before Phase 1 rather than letting eight phases analyse an
+empty string. A resolution the user did
 not type verbatim is echoed back before Phase 1 runs, as an index-0 `phase`
 event. Resolution failure asks for a reference rather than guessing. Note
 that the 25-verse cap is sized to the parable corpus — 12 of the 42 parables
@@ -3376,4 +3447,5 @@ EOF
 - **The `Original_Words_*` and `Root`/`KJV_SN` alignments are different lengths and different orders.** Genesis 1:1 has 7 original words and 6 root entries. Mixing them silently produces wrong Strong's-to-English pairings. The Task 2 tests pin both.
 - **`simple_completion` returns `""` on an unconfigured provider or any HTTP error** — it does not raise. Task 8 checks `llm_unconfigured_error()` up front for that reason; an empty phase body from a transient error still yields a phase with `status: "done"` and empty markdown, which the UI renders as an empty section. That is acceptable; do not add a retry.
 - **Do not add a Phase 8 retry loop.** It was explicitly considered and rejected — see the spec's *Phase 8 is disclosure, not enforcement*.
+- **An empty `passage_text` is a stop condition, not a degraded run.** `list_passage_verses_sync` returns `[]` for a chapter or range `Complete.db` has no rows for, which becomes `""` — and every phase would happily run on it. The guard in Task 8 is the only thing standing between a hallucinated reference and eight phases of confident nonsense. Do not soften it into a warning.
 - **`_resolve_verse_reference` returns `None` for an unidentifiable book.** That is the mechanism by which a hallucinated witness gets dropped; do not "fix" it by falling back to the raw string.
