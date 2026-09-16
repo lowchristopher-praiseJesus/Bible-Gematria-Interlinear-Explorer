@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
+import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -264,6 +264,19 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
             }
           >
             <HelpCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Socratic Study
+          </button>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithChoices(
+                'hermeneutics',
+                '📚 Deep Study',
+                'Name a passage and I\'ll run it through all eight phases — context, semantics, witnesses, covenant, typology and the validation tests.',
+                [{ label: 'Surprise me', modeParams: { surprise: true } }]
+              )
+            }
+          >
+            <Layers className="h-4 w-4 shrink-0" aria-hidden="true" /> Deep Study
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
             <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything

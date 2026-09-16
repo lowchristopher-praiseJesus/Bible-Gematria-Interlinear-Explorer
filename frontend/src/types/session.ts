@@ -26,6 +26,7 @@ export interface ModeParams {
   /** Hermeneutics mode: the compact digest of a completed run. Its presence
    * is what makes a later turn a follow-up rather than a fresh run. */
   runDigest?: string
+  surprise?: boolean
 }
 
 export interface ArtifactLink {

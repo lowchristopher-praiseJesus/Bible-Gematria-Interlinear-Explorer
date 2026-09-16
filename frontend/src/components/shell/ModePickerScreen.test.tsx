@@ -193,4 +193,20 @@ describe('ModePickerScreen', () => {
     expect(session.messages[0]).toMatchObject({ role: 'user', text: 'What does John 3:16 mean?' })
     expect(session.messages[1]).toMatchObject({ role: 'assistant', text: 'Great question — here is what I found.' })
   })
+
+  it('offers a Deep Study starter', () => {
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    expect(screen.getByRole('button', { name: /deep study/i })).toBeInTheDocument()
+  })
+
+  it('selecting Deep Study offers a "Surprise me" choice inline', async () => {
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /deep study/i }))
+
+    const session = firstSession()
+    expect(session.mode).toBe('hermeneutics')
+    expect(session.messages[0]).toMatchObject({ role: 'user', text: '📚 Deep Study' })
+    expect(session.messages[1].choicesStatus).toBe('ready')
+    expect(session.messages[1].choices).toEqual([{ label: 'Surprise me', modeParams: { surprise: true } }])
+  })
 })

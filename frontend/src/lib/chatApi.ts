@@ -64,6 +64,9 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
       case 'runDigest':
         out.run_digest = value
         break
+      case 'surprise':
+        out.surprise = value
+        break
       default:
         out[key] = value
     }

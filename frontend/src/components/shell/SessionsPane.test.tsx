@@ -315,4 +315,11 @@ describe('SessionsPane', () => {
       expect(screen.getByText('Prodigal', { selector: 'mark' })).toBeInTheDocument()
     })
   })
+
+  it('groups Deep Study sessions under their own heading', () => {
+    useSessionsStore.getState().createSession('hermeneutics', {})
+    render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+    // The label differs from the mode id on purpose — see Global Constraints.
+    expect(screen.getByText('Deep Study')).toBeInTheDocument()
+  })
 })
