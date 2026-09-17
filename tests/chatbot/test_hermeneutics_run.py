@@ -28,11 +28,7 @@ def fake_llm(monkeypatch):
             return "This passage promises the resurrection and rapture of every believer."
         return "Phase findings."
 
-    async def fake_fetch(reference, languages=None):
-        return {"eng-KJV": f"text of {reference}"}
-
     monkeypatch.setattr(hermeneutics, "simple_completion", fake_simple_completion)
-    monkeypatch.setattr(hermeneutics, "fetch_verse_translations", fake_fetch)
     monkeypatch.setattr(hermeneutics, "llm_unconfigured_error", lambda: None)
     monkeypatch.setattr(hermeneutics, "search_english", lambda q: _empty_search())
     return calls
@@ -294,3 +290,42 @@ async def test_an_empty_phase_reply_is_reported_as_an_error(monkeypatch, fake_ll
     assert phase5["status"] == "error"
     assert phase5["markdown"]
     assert "5" in events[-1]["result"]["message"]
+
+
+async def test_an_empty_synthesis_falls_back_to_a_stated_line(monkeypatch, fake_llm):
+    # simple_completion returns "" on a timeout rather than raising; the
+    # final message must never be an empty bubble.
+    real = hermeneutics.simple_completion
+
+    async def silent_synthesis(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
+        if "FINAL VERIFIED INTERPRETATION" in system_prompt:
+            return ""
+        return await real(system_prompt, user_prompt, max_tokens=max_tokens)
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", silent_synthesis)
+    events = await _collect("1TH 4:15-18")
+    result = events[-1]["result"]
+    assert result["message"].strip()
+    assert "could not be generated" in result["message"]
+    assert result["artifacts"][0]["params"]["summary"] == result["message"]
+
+
+async def test_the_synthesis_leaves_room_for_a_reasoning_model(monkeypatch, fake_llm):
+    budgets = {}
+    real = hermeneutics.simple_completion
+
+    async def spy(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
+        if "FINAL VERIFIED INTERPRETATION" in system_prompt:
+            budgets["synthesis"] = max_tokens
+        return await real(system_prompt, user_prompt, max_tokens=max_tokens)
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", spy)
+    await _collect("1TH 4:15-18")
+    assert budgets["synthesis"] >= 1500
+
+
+async def test_the_witness_shortfall_note_follows_the_minimum(monkeypatch, fake_llm):
+    monkeypatch.setattr(hermeneutics, "MIN_WITNESSES", 3)
+    events = await _collect("1TH 4:15-18")
+    phase4 = next(e["phase"] for e in events if e["kind"] == "phase" and e["phase"]["index"] == 4)
+    assert "fewer than three" in phase4["markdown"].lower()

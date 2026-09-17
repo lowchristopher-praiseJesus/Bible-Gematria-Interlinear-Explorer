@@ -326,6 +326,16 @@ async def _with_keepalive(events):
     finally:
         if not pending.done():
             pending.cancel()
+            # Let the cancellation land before closing: aclose() on a
+            # generator whose __anext__ is still running raises.
+            try:
+                await pending
+            except BaseException:  # noqa: BLE001 — CancelledError or the step's own error
+                pass
+        # On a client disconnect, close the pipeline too rather than leaving
+        # it suspended mid-run until garbage collection.
+        if hasattr(events, "aclose"):
+            await events.aclose()
 
 
 async def _stream_chat_response(

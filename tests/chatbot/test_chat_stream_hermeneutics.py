@@ -90,3 +90,20 @@ def test_stream_passes_the_narrowed_chapter_through(client, monkeypatch):
     })
     assert seen["scope_chapter"] == "GEN 1"
 
+
+async def test_keepalive_closes_the_inner_stream_when_the_client_goes_away():
+    # A client disconnect closes the outer generator; the pipeline inside
+    # must be closed too, not left suspended mid-run.
+    closed = {}
+
+    async def inner():
+        try:
+            yield {"kind": "phase", "phase": {}}
+            yield {"kind": "phase", "phase": {}}
+        finally:
+            closed["inner"] = True
+
+    outer = api._with_keepalive(inner())
+    await outer.__anext__()
+    await outer.aclose()
+    assert closed.get("inner") is True

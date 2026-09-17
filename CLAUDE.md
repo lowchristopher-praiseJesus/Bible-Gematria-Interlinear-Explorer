@@ -83,7 +83,7 @@ one LLM call per phase, orchestrated by `chatbot/hermeneutics.py` with
 the prompts in `chatbot/hermeneutics_phases.py`. Phases 2, 4 and 7 are
 grounded in real `Complete.db` lookups (interlinear words and Strong's
 entries via the new dependency-free readers in `chatbot/bible_search.py`,
-English full-text search, and witness-verse verification that **drops any
+English full-text search, and witness-verse verification against `Complete.db` that **drops any
 reference that does not resolve**); the rest run on model knowledge over
 the passage and the prior phases.
 
@@ -100,7 +100,8 @@ against the existing `chatbot/data/parables.py` table (or the word "parable"
 plus its distinctive words — no LLM call), then the session's chosen passage,
 then one short LLM completion with a single retry. Conversation history is
 never a reference source, and only a completed run or the primer sets the
-session reference — the claim, narrowing and no-text replies do not. That same call also distinguishes a passage from a
+session reference — the claim, narrowing and no-text replies do not.
+The LLM call also distinguishes a passage from a
 doctrinal **claim** ("verify this claim — the patriarchs rise with the
 Church"): a claim is never run, because the eight phases interpret one
 passage and a claim is a proposition to test across several. The mode says

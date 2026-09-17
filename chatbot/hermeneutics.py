@@ -19,10 +19,17 @@ from chatbot.data.parables import PARABLES
 from chatbot.ollama_client import llm_unconfigured_error, simple_completion, call_ollama_with_context, generate_llm_follow_ups
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
 from chatbot.socratic import _detect_reference
-from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english, fetch_verse_translations
+from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english
 from chatbot.hermeneutics_phases import PHASES, SYNTHESIS_PROMPT
 
 MAX_PASSAGE_VERSES = 25
+
+# Room for a reasoning model's hidden reasoning before the synthesis itself.
+SYNTHESIS_MAX_TOKENS = 1500
+
+SUMMARY_FALLBACK = (
+    "The summary could not be generated — the phase findings above stand on their own."
+)
 
 # A hosted reasoning model can take over a minute on one phase; the shared
 # 60s default would turn that into a silently empty phase.
@@ -441,53 +448,71 @@ def parse_marker(phase_text: str, marker: str) -> Optional[str]:
 
 def parse_verdicts(phase_text: str) -> List[Dict[str, Any]]:
     """Phase 8's three verdicts. Prose without markers yields [] — the
-    report then shows no badges rather than inventing passes."""
-    return [
-        {
+    report then shows no badges rather than inventing passes. A test the
+    model states twice keeps its first verdict."""
+    verdicts: Dict[str, Dict[str, Any]] = {}
+    for test, outcome, reason in _VERDICT_LINE_RE.findall(phase_text):
+        verdicts.setdefault(test.lower(), {
             "test": test.lower(),
             "passed": outcome.lower() == "pass",
             "reason": reason.strip(),
-        }
-        for test, outcome, reason in _VERDICT_LINE_RE.findall(phase_text)
-    ]
+        })
+    return list(verdicts.values())
 
 
 async def verify_witnesses(phase_text: str) -> Tuple[List[Dict[str, Any]], int]:
-    """Resolve and fetch each reference Phase 4 proposed.
+    """Resolve each reference Phase 4 proposed and read it from Complete.db.
 
     Returns (verified citations, count dropped). A reference that doesn't
-    resolve, or whose text can't be fetched, is dropped — the model must
-    not be able to cite a verse that isn't there.
+    resolve, or any verse of whose range Complete.db has no text for, is
+    dropped — the model must not be able to cite a verse that isn't there.
+    A reference repeated in the list is cited once and not counted as
+    dropped.
     """
     match = _WITNESS_LINE_RE.search(phase_text)
     if not match:
         return [], 0
 
     citations: List[Dict[str, Any]] = []
+    seen = set()
     dropped = 0
-    for raw in match.group(1).split(","):
-        candidate = raw.strip()
+    for raw in match.group(1).translate(_DASHES).split(","):
+        candidate = raw.strip().rstrip(".;")
         if not candidate:
             continue
         resolved = _resolve_verse_reference(candidate)
-        if not resolved:
+        parsed = _SCOPE_RE.match(resolved.upper()) if resolved else None
+        if not parsed:
             dropped += 1
             continue
-        try:
-            translations = await fetch_verse_translations(resolved, languages=["eng"])
-        except Exception:
-            translations = None
-        text = (translations or {}).get("eng-KJV") or next(
-            iter((translations or {}).values()), None
+        if resolved in seen:
+            continue
+        usfm, chapter = parsed.group(1), int(parsed.group(2))
+        start = int(parsed.group(3))
+        end = int(parsed.group(4)) if parsed.group(4) else start
+        book_name = _USFM_TO_BOOK.get(usfm)
+        verses = (
+            list_passage_verses_sync(book_name, chapter, start, end)
+            if book_name and start <= end else []
         )
-        if not text:
+        with_text = [v for v in verses if v.get("kjv")]
+        if not with_text or len(with_text) != end - start + 1:
             dropped += 1
             continue
+        text = (
+            with_text[0]["kjv"] if start == end
+            else " ".join(f"{v['vnum']} {v['kjv']}" for v in with_text)
+        )
+        seen.add(resolved)
         citations.append({"reference": resolved, "text": text, "verified": True})
     return citations, dropped
 
 
 MIN_WITNESSES = 2
+
+
+def _count_word(n: int) -> str:
+    return {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}.get(n, str(n))
 
 
 def _final(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -651,7 +676,7 @@ async def run(
                 phase["citations"] = citations
                 if len(citations) < MIN_WITNESSES:
                     phase["markdown"] += (
-                        "\n\n_Note: fewer than two proposed witnesses could be "
+                        f"\n\n_Note: fewer than {_count_word(MIN_WITNESSES)} proposed witnesses could be "
                         f"verified against the text ({dropped} dropped as unresolvable). "
                         "Weigh this interpretation accordingly._"
                     )
@@ -677,11 +702,16 @@ async def run(
         summary = await simple_completion(
             SYNTHESIS_PROMPT,
             f"PASSAGE: {resolved}\n\nTEXT (KJV): {passage_text}\n\nPHASE FINDINGS:\n{findings}",
-            max_tokens=900,
+            max_tokens=SYNTHESIS_MAX_TOKENS,
             timeout=LLM_TIMEOUT_SECONDS,
         )
-    except Exception as exc:
-        summary = f"The summary could not be generated: {type(exc).__name__}: {exc}"
+    except Exception:
+        summary = ""
+    # simple_completion returns "" on a timeout or provider error rather
+    # than raising; an empty chat bubble would read as a finished report
+    # with nothing to say.
+    if not (summary or "").strip():
+        summary = SUMMARY_FALLBACK
     if missing:
         summary += (
             "\n\n_Phases "
