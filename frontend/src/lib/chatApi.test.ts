@@ -10,6 +10,7 @@ import {
   postChatStream,
   toWireModeParams,
 } from './chatApi'
+import type { PhaseResult } from '@/types/session'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -261,7 +262,7 @@ describe('postChatStream phase events', () => {
       'data: {"type":"final","result":{"type":"chat","message":"report"}}\n\n',
       'data: {"type":"trace","trace":{}}\n\n',
     ])
-    const phases: any[] = []
+    const phases: PhaseResult[] = []
     const result = await postChatStream({ message: 'run it' }, { onPhase: (p) => phases.push(p) })
     expect(phases.map((p) => p.index)).toEqual([1, 2])
     expect(phases[0].title).toBe('Context')

@@ -74,7 +74,7 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
   return out
 }
 
-interface ChatApiResponse {
+export interface ChatApiResponse {
   type: string
   message: string
   data?: Record<string, unknown> | null

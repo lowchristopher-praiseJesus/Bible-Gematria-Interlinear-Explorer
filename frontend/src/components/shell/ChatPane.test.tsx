@@ -8,8 +8,10 @@ import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { useDevotionalRotationStore } from '@/store/useDevotionalRotationStore'
 import { useVoiceSettingsStore } from '@/store/useVoiceSettingsStore'
 import * as chatApi from '@/lib/chatApi'
+import type { ChatApiResponse } from '@/lib/chatApi'
 import * as shareApi from '@/lib/shareApi'
 import * as voiceModule from './useVoiceMode'
+import type { PhaseResult } from '@/types/session'
 
 describe('ChatPane', () => {
   beforeEach(() => {
@@ -951,7 +953,7 @@ describe('ChatPane', () => {
     )
   })
 
-  function mockStreamWithPhases(phases: any[], finalResult: any) {
+  function mockStreamWithPhases(phases: PhaseResult[], finalResult: ChatApiResponse) {
     vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
       for (const phase of phases) {
         handlers?.onPhase?.(phase)
