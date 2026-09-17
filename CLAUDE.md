@@ -74,6 +74,54 @@ clients already saw — so pool changes must be rare and deliberate and will
 trip `test_devotional_rotation.py::test_rotation_sequence_is_pinned`. See
 `docs/superpowers/specs/2026-09-10-devotional-annual-rotation-design.md`.
 
+## Deep Study mode (internal id `hermeneutics`)
+
+Runs a passage (a verse or a range of at most 25 verses — see
+`MAX_PASSAGE_VERSES`, sized to fit every curated parable) through a fixed
+8-phase interpretive methodology,
+one LLM call per phase, orchestrated by `chatbot/hermeneutics.py` with
+the prompts in `chatbot/hermeneutics_phases.py`. Phases 2, 4 and 7 are
+grounded in real `Complete.db` lookups (interlinear words and Strong's
+entries via the new dependency-free readers in `chatbot/bible_search.py`,
+English full-text search, and witness-verse verification that **drops any
+reference that does not resolve**); the rest run on model knowledge over
+the passage and the prior phases.
+
+Each completed phase is pushed to the browser as an additive `phase` SSE
+event — the `stream` / single `final` / terminal `trace` contract is
+otherwise unchanged — and stored on the assistant message, so a reload or
+a share link shows the finished run. The whole report also opens in the
+artifact pane (`hermeneutics_report`, carried inline like `devotional`).
+
+A passage can be named by reference **or described** ("the parable of the
+ten virgins", "Jesus feeding the 5000"): resolution tries the reference
+regex, then a normalised name match against the existing
+`chatbot/data/parables.py` table (no LLM call), then one short LLM completion
+with a single retry. That same call also distinguishes a passage from a
+doctrinal **claim** ("verify this claim — the patriarchs rise with the
+Church"): a claim is never run, because the eight phases interpret one
+passage and a claim is a proposition to test across several. The mode says
+so and offers the passage that bears on it most directly. However it
+resolved, the passage is then checked to actually have text in
+`Complete.db` — an unresolvable or typo'd reference
+stops the run before Phase 1 rather than letting eight phases analyse an
+empty string. A resolution the user did
+not type verbatim is echoed back before Phase 1 runs, as an index-0 `phase`
+event. Resolution failure asks for a reference rather than guessing. Note
+that the 25-verse cap is sized to the parable corpus — 12 of the 42 parables
+exceed 12 verses, the longest being the Prodigal Son at 22 — so lowering it
+would start rejecting named parables.
+
+The curated idiom rulings in `chatbot/data/hermeneutic_rulings.py` are
+injected only when their trigger phrases match the passage. Every proof
+text is verified against `Complete.db` by
+`tests/chatbot/test_hermeneutic_rulings.py`. **Editing `RULINGS` changes
+the mode's doctrinal output** — the methodology encodes a specific
+free-grace/dispensational position deliberately, and Phase 8's three tests
+are *disclosure, never enforcement*: a failed test is reported with a
+caution banner and never triggers a rewrite. See
+`docs/superpowers/specs/2026-09-16-hermeneutics-mode-design.md`.
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.
