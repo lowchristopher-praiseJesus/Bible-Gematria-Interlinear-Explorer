@@ -138,7 +138,6 @@ export function DevotionalListenOverlay({ reference, text, open, onClose }: Devo
           <Dialog.Close asChild>
             <button
               type="button"
-              onClick={handleDone}
               aria-label="Done"
               className="text-xs px-3 py-1.5 rounded border border-white/30 text-white/90 hover:bg-white/10"
             >

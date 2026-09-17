@@ -54,7 +54,7 @@ describe('DevotionalListenOverlay', () => {
     await screen.findByRole('button', { name: /play/i })
 
     await userEvent.click(screen.getByRole('button', { name: /done/i }))
-    expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalled()
-    expect(onClose).toHaveBeenCalled()
+    expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

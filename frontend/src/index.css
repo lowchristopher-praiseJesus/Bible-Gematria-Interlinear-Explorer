@@ -235,20 +235,29 @@ summary:focus-visible,
 }
 
 @keyframes devotional-listen-gradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% { background-position: 0% 0%, 0% 50%; }
+  50% { background-position: 0% 0%, 100% 50%; }
+  100% { background-position: 0% 0%, 0% 50%; }
 }
 
+/* A dark scrim is layered on top of the animated gradient (as a second,
+   fixed background layer) so the overlay's white text stays legible in
+   every reader theme — --color-surface/--color-surface-alt resolve to
+   near-white in scholarly/illuminated/papyrus, and without the scrim the
+   gradient animation cycles through stretches of near-white-on-white.
+   0.65 alpha keeps text-white at >=4.5:1 (WCAG AA) even at the weakest
+   text opacity used (white/80%) across all four reader themes. */
 .devotional-listen-bg {
-  background: linear-gradient(
-    120deg,
-    var(--color-surface),
-    var(--color-accent-dark),
-    var(--color-surface-alt),
-    var(--color-accent)
-  );
-  background-size: 300% 300%;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.65)),
+    linear-gradient(
+      120deg,
+      var(--color-surface),
+      var(--color-accent-dark),
+      var(--color-surface-alt),
+      var(--color-accent)
+    );
+  background-size: 100% 100%, 300% 300%;
   animation: devotional-listen-gradient 20s ease-in-out infinite;
 }
 
