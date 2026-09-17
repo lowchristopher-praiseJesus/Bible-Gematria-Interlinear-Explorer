@@ -2156,8 +2156,23 @@ def chatbot_proxy(subpath=None):
 		)
 
 		# Build Flask response
-		excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-		response_headers = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded_headers]
+		raw_header_items = list(resp.raw.headers.items())
+		excluded_headers = {'content-encoding', 'transfer-encoding', 'connection'}
+		if any(k.lower() == 'content-encoding' for k, _ in raw_header_items):
+			# requests transparently decompresses the body in iter_content()
+			# below, so a compressed upstream's Content-Length would no longer
+			# match the decompressed bytes actually forwarded here — drop it
+			# too and let the response stay chunked, as it always has.
+			excluded_headers.add('content-length')
+		# Forwarding a real Content-Length (the common, uncompressed case)
+		# instead of always stripping it matters for more than just byte
+		# counting: without it, every proxied response - including static
+		# files like the devotional's generated MP3 - goes out as
+		# Transfer-Encoding: chunked. Browsers (mobile ones especially) can
+		# then report an HTMLMediaElement's `duration` as Infinity instead of
+		# the real length, breaking anything computed from it (e.g. the
+		# Listen overlay's playback-position scroll sync).
+		response_headers = [(k, v) for k, v in raw_header_items if k.lower() not in excluded_headers]
 
 		# Small chunk size so an SSE frame (a few hundred bytes) is passed
 		# through as soon as it arrives instead of waiting to fill a large

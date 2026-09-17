@@ -73,6 +73,42 @@ def test_proxy_forwards_every_chunk_and_closes_the_upstream_connection(client, m
     assert upstream.closed is True
 
 
+def test_proxy_forwards_content_length_for_an_uncompressed_response(client, monkeypatch):
+    # Regression test: the proxy used to strip Content-Length from every
+    # response (needed for /chat/stream's SSE body, which never has one
+    # upstream), forcing even small, complete, uncompressed bodies like a
+    # generated devotional's MP3 into Transfer-Encoding: chunked. Browsers
+    # (mobile ones especially) can then read an <audio> element's `duration`
+    # as Infinity instead of the real value, breaking anything computed from
+    # it (e.g. the Listen overlay's playback-position scroll sync).
+    upstream = FakeUpstreamResponse(
+        200, [b"id3-mp3-bytes"], headers={"Content-Type": "audio/mpeg", "Content-Length": "13"}
+    )
+    monkeypatch.setattr(myproject.requests, "request", lambda *a, **k: upstream)
+
+    resp = client.get("/api/bible-chat/devotional-audio/abc.mp3")
+
+    assert resp.headers.get("Content-Length") == "13"
+
+
+def test_proxy_drops_content_length_for_a_compressed_response(client, monkeypatch):
+    # A Content-Encoding response has its Content-Length forwarded from
+    # requests's iter_content(), which transparently decompresses the body -
+    # so the original (compressed) Content-Length would no longer match the
+    # bytes actually sent and must still be dropped.
+    upstream = FakeUpstreamResponse(
+        200,
+        [b"decompressed-bytes"],
+        headers={"Content-Type": "application/json", "Content-Encoding": "gzip", "Content-Length": "9999"},
+    )
+    monkeypatch.setattr(myproject.requests, "request", lambda *a, **k: upstream)
+
+    resp = client.get("/api/bible-chat/parables")
+
+    assert "Content-Length" not in resp.headers
+    assert "Content-Encoding" not in resp.headers
+
+
 def test_proxy_still_returns_503_on_a_connection_error(client, monkeypatch):
     import requests as requests_module
 
