@@ -734,6 +734,28 @@ describe('ChatPane', () => {
     expect(useSessionsStore.getState().sessions[session.id].modeParams.rotationCursor).toBe(0)
   })
 
+  it('a system-source devotional does not advance the cursor when served from the daily cache', async () => {
+    localStorage.clear()
+    useDevotionalRotationStore.setState({ seed: null, cursor: 0 })
+    const session = useSessionsStore.getState().createSession('devotional', { source: 'system' })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: '📖 Devotional' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'Let me find a verse for you…',
+    })
+
+    vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
+      handlers?.onChunk?.('')
+      const final = devotionalFinal()
+      return { ...final, data: { ...final.data, from_daily_cache: true } } as never
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
+
+    expect(useDevotionalRotationStore.getState().cursor).toBe(0)
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.delivered).toBe(true)
+  })
+
   it('a second system-source devotional uses the advanced cursor', async () => {
     localStorage.clear()
     useDevotionalRotationStore.setState({ seed: 12345, cursor: 1 })

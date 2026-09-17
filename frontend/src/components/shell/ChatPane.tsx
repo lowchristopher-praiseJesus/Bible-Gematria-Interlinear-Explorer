@@ -308,7 +308,8 @@ export function ChatPane({ sessionId }: Props) {
         )
         if (response && response.type !== 'error') {
           updateModeParams(sessionId, { delivered: true })
-          if (isRotationPick) {
+          const fromDailyCache = response.data?.from_daily_cache === true
+          if (isRotationPick && !fromDailyCache) {
             useDevotionalRotationStore.getState().advance()
           }
         }
