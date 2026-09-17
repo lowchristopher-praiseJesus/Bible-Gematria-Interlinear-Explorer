@@ -532,7 +532,7 @@ to:
 Add to `tests/chatbot/test_chat_stream_devotional.py` (reusing its existing `_events`/`_patch_stream_devotional` helpers):
 
 ```python
-def test_devotional_stream_surfaces_from_daily_cache(monkeypatch):
+def test_devotional_stream_surfaces_from_daily_cache(client, monkeypatch):
     async def fake_stream(raw, source, page_context=None, rotation=None):
         yield {"type": "done", "text": "Cached text.", "reference": "GEN 8:22",
                "translations": {"eng-KJV": "..."}, "from_daily_cache": True}
@@ -546,7 +546,7 @@ def test_devotional_stream_surfaces_from_daily_cache(monkeypatch):
     assert final["data"]["from_daily_cache"] is True
 ```
 
-This test needs the `client` fixture — check the top of `tests/chatbot/test_chat_stream_devotional.py`; if `client` isn't already a bare-name fixture parameter there (it's provided by `tests/chatbot/conftest.py`), add `client` as a parameter to this new test function, matching how other tests in that file already receive it via pytest fixture injection.
+`client` is the `TestClient` fixture from `tests/chatbot/conftest.py`, received via pytest fixture injection — the same pattern every other test in this file already uses.
 
 - [ ] **Step 7: Run the full devotional test suite**
 
