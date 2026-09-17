@@ -107,9 +107,11 @@ def _probe_duration_seconds(path: Path) -> float:
             ],
             check=True, capture_output=True, text=True,
         )
+        return float(result.stdout.strip())
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         raise DevotionalAudioError(f"ffprobe failed: {exc}") from exc
-    return float(result.stdout.strip())
+    except ValueError as exc:
+        raise DevotionalAudioError(f"ffprobe returned an unparseable duration: {exc}") from exc
 
 
 def synthesize_devotional_audio(text: str) -> bytes:
@@ -119,7 +121,10 @@ def synthesize_devotional_audio(text: str) -> bytes:
     if not text.strip():
         raise DevotionalAudioError("Cannot synthesize audio for empty text")
 
-    client = texttospeech.TextToSpeechClient()
+    try:
+        client = texttospeech.TextToSpeechClient()
+    except Exception as exc:  # noqa: BLE001 — credential/config errors become clean app errors
+        raise DevotionalAudioError(f"TTS client initialization failed: {exc}") from exc
     chunks = _chunk_text(text)
 
     with tempfile.TemporaryDirectory() as tmp:

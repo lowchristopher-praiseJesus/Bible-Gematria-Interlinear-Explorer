@@ -109,3 +109,26 @@ def test_synthesize_devotional_audio_wraps_tts_failure(monkeypatch):
 
     with pytest.raises(da.DevotionalAudioError):
         da.synthesize_devotional_audio("Some devotional text.")
+
+
+def test_synthesize_devotional_audio_wraps_client_construction_failure(monkeypatch):
+    class FailingClientClass:
+        def __init__(self):
+            raise RuntimeError("credentials not found")
+
+    monkeypatch.setattr(da.texttospeech, "TextToSpeechClient", FailingClientClass)
+
+    with pytest.raises(da.DevotionalAudioError):
+        da.synthesize_devotional_audio("Some devotional text.")
+
+
+def test_probe_duration_seconds_wraps_unparseable_output(monkeypatch):
+    def fake_run_ffprobe(args, **kwargs):
+        class FakeResult:
+            stdout = "N/A\n"
+        return FakeResult()
+
+    monkeypatch.setattr("chatbot.devotional_audio.subprocess.run", fake_run_ffprobe)
+
+    with pytest.raises(da.DevotionalAudioError):
+        da._probe_duration_seconds(Path("/fake/path.mp3"))
