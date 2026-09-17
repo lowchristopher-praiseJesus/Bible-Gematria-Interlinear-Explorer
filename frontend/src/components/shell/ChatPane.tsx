@@ -53,13 +53,24 @@ function socraticReference(data: unknown): string | undefined {
   return (data as { reference?: string | null } | undefined)?.reference ?? undefined
 }
 
-// Hermeneutics persists both the resolved passage and the run digest into
+type HermeneuticsPatch = { reference?: string; runDigest?: string; scopeChapter?: string }
+
+// Deep Study persists the resolved passage and the run digest into
 // modeParams, so a later turn is answered from the completed run instead of
 // re-running the eight phases.
-function hermeneuticsParams(data: unknown): { reference?: string; runDigest?: string } {
-  const d = data as { reference?: string; runDigest?: string } | undefined
-  const patch: { reference?: string; runDigest?: string } = {}
-  if (d?.reference) patch.reference = d.reference
+//
+// The session reference is only ever taken from a completed run (it carries
+// a digest) or the mode primer. A claim redirect, a "which part?" narrowing
+// reply or a no-text reply may mention a passage, but the user never chose
+// it — adopting it would make their next, unrelated message run it.
+//
+// `scopeChapter` (the chapter a narrowing reply asked the user to pick
+// from) lives for exactly one turn, so "verses 1-5" can be read against it;
+// every other reply clears it.
+function hermeneuticsParams(data: unknown, opts: { fromPrimer?: boolean } = {}): HermeneuticsPatch {
+  const d = data as { reference?: string; runDigest?: string; scopeChapter?: string } | null | undefined
+  const patch: HermeneuticsPatch = { scopeChapter: d?.scopeChapter || undefined }
+  if (d?.reference && (d.runDigest || opts.fromPrimer)) patch.reference = d.reference
   // Only a fresh run returns a digest; a follow-up turn returns none, and
   // must not clear the one the session already holds.
   if (d?.runDigest) patch.runDigest = d.runDigest
@@ -388,8 +399,7 @@ export function ChatPane({ sessionId }: Props) {
           if (ref) updateModeParams(sessionId, { reference: ref })
         }
         if (session.mode === 'hermeneutics') {
-          const patch = hermeneuticsParams(response?.data)
-          if (Object.keys(patch).length) updateModeParams(sessionId, patch)
+          updateModeParams(sessionId, hermeneuticsParams(response?.data))
         }
         if (voiceTurn) {
           // Against the id captured when THIS turn's transcript arrived —
@@ -463,6 +473,15 @@ export function ChatPane({ sessionId }: Props) {
       const userMessage = idx > 0 ? session.messages[idx - 1] : undefined
       if (!userMessage || userMessage.role !== 'user') return
       const history = session.messages.slice(0, idx - 1).slice(-6).map((m) => ({ role: m.role, text: m.text }))
+      // Regenerating a Deep Study report must re-run it: sent with the
+      // digest that report itself produced, the backend would treat the
+      // same request as a follow-up and replace the report with a
+      // paragraph answered from its own findings.
+      const target = session.messages[idx]
+      const isReport =
+        !!target.phases?.length || !!target.artifacts?.some((a) => a.type === 'hermeneutics_report')
+      const modeParams = { ...session.modeParams }
+      if (session.mode === 'hermeneutics' && isReport) delete modeParams.runDigest
       setRegeneratingId(assistantMessageId)
       truncateMessagesFrom(sessionId, assistantMessageId)
       try {
@@ -470,15 +489,14 @@ export function ChatPane({ sessionId }: Props) {
           message: userMessage.text,
           history,
           mode: session.mode,
-          mode_params: { ...session.modeParams },
+          mode_params: modeParams,
         })
         if (session.mode === 'socratic') {
           const ref = socraticReference(response?.data)
           if (ref) updateModeParams(sessionId, { reference: ref })
         }
         if (session.mode === 'hermeneutics') {
-          const patch = hermeneuticsParams(response?.data)
-          if (Object.keys(patch).length) updateModeParams(sessionId, patch)
+          updateModeParams(sessionId, hermeneuticsParams(response?.data))
         }
       } finally {
         setRegeneratingId(null)
@@ -536,8 +554,7 @@ export function ChatPane({ sessionId }: Props) {
             if (ref) updateModeParams(sessionId, { reference: ref })
           }
           if (session.mode === 'hermeneutics') {
-            const patch = hermeneuticsParams(response.data)
-            if (Object.keys(patch).length) updateModeParams(sessionId, patch)
+            updateModeParams(sessionId, hermeneuticsParams(response.data, { fromPrimer: true }))
           }
         }
       } catch (err) {

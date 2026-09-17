@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { PhaseList } from './PhaseList'
 import type { PhaseResult } from '@/types/session'
 
@@ -9,6 +9,24 @@ const done = (over: Partial<PhaseResult> = {}): PhaseResult => ({
 })
 
 describe('PhaseList', () => {
+  it('renders repeated witnesses and verdicts from an older stored report without key collisions', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<PhaseList phases={[
+      done({ index: 4, title: 'Witnesses', citations: [
+        { reference: 'JHN 14:2-3', text: 'mansions', verified: true },
+        { reference: 'JHN 14:2-3', text: 'mansions', verified: true },
+      ] }),
+      done({ index: 8, title: 'Validation', verdicts: [
+        { test: 'heart', passed: false, reason: 'a' },
+        { test: 'heart', passed: false, reason: 'b' },
+      ] }),
+    ]} />)
+    await userEvent.click(screen.getByRole('button', { name: /witnesses/i }))
+    await userEvent.click(screen.getByRole('button', { name: /validation/i }))
+    expect(errors.mock.calls.some((c) => String(c[0]).includes('same key'))).toBe(false)
+    errors.mockRestore()
+  })
+
   it('shows each phase title collapsed, with the body hidden until expanded', async () => {
     render(<PhaseList phases={[done()]} />)
     expect(screen.getByText(/contextual scope/i)).toBeInTheDocument()

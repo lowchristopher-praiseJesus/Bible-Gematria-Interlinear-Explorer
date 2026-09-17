@@ -32,8 +32,8 @@ function Phase({ phase }: { phase: PhaseResult }) {
           {renderMarkdown(phase.markdown)}
           {!!phase.citations?.length && (
             <ul className="mt-2 flex flex-col gap-1.5">
-              {phase.citations.map((c) => (
-                <li key={c.reference} className="text-xs">
+              {phase.citations.map((c, i) => (
+                <li key={`${i}-${c.reference}`} className="text-xs">
                   <span className="font-semibold">{c.reference}</span>{' '}
                   <span className="text-[var(--color-text-secondary)]">{c.text}</span>
                 </li>
@@ -42,8 +42,8 @@ function Phase({ phase }: { phase: PhaseResult }) {
           )}
           {!!phase.verdicts?.length && (
             <ul className="mt-2 flex flex-col gap-1">
-              {phase.verdicts.map((v) => (
-                <li key={v.test} className="text-xs">
+              {phase.verdicts.map((v, i) => (
+                <li key={`${i}-${v.test}`} className="text-xs">
                   <span className="font-semibold capitalize">{v.test} Test</span>:{' '}
                   <span className={v.passed ? 'text-[var(--color-green)]' : 'text-[var(--color-danger)]'}>
                     {v.passed ? 'PASSED' : 'FAILED'}
@@ -79,8 +79,8 @@ export function PhaseList({ phases }: { phases: PhaseResult[] }) {
         <div role="status" className="flex items-start gap-2 rounded-md bg-[var(--color-surface-alt)] px-2.5 py-2 text-xs">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-gold)]" aria-hidden="true" />
           <span>
-            {failed.map((v) => (
-              <span key={v.test} className="block">
+            {failed.map((v, i) => (
+              <span key={`${i}-${v.test}`} className="block">
                 <span className="font-semibold capitalize">{v.test} Test</span> failed
                 {v.reason ? `: ${v.reason}` : ''}. Weigh this before accepting the reading.
               </span>

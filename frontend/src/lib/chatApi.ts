@@ -32,7 +32,7 @@ interface ChatPayload {
  * (dayIndex -> day_index, completedDays -> completed_days,
  *  parableId -> parable_id, seriesId -> series_id, conceptSlug -> concept_slug,
  *  rotationSeed -> rotation_seed, rotationCursor -> rotation_cursor,
- *  runDigest -> run_digest).
+ *  runDigest -> run_digest, scopeChapter -> scope_chapter).
  * Unknown keys pass through unchanged so the mapper stays forward-compatible.
  */
 export function toWireModeParams(params: ModeParams): Record<string, unknown> {
@@ -63,6 +63,9 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
         break
       case 'runDigest':
         out.run_digest = value
+        break
+      case 'scopeChapter':
+        out.scope_chapter = value
         break
       case 'surprise':
         out.surprise = value

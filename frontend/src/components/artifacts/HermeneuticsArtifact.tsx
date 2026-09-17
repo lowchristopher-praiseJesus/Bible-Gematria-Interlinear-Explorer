@@ -13,8 +13,8 @@ export function HermeneuticsArtifact({ reference, phases, summary }: Hermeneutic
           <div className="text-sm leading-relaxed">{renderMarkdown(phase.markdown)}</div>
           {!!phase.citations?.length && (
             <ul className="flex flex-col gap-1">
-              {phase.citations.map((c) => (
-                <li key={c.reference} className="text-xs">
+              {phase.citations.map((c, i) => (
+                <li key={`${i}-${c.reference}`} className="text-xs">
                   <span className="font-semibold">{c.reference}</span>{' '}
                   <span className="text-[var(--color-text-secondary)]">{c.text}</span>
                 </li>
@@ -23,8 +23,8 @@ export function HermeneuticsArtifact({ reference, phases, summary }: Hermeneutic
           )}
           {!!phase.verdicts?.length && (
             <ul className="flex flex-col gap-0.5">
-              {phase.verdicts.map((v) => (
-                <li key={v.test} className="text-xs">
+              {phase.verdicts.map((v, i) => (
+                <li key={`${i}-${v.test}`} className="text-xs">
                   <span className="font-semibold capitalize">{v.test} Test</span>:{' '}
                   {v.passed ? 'PASSED' : 'FAILED'}
                   {v.reason ? ` — ${v.reason}` : ''}

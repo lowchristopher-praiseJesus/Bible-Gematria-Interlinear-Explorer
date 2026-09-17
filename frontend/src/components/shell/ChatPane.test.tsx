@@ -954,7 +954,7 @@ describe('ChatPane', () => {
   })
 
   function mockStreamWithPhases(phases: PhaseResult[], finalResult: ChatApiResponse) {
-    vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
+    return vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
       for (const phase of phases) {
         handlers?.onPhase?.(phase)
       }
@@ -1007,6 +1007,83 @@ describe('ChatPane', () => {
 
     const params = useSessionsStore.getState().sessions[session.id].modeParams
     expect(params.runDigest).toBe('existing digest')
+  })
+
+  it('does not adopt a reference from a reply that is not a completed run', async () => {
+    // A claim redirect offering a passage must not become the session's
+    // passage — the next unrelated message would silently run it.
+    mockStreamWithPhases([], {
+      type: 'chat',
+      message: "That's a claim to test rather than a passage.",
+      data: { reference: '1TH 4:13-18' },
+    })
+
+    const session = useSessionsStore.getState().createSession('hermeneutics', {})
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'the patriarchs rise with the Church')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    const params = useSessionsStore.getState().sessions[session.id].modeParams
+    expect(params.reference).toBeUndefined()
+  })
+
+  it('adopts the passage the primer picked, so "go" runs it', async () => {
+    const session = useSessionsStore.getState().createSession('hermeneutics', {})
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'prompt', role: 'assistant', text: 'Name a passage.', choicesStatus: 'ready',
+      choices: [{ label: 'Surprise me', modeParams: { surprise: true } }],
+    })
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+      type: 'chat', message: "**PSA 23:1** — say go.", data: { reference: 'PSA 23:1' },
+    })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Surprise me' }))
+
+    await vi.waitFor(() =>
+      expect(useSessionsStore.getState().sessions[session.id].modeParams.reference).toBe('PSA 23:1')
+    )
+  })
+
+  it('carries a narrowed chapter to the next turn only', async () => {
+    const spy = vi.spyOn(chatApi, 'postChatStream')
+      .mockResolvedValueOnce({ type: 'chat', message: 'Which part?', data: { scopeChapter: 'GEN 1' } } as never)
+      .mockResolvedValueOnce({ type: 'chat', message: 'report', data: { reference: 'GEN 1:1-5', runDigest: 'd' } } as never)
+
+    const session = useSessionsStore.getState().createSession('hermeneutics', {})
+    render(<ChatPane sessionId={session.id} />)
+    const input = screen.getByPlaceholderText(/ask about a verse/i)
+    await userEvent.type(input, 'Genesis 1')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    expect(useSessionsStore.getState().sessions[session.id].modeParams.scopeChapter).toBe('GEN 1')
+
+    await userEvent.type(input, 'verses 1-5')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+    expect(spy.mock.calls[1][0].mode_params).toEqual(expect.objectContaining({ scopeChapter: 'GEN 1' }))
+
+    const params = useSessionsStore.getState().sessions[session.id].modeParams
+    expect(params.scopeChapter).toBeUndefined()
+    expect(params.reference).toBe('GEN 1:1-5')
+  })
+
+  it('regenerating a report re-runs it rather than answering from its own digest', async () => {
+    const session = useSessionsStore.getState().createSession('hermeneutics', {
+      reference: 'ROM 8:1', runDigest: 'digest of the report being regenerated',
+    })
+    useSessionsStore.getState().appendMessage(session.id, { id: 'u1', role: 'user', text: 'run Romans 8:1' })
+    useSessionsStore.getState().appendMessage(session.id, {
+      id: 'a1', role: 'assistant', text: 'report',
+      phases: [{ index: 1, title: 'Context', status: 'done', markdown: 'a' }],
+      artifacts: [{ type: 'hermeneutics_report', label: 'Open full report ▸', params: {} }],
+    })
+    const spy = mockStreamWithPhases([], { type: 'chat', message: 'new report', data: { reference: 'ROM 8:1', runDigest: 'new' } })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: /regenerate response/i }))
+
+    const sent = spy.mock.calls[0][0]
+    expect(sent.mode_params?.runDigest).toBeUndefined()
+    expect(sent.mode_params?.reference).toBe('ROM 8:1')
   })
 
   it('renders a voice toggle that reflects the voice hook status', () => {

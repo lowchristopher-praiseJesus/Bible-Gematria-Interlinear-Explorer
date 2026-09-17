@@ -26,6 +26,10 @@ export interface ModeParams {
   /** Hermeneutics mode: the compact digest of a completed run. Its presence
    * is what makes a later turn a follow-up rather than a fresh run. */
   runDigest?: string
+  /** Hermeneutics mode: the chapter a "which part?" narrowing reply asked
+   * the user to pick from, kept for one turn so "verses 1-5" resolves
+   * against it. */
+  scopeChapter?: string
   surprise?: boolean
 }
 
