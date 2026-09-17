@@ -31,6 +31,7 @@ from chatbot.ollama_client import (
     stream_devotional_completion,
 )
 from chatbot.devotional_rotation import pick_from_rotation
+from chatbot import devotional_of_day
 
 
 class DevotionalError(Exception):
@@ -263,6 +264,17 @@ async def _resolve_rotation_seed_verse(
     return resolved
 
 
+def _is_rotation_pick(raw: Optional[str], source: str, rotation: Optional[Tuple[int, int]]) -> bool:
+    """True for "Pick one for me": no typed verse reference, no typed
+    theme, and the client supplied a rotation (seed, cursor) slot. Shared
+    by resolve_seed_verse (which path to resolve) and stream_devotional
+    (whether devotional-of-the-day applies)."""
+    if source == "user" and raw and _resolve_verse_reference(raw) is not None:
+        return False
+    theme = raw.strip() if (raw and raw.strip()) else None
+    return theme is None and rotation is not None
+
+
 async def resolve_seed_verse(
     raw: Optional[str],
     source: str,
@@ -279,11 +291,12 @@ async def resolve_seed_verse(
     fallback (next card → theme pick → FALLBACK_VERSES) so an unresolvable
     pool entry isn't fatal. Themed and typed-reference picks ignore
     `rotation` and still propagate a DevotionalError unchanged."""
+    if _is_rotation_pick(raw, source, rotation):
+        return await _resolve_rotation_seed_verse(*rotation)
+
     ref = _resolve_verse_reference(raw) if (source == "user" and raw) else None
     if ref is None:
         theme = raw.strip() if (raw and raw.strip()) else None
-        if theme is None and rotation is not None:
-            return await _resolve_rotation_seed_verse(*rotation)
         ref = await pick_verse_for_theme(theme)
 
     resolved = await _resolve_ref_to_text(ref)
@@ -301,8 +314,30 @@ async def stream_devotional(
     """Resolve the seed verse, then stream the devotional. Yields
     {"type": "stream", "chunk": str} while generating, then one terminal
     event: {"type": "error", "message": str} on an LLM stream failure, or
-    {"type": "done", "text", "reference", "translations"} on success.
-    A DevotionalError from seed-verse resolution propagates to the caller."""
+    {"type": "done", "text", "reference", "translations", "from_daily_cache"}
+    on success. A DevotionalError from seed-verse resolution propagates to
+    the caller.
+
+    For a rotation ("Pick one for me") request, the first successful
+    generation each GMT+8 day is captured as that day's shared devotional
+    (chatbot.devotional_of_day); every later rotation request that same day
+    short-circuits straight to that cached text with no verse resolution or
+    LLM call, and yields from_daily_cache=True. Typed-reference and theme
+    requests never read or write that cache and always generate fresh."""
+    is_rotation_pick = _is_rotation_pick(raw, source, rotation)
+
+    if is_rotation_pick:
+        cached = devotional_of_day.get_today(devotional_of_day.get_default_db())
+        if cached is not None:
+            yield {
+                "type": "done",
+                "text": cached["text"],
+                "reference": cached["reference"],
+                "translations": cached["translations"],
+                "from_daily_cache": True,
+            }
+            return
+
     reference, translations = await resolve_seed_verse(raw, source, rotation)
     verse_text = _kjv_text(translations)
     prompt = build_devotional_prompt(reference, verse_text)
@@ -315,4 +350,19 @@ async def stream_devotional(
         elif ev["type"] == "error":
             yield {"type": "error", "message": ev["message"]}
             return
-    yield {"type": "done", "text": full, "reference": reference, "translations": translations}
+
+    if is_rotation_pick:
+        devotional_of_day.capture_if_absent(
+            devotional_of_day.get_default_db(),
+            reference=reference,
+            translations=translations,
+            text=full,
+        )
+
+    yield {
+        "type": "done",
+        "text": full,
+        "reference": reference,
+        "translations": translations,
+        "from_daily_cache": False,
+    }

@@ -397,6 +397,7 @@ async def _stream_chat_response(
             except (TypeError, ValueError):
                 rotation = None
             full_text, reference, translations, stream_error = "", None, {}, None
+            from_daily_cache = False
             try:
                 async for ev in stream_devotional(raw or None, source, request.page_context, rotation):
                     if ev["type"] == "stream":
@@ -407,6 +408,7 @@ async def _stream_chat_response(
                         full_text = ev["text"]
                         reference = ev["reference"]
                         translations = ev["translations"]
+                        from_daily_cache = bool(ev.get("from_daily_cache", False))
             except DevotionalError:
                 result = {
                     "type": "error",
@@ -435,6 +437,7 @@ async def _stream_chat_response(
                         "translations": translations,
                         "book_context": book_context,
                         "devotional": full_text,
+                        "from_daily_cache": from_daily_cache,
                     },
                     "artifacts": [{
                         "type": "devotional",

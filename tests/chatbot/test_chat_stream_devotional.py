@@ -195,3 +195,17 @@ def test_devotional_stream_delivered_true_falls_through_to_normal_routing(client
     final = next(e for e in _events(resp.text) if e["type"] == "final")["result"]
     assert final["type"] == "verse"
     assert "11:35" in final["data"]["reference"]
+
+
+def test_devotional_stream_surfaces_from_daily_cache(client, monkeypatch):
+    async def fake_stream(raw, source, page_context=None, rotation=None):
+        yield {"type": "done", "text": "Cached text.", "reference": "GEN 8:22",
+               "translations": {"eng-KJV": "..."}, "from_daily_cache": True}
+
+    _patch_stream_devotional(monkeypatch, fake_stream)
+
+    resp = client.post("/chat/stream", json={
+        "message": "", "mode": "devotional", "mode_params": {"source": "system"},
+    })
+    final = next(e for e in _events(resp.text) if e["type"] == "final")["result"]
+    assert final["data"]["from_daily_cache"] is True
