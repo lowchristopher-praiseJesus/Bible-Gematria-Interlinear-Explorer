@@ -23,6 +23,7 @@ shares.db-wal
 
 # flask_caching filesystem cache
 CACHED_PAGES/
+AUDIO_CACHE/
 frontend/CACHED_PAGES/
 .data/
 

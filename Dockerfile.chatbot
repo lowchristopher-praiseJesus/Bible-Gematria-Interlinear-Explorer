@@ -15,6 +15,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# ffmpeg/ffprobe: chatbot/devotional_audio.py concatenates and mixes
+# devotional audio. Not present in python:3.13-slim.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 # requirements.txt covers fastapi / uvicorn[standard] / httpx / pydantic /
 # python-multipart / markdown / dataset / requests. The vendored
