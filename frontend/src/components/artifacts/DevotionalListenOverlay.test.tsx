@@ -73,6 +73,19 @@ describe('DevotionalListenOverlay', () => {
     expect(await screen.findByRole('button', { name: /play/i })).toBeInTheDocument()
   })
 
+  it('gives the scrolling text container min-h-0 so it can shrink and scroll', async () => {
+    // Regression test: a flex item's default min-height: auto sizes it to
+    // fit all of its content instead of the flex column's available space.
+    // WebKit (mobile Safari/Chrome-on-iOS) enforces this strictly, so
+    // without min-h-0 the container never actually overflows and nothing
+    // - not even a manual swipe - scrolls.
+    vi.spyOn(chatApi, 'postDevotionalAudio').mockResolvedValue({ audio_url: '/api/bible-chat/devotional-audio/abc.mp3' })
+    render(<DevotionalListenOverlay reference="JHN 14:27" text="Peace be with you." open onClose={() => {}} />)
+
+    await screen.findByRole('button', { name: /pause/i })
+    expect(screen.getByText('Peace be with you.')).toHaveClass('min-h-0')
+  })
+
   it('Done pauses the audio and calls onClose', async () => {
     vi.spyOn(chatApi, 'postDevotionalAudio').mockResolvedValue({ audio_url: '/api/bible-chat/devotional-audio/abc.mp3' })
     const onClose = vi.fn()

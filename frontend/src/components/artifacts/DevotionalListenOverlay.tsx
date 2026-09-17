@@ -139,7 +139,13 @@ export function DevotionalListenOverlay({ reference, text, open, onClose }: Devo
               <audio ref={audioRef} src={audioUrl} preload="auto" onEnded={handleEnded} />
               <div
                 ref={textRef}
-                className="flex-1 w-full max-w-2xl overflow-y-auto text-white text-lg leading-relaxed whitespace-pre-wrap px-4"
+                // min-h-0 overrides a flex item's default min-height: auto,
+                // which otherwise sizes this div to fit all of its content
+                // instead of shrinking to the flex column's available space
+                // - WebKit (mobile Safari/Chrome-on-iOS) enforces this
+                // strictly, so without it the div never actually overflows
+                // and nothing (not even a manual swipe) scrolls at all.
+                className="flex-1 min-h-0 w-full max-w-2xl overflow-y-auto text-white text-lg leading-relaxed whitespace-pre-wrap px-4"
               >
                 {text}
               </div>
