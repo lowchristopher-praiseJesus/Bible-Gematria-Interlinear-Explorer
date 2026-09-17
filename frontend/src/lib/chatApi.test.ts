@@ -8,6 +8,7 @@ import {
   fetchStrongsEntry,
   postChat,
   postChatStream,
+  postDevotionalAudio,
   toWireModeParams,
 } from './chatApi'
 import type { PhaseResult } from '@/types/session'
@@ -146,6 +147,13 @@ describe('chatApi', () => {
     mockFetchOnce({ searchTerm: 'love', results: [], resultSummary: 'No results' })
     await fetchEnglishSearch('love')
     expect(fetch).toHaveBeenCalledWith('/api/english?words=love')
+  })
+
+  it('postDevotionalAudio posts reference+text and resolves audio_url against CHAT_API', async () => {
+    mockFetchOnce({ audio_url: '/devotional-audio/abc123.mp3' })
+    const result = await postDevotionalAudio('JHN 14:27', 'Peace be with you.')
+    expect(postedBody()).toEqual({ reference: 'JHN 14:27', text: 'Peace be with you.' })
+    expect(result.audio_url).toBe('/api/bible-chat/devotional-audio/abc123.mp3')
   })
 
   it('postChat throws on a non-ok response instead of resolving with the error body', async () => {

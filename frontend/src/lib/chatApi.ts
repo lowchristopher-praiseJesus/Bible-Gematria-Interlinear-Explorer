@@ -252,6 +252,26 @@ export async function fetchBookContext(book: string): Promise<BookContextRespons
   return parseJsonResponse<BookContextResponse>(res)
 }
 
+export interface DevotionalAudioResponse {
+  audio_url: string
+}
+
+/**
+ * Generate (or reuse a cached) Neural2 MP3 for a devotional's full text.
+ * The backend's `audio_url` is relative to the chatbot service root (e.g.
+ * '/devotional-audio/<hash>.mp3'); this resolves it against CHAT_API so
+ * the result is directly usable as an <audio src>.
+ */
+export async function postDevotionalAudio(reference: string, text: string): Promise<DevotionalAudioResponse> {
+  const res = await fetch(`${CHAT_API}/devotional/audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reference, text }),
+  })
+  const json = await parseJsonResponse<DevotionalAudioResponse>(res)
+  return { audio_url: `${CHAT_API}${json.audio_url}` }
+}
+
 export async function fetchGematria(value: number): Promise<GematriaResponse> {
   const res = await fetch(`/api/gematria?value=${value}`)
   return parseJsonResponse<GematriaResponse>(res)
