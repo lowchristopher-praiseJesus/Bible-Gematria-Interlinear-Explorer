@@ -83,6 +83,24 @@ export function DevotionalListenOverlay({ reference, text, open, onClose }: Devo
     stopScrollSync()
   }
 
+  // Autoplay once the audio is ready, so the user doesn't have to press
+  // Play after clicking Listen. play() is called after an async fetch
+  // resolves — outside the click's original call stack — so a browser's
+  // autoplay policy can still block it; if so, leave isPlaying false and
+  // let the user start it manually instead of failing silently.
+  useEffect(() => {
+    if (status !== 'ready' || !audioUrl) return
+    const audio = audioRef.current
+    if (!audio) return
+    audio
+      .play()
+      .then(() => {
+        setIsPlaying(true)
+        rafRef.current = requestAnimationFrame(tick)
+      })
+      .catch(() => {})
+  }, [status, audioUrl])
+
   function handleDone() {
     audioRef.current?.pause()
     setIsPlaying(false)

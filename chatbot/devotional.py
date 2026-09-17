@@ -114,7 +114,7 @@ WRITING CHARACTERISTICS:
 
 LENGTH:
 
-Write approximately 500-800 words.
+Write approximately 300-500 words.
 
 MOST IMPORTANT:
 

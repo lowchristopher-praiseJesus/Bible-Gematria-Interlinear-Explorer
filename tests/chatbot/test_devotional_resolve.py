@@ -8,7 +8,7 @@ def test_build_devotional_prompt_substitutes_the_marker():
     assert "[INSERT VERSE AND REFERENCE]" not in out
     assert "JHN 14:27 (KJV)" in out
     assert "Peace I leave with you..." in out
-    assert "500-800" in out  # length instruction survived
+    assert "300-500" in out  # length instruction survived
 
 
 @pytest.mark.asyncio
