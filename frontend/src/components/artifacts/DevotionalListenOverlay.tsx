@@ -78,6 +78,11 @@ export function DevotionalListenOverlay({ reference, text, open, onClose }: Devo
     }
   }
 
+  function handleEnded() {
+    setIsPlaying(false)
+    stopScrollSync()
+  }
+
   function handleDone() {
     audioRef.current?.pause()
     setIsPlaying(false)
@@ -113,7 +118,7 @@ export function DevotionalListenOverlay({ reference, text, open, onClose }: Devo
 
           {status === 'ready' && audioUrl && (
             <>
-              <audio ref={audioRef} src={audioUrl} preload="auto" />
+              <audio ref={audioRef} src={audioUrl} preload="auto" onEnded={handleEnded} />
               <div
                 ref={textRef}
                 className="flex-1 w-full max-w-2xl overflow-y-auto text-white text-lg leading-relaxed whitespace-pre-wrap px-4"
