@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as chatApi from '@/lib/chatApi'
 import { DevotionalArtifact } from './DevotionalArtifact'
 
 describe('DevotionalArtifact', () => {
+  beforeEach(() => {
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    })
+  })
+
   afterEach(() => vi.restoreAllMocks())
 
   it('renders the reference heading and the markdown body', () => {
@@ -37,5 +44,23 @@ describe('DevotionalArtifact', () => {
     expect(screen.queryByText(/preparing audio/i)).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /listen/i }))
     expect(screen.getByText(/preparing audio/i)).toBeInTheDocument()
+  })
+
+  it('primes audio playback synchronously in the click, before the fetch resolves', async () => {
+    // Regression test: WebKit (mobile Safari / Chrome-on-iOS) only allows
+    // audio.play() within a short window of a real user gesture. Real TTS
+    // synthesis on a cache miss can take several seconds - long enough that
+    // the overlay's own, later play() call (after its fetch resolves) is no
+    // longer gesture-adjacent and gets silently rejected. Priming here,
+    // synchronously in the click itself, unlocks playback for the rest of
+    // the page so that later call succeeds regardless of how long
+    // generation takes.
+    const audioPromise = new Promise<{ audio_url: string }>(() => {})
+    vi.spyOn(chatApi, 'postDevotionalAudio').mockReturnValue(audioPromise)
+    render(<DevotionalArtifact reference="JHN 14:27" text="Peace be with you." />)
+
+    await userEvent.click(screen.getByRole('button', { name: /listen/i }))
+
+    expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled()
   })
 })
