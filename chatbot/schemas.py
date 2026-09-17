@@ -137,3 +137,12 @@ class PhaseEvent(BaseModel):
     verdicts: Optional[List[Dict[str, Any]]] = Field(
         None, description="Phase 8 only: the three validation-test verdicts"
     )
+
+
+class DevotionalAudioRequest(BaseModel):
+    reference: str = Field(..., description="Verse reference the devotional is for (cache/debug only — the audio cache key is derived from text alone)")
+    text: str = Field(..., description="The devotional's full text to synthesize")
+
+
+class DevotionalAudioResponse(BaseModel):
+    audio_url: str = Field(..., description="Path to the generated/cached MP3, relative to the chatbot service root (e.g. '/devotional-audio/<hash>.mp3')")

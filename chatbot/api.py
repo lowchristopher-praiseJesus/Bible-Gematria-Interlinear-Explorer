@@ -12,6 +12,8 @@ from chatbot.schemas import (
     BookContextResponse,
     ChatRequest,
     ChatResponse,
+    DevotionalAudioRequest,
+    DevotionalAudioResponse,
     PassageResponse,
     PassageVerse,
     ParablesResponse,
@@ -29,6 +31,12 @@ from chatbot.tools import (
     list_passage_verses,
 )
 from chatbot.book_context import get_book_context
+from chatbot.devotional_audio import (
+    AUDIO_CACHE_DIR,
+    DevotionalAudioError,
+    cache_key,
+    synthesize_devotional_audio,
+)
 from chatbot.data.parables import PARABLES
 from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics
 from chatbot.router import (
@@ -206,6 +214,27 @@ async def list_parables():
 async def list_study_wikis():
     """List the registered study-wiki series available for Topical Study mode."""
     return StudyWikisResponse(study_wikis=wiki_loader.list_series())
+
+
+@router.post("/devotional/audio", response_model=DevotionalAudioResponse)
+async def post_devotional_audio(request: DevotionalAudioRequest):
+    """Generate (or reuse a cached) Neural2 MP3 for a devotional's full
+    text. Synchronous — spike latency for a devotional-length text is a
+    few seconds, acceptable for a blocking call with a client-side
+    spinner. See chatbot/devotional_audio.py."""
+    if not request.text.strip():
+        raise HTTPException(status_code=422, detail="text must not be empty")
+
+    key = cache_key(request.text)
+    cache_path = AUDIO_CACHE_DIR / f"{key}.mp3"
+    if not cache_path.exists():
+        try:
+            audio_bytes = await asyncio.to_thread(synthesize_devotional_audio, request.text)
+        except DevotionalAudioError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        cache_path.write_bytes(audio_bytes)
+
+    return DevotionalAudioResponse(audio_url=f"/devotional-audio/{key}.mp3")
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # Load the repo-root .env so a directly-launched process picks up LLM_PROVIDER
 # and the provider-specific vars. docker-compose wires these via `env_file`, but
@@ -41,5 +42,8 @@ def create_chatbot_app() -> FastAPI:
 
     from chatbot.api import router
     app.include_router(router, prefix="")
+
+    from chatbot.devotional_audio import AUDIO_CACHE_DIR
+    app.mount("/devotional-audio", StaticFiles(directory=str(AUDIO_CACHE_DIR)), name="devotional-audio")
 
     return app
