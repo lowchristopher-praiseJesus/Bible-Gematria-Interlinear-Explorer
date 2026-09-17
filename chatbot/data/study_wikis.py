@@ -57,6 +57,18 @@ STUDY_WIKI_LIBRARY: List[Dict[str, Any]] = [
         ),
         "path": "~/Documents/study-wikis/the-secret-of-moses-40-Days",
     },
+    {
+        "id": "unshakeable-covenant-of-god",
+        "title": "The Powerful And Unshakeable Covenant Of God",
+        "speaker": "Joseph Prince",
+        "description": (
+            "3-part series on what a biblical covenant is — contrasting the "
+            "old, performance-based covenant with the new covenant of grace, "
+            "through the Abraham, Jonathan-David, and Levitical-offering "
+            "narratives."
+        ),
+        "path": "~/Documents/study-wikis/The-Powerful-And-Unshakeable-Covenant-Of-God",
+    },
 ]
 
 
