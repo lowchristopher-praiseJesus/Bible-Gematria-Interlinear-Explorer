@@ -50,3 +50,28 @@ def test_stream_phase_event_carries_the_full_phase_payload(client, monkeypatch):
     })
     phase = next(e for e in _events(response.text) if e["type"] == "phase")
     assert phase["phase"]["citations"][0]["reference"] == "1CO 15:51-52"
+
+
+def test_stream_sends_keepalives_while_a_phase_is_slow(client, monkeypatch):
+    # The Flask proxy (180s) and nginx (300s) drop a silent connection; a
+    # phase on a slow hosted model can be silent for longer than that.
+    import asyncio
+
+    async def slow_stream(reference, message, history=None, run_digest=None):
+        await asyncio.sleep(0.25)
+        yield {"kind": "phase", "phase": {
+            "index": 1, "title": "Phase 1", "status": "done", "markdown": "text",
+        }}
+        yield {"kind": "final", "result": {
+            "type": "chat", "message": "report", "data": None, "route": "hermeneutics",
+        }}
+
+    monkeypatch.setattr(api.hermeneutics, "stream", slow_stream)
+    monkeypatch.setattr(api, "HERMENEUTICS_KEEPALIVE_SECONDS", 0.05)
+    response = client.post("/chat/stream", json={
+        "message": "run it", "mode": "hermeneutics", "mode_params": {"reference": "ROM 8:1"},
+    })
+    frames = response.text.strip().split("\n\n")
+    assert any(f.startswith(":") for f in frames[:frames.index(next(f for f in frames if '"phase"' in f))])
+    types = [e["type"] for e in _events(response.text)]
+    assert types == ["phase", "final", "trace"]

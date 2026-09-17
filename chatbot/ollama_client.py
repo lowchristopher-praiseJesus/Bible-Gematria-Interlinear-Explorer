@@ -607,7 +607,8 @@ async def stream_chat_with_ollama(
 # ---------------------------------------------------------------------------
 
 async def simple_completion(
-    system_prompt: str, user_prompt: str, *, max_tokens: int = 2048
+    system_prompt: str, user_prompt: str, *, max_tokens: int = 2048,
+    timeout: float = 60.0,
 ) -> str:
     """One non-streamed completion from an explicit system + user prompt.
     Returns the model's text, or "" on an unconfigured provider or any HTTP
@@ -623,7 +624,7 @@ async def simple_completion(
     )
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, headers=headers, json=payload, timeout=60.0)
+            response = await client.post(url, headers=headers, json=payload, timeout=timeout)
             response.raise_for_status()
             result = response.json()
         except Exception:  # noqa: BLE001 — any failure means "no answer"

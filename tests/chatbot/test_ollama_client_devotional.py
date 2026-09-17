@@ -100,3 +100,25 @@ async def test_stream_devotional_completion_emits_error_when_unconfigured(monkey
     monkeypatch.setattr(ollama_client, "llm_unconfigured_error", lambda: "no key")
     events = [e async for e in ollama_client.stream_devotional_completion("s", "u")]
     assert events == [{"type": "error", "message": "no key"}]
+
+
+@pytest.mark.asyncio
+async def test_simple_completion_defaults_to_a_60s_timeout_and_accepts_an_override(monkeypatch):
+    monkeypatch.setattr(ollama_client, "llm_unconfigured_error", lambda: None)
+    seen = []
+
+    class FakeResp:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "ok"}}
+
+    class FakeClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, *a, **k):
+            seen.append(k["timeout"])
+            return FakeResp()
+
+    monkeypatch.setattr(ollama_client.httpx, "AsyncClient", lambda *a, **k: FakeClient())
+    await ollama_client.simple_completion("sys", "user")
+    await ollama_client.simple_completion("sys", "user", timeout=240.0)
+    assert seen == [60.0, 240.0]

@@ -9,7 +9,7 @@ def fake_llm(monkeypatch):
     exercised without a live provider."""
     calls = []
 
-    async def fake_simple_completion(system_prompt, user_prompt, *, max_tokens=2048):
+    async def fake_simple_completion(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
         calls.append({"system": system_prompt, "user": user_prompt})
         if "PHASE 1" in system_prompt:
             return "Context findings.\nAUDIENCE: church"
@@ -98,7 +98,7 @@ async def test_run_carries_audience_and_speaker_forward(fake_llm):
 
 
 async def test_a_phase_without_its_marker_carries_none(monkeypatch, fake_llm):
-    async def unmarked(system_prompt, user_prompt, *, max_tokens=2048):
+    async def unmarked(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
         if "FINAL VERIFIED INTERPRETATION" in system_prompt:
             return "Summary."
         return "Prose with no marker line."
@@ -117,7 +117,7 @@ async def test_run_attaches_verified_citations_to_phase_four(fake_llm):
 
 
 async def test_run_notes_when_fewer_than_two_witnesses_verify(monkeypatch, fake_llm):
-    async def one_witness(system_prompt, user_prompt, *, max_tokens=2048):
+    async def one_witness(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
         if "PHASE 4" in system_prompt:
             return "Only one.\nWITNESSES: 1CO 15:51-52"
         if "FINAL VERIFIED INTERPRETATION" in system_prompt:
@@ -137,7 +137,7 @@ async def test_run_attaches_verdicts_to_phase_eight(fake_llm):
 
 
 async def test_a_failed_verdict_is_disclosed_and_never_retried(monkeypatch, fake_llm):
-    async def failing(system_prompt, user_prompt, *, max_tokens=2048):
+    async def failing(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
         if "PHASE 8" in system_prompt:
             return (
                 "VERDICT: heart=pass — fine\n"
@@ -157,7 +157,7 @@ async def test_a_failed_verdict_is_disclosed_and_never_retried(monkeypatch, fake
 
 
 async def test_an_erroring_phase_does_not_abort_the_run(monkeypatch, fake_llm):
-    async def phase7_explodes(system_prompt, user_prompt, *, max_tokens=2048):
+    async def phase7_explodes(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
         if "PHASE 7" in system_prompt:
             raise RuntimeError("provider timeout")
         if "FINAL VERIFIED INTERPRETATION" in system_prompt:
@@ -262,3 +262,35 @@ async def test_run_asks_for_a_passage_when_none_is_known(fake_llm):
     events = await _collect(None, message="hello", history=[])
     assert len(events) == 1
     assert "passage" in events[0]["result"]["message"].lower()
+
+
+async def test_every_llm_call_gets_the_slow_provider_timeout(monkeypatch, fake_llm):
+    timeouts = []
+    real = hermeneutics.simple_completion
+
+    async def spy(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
+        timeouts.append(kwargs.get("timeout"))
+        return await real(system_prompt, user_prompt, max_tokens=max_tokens)
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", spy)
+    await _collect("1TH 4:15-18")
+    assert timeouts and all(t == hermeneutics.LLM_TIMEOUT_SECONDS for t in timeouts)
+    assert hermeneutics.LLM_TIMEOUT_SECONDS > 60
+
+
+async def test_an_empty_phase_reply_is_reported_as_an_error(monkeypatch, fake_llm):
+    # simple_completion returns "" on a timeout; that is a failed phase, not
+    # a completed one with nothing to say.
+    real = hermeneutics.simple_completion
+
+    async def silent_phase_five(system_prompt, user_prompt, *, max_tokens=2048, **kwargs):
+        if "PHASE 5" in system_prompt:
+            return ""
+        return await real(system_prompt, user_prompt, max_tokens=max_tokens)
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", silent_phase_five)
+    events = await _collect("1TH 4:15-18")
+    phase5 = next(e["phase"] for e in events if e["kind"] == "phase" and e["phase"]["index"] == 5)
+    assert phase5["status"] == "error"
+    assert phase5["markdown"]
+    assert "5" in events[-1]["result"]["message"]

@@ -299,6 +299,34 @@ async def post_chat(request: ChatRequest):
 # Chat endpoint (SSE streaming)
 # ---------------------------------------------------------------------------
 
+# A Deep Study phase on a slow hosted model can be silent for minutes; the
+# Flask proxy (180s) and nginx (300s) drop a connection that quiet. An SSE
+# comment frame keeps bytes flowing and is ignored by every client.
+HERMENEUTICS_KEEPALIVE_SECONDS = 15.0
+
+
+async def _with_keepalive(events):
+    """Re-yield `events`, yielding None whenever none arrives within
+    HERMENEUTICS_KEEPALIVE_SECONDS."""
+    iterator = events.__aiter__()
+    pending = asyncio.ensure_future(iterator.__anext__())
+    try:
+        while True:
+            done, _ = await asyncio.wait({pending}, timeout=HERMENEUTICS_KEEPALIVE_SECONDS)
+            if not done:
+                yield None
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                return
+            yield event
+            pending = asyncio.ensure_future(iterator.__anext__())
+    finally:
+        if not pending.done():
+            pending.cancel()
+
+
 async def _stream_chat_response(
     recorder: TraceRecorder, request: ChatRequest, openai_key: Optional[str] = None
 ) -> AsyncIterator[str]:
@@ -439,10 +467,13 @@ async def _stream_chat_response(
         # phase is pushed as it lands, ahead of the single `final`.
         if request.mode == "hermeneutics":
             params = request.mode_params or {}
-            async for event in hermeneutics.stream(
+            async for event in _with_keepalive(hermeneutics.stream(
                 params.get("reference"), request.message, history,
                 run_digest=params.get("run_digest"),
-            ):
+            )):
+                if event is None:
+                    yield ": keepalive\n\n"
+                    continue
                 if event["kind"] == "phase":
                     yield await sse_event("phase", {"phase": event["phase"]})
                 else:

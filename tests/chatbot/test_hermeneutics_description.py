@@ -42,7 +42,7 @@ async def test_resolve_description_prefers_the_table_over_the_llm(monkeypatch):
 
 
 async def test_resolve_description_falls_back_to_the_llm(monkeypatch):
-    async def fake(system_prompt, user_prompt, *, max_tokens=64):
+    async def fake(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
         return "Ephesians 6:10-18"
 
     monkeypatch.setattr(hermeneutics, "simple_completion", fake)
@@ -54,7 +54,7 @@ async def test_resolve_description_falls_back_to_the_llm(monkeypatch):
 async def test_resolve_description_retries_once_then_gives_up(monkeypatch):
     calls = []
 
-    async def unparseable(system_prompt, user_prompt, *, max_tokens=64):
+    async def unparseable(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
         calls.append(1)
         return "I'm not sure which passage you mean."
 
@@ -66,7 +66,7 @@ async def test_resolve_description_retries_once_then_gives_up(monkeypatch):
 
 
 async def test_resolve_description_never_guesses_a_random_verse(monkeypatch):
-    async def empty(system_prompt, user_prompt, *, max_tokens=64):
+    async def empty(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
         return ""
 
     monkeypatch.setattr(hermeneutics, "simple_completion", empty)
@@ -122,7 +122,7 @@ async def test_resolve_passage_reports_nothing_found():
 # did not ask while looking authoritative doing it.
 
 async def test_a_doctrinal_claim_is_classified_as_a_claim(monkeypatch):
-    async def classifies(system_prompt, user_prompt, *, max_tokens=64):
+    async def classifies(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
         return "CLAIM: 1 Thessalonians 4:13-18"
 
     monkeypatch.setattr(hermeneutics, "simple_completion", classifies)
@@ -136,7 +136,7 @@ async def test_a_doctrinal_claim_is_classified_as_a_claim(monkeypatch):
 
 
 async def test_a_claim_with_no_suggested_passage_still_classifies(monkeypatch):
-    async def bare_claim(system_prompt, user_prompt, *, max_tokens=64):
+    async def bare_claim(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
         return "CLAIM"
 
     monkeypatch.setattr(hermeneutics, "simple_completion", bare_claim)
@@ -165,3 +165,29 @@ async def test_a_parable_request_is_never_classified_as_a_claim(monkeypatch):
     monkeypatch.setattr(hermeneutics, "simple_completion", explode)
     res = await hermeneutics.resolve_passage("the ten virgins", reference=None, history=None)
     assert res.source == "description"
+
+
+@pytest.mark.parametrize("dash", ["‑", "–", "—", "−"])
+async def test_a_range_written_with_a_unicode_dash_keeps_its_end_verse(monkeypatch, dash):
+    # Models commonly emit "14:13‑21" with a non-breaking hyphen; parsing
+    # that as MAT 14:13 would silently run one verse instead of the account.
+    async def fake(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
+        return f"Matthew 14:13{dash}21"
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", fake)
+    res = await hermeneutics.resolve_description("Jesus feeding the 5000")
+    assert res.reference == "MAT 14:13-21"
+
+
+async def test_the_classifier_leaves_room_for_a_reasoning_model(monkeypatch):
+    # A reasoning model spends max_tokens on its reasoning before any
+    # content; a tight budget comes back as an empty answer.
+    budgets = []
+
+    async def fake(system_prompt, user_prompt, *, max_tokens=64, **kwargs):
+        budgets.append(max_tokens)
+        return "Ephesians 6:10-18"
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", fake)
+    await hermeneutics.resolve_description("the armour of God")
+    assert budgets and budgets[0] >= 1024

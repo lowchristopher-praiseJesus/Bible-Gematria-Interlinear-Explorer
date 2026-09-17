@@ -24,6 +24,10 @@ from chatbot.hermeneutics_phases import PHASES, SYNTHESIS_PROMPT
 
 MAX_PASSAGE_VERSES = 25
 
+# A hosted reasoning model can take over a minute on one phase; the shared
+# 60s default would turn that into a silently empty phase.
+LLM_TIMEOUT_SECONDS = 240.0
+
 _SCOPE_RE = re.compile(r"^([1-3]?[A-Z]{2,3})\s+(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$")
 
 
@@ -129,6 +133,14 @@ def find_parable_reference(text: str) -> Optional[str]:
     return _resolve_verse_reference(best[1])
 
 
+# Models write ranges with typographic dashes ("14:13\u201121"); the reference
+# parser only knows "-" and would silently drop the end verse.
+_DASHES = str.maketrans({"\u2010": "-", "\u2011": "-", "\u2012": "-",
+                         "\u2013": "-", "\u2014": "-", "\u2212": "-"})
+
+# Room for a reasoning model's hidden reasoning before its one-line answer.
+_CLASSIFIER_MAX_TOKENS = 1024
+
 _DESCRIPTION_SYSTEM_PROMPT = (
     "You identify which Bible passage a description refers to. Reply with only "
     "the reference and nothing else."
@@ -177,7 +189,10 @@ async def resolve_description(text: str) -> Resolution:
         "If you cannot tell, reply `NONE`."
     )
     for _ in range(2):
-        reply = (await simple_completion(_DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=64)) or ""
+        reply = (await simple_completion(
+            _DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=_CLASSIFIER_MAX_TOKENS,
+            timeout=LLM_TIMEOUT_SECONDS,
+        ) or "").translate(_DASHES)
         refs = _find_flexible_verse_refs(reply)
         bearing = _format_reference(*refs[0]) if refs else None
         if reply.strip().upper().startswith("CLAIM"):
@@ -529,8 +544,11 @@ async def run(
                 + "Carry out your phase now."
             )
             phase["markdown"] = await simple_completion(
-                spec.system_prompt, user_prompt, max_tokens=spec.max_tokens
+                spec.system_prompt, user_prompt, max_tokens=spec.max_tokens,
+                timeout=LLM_TIMEOUT_SECONDS,
             )
+            if not phase["markdown"].strip():
+                raise RuntimeError("the model returned no answer (timeout or provider error)")
             if spec.index == 1:
                 phase["audience"] = parse_marker(phase["markdown"], "AUDIENCE")
             if spec.index == 3:
@@ -567,6 +585,7 @@ async def run(
             SYNTHESIS_PROMPT,
             f"PASSAGE: {resolved}\n\nTEXT (KJV): {passage_text}\n\nPHASE FINDINGS:\n{findings}",
             max_tokens=900,
+            timeout=LLM_TIMEOUT_SECONDS,
         )
     except Exception as exc:
         summary = f"The summary could not be generated: {type(exc).__name__}: {exc}"
