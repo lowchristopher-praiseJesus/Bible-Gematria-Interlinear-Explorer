@@ -65,10 +65,17 @@ async def test_resolve_passage_falls_back_to_the_session_reference():
     assert resolved.reference == "1TH 4:15-18"
 
 
-async def test_resolve_passage_falls_back_to_history():
+async def test_resolve_passage_does_not_fall_back_to_history(monkeypatch):
+    # History carries this mode's own example references ("for example
+    # Romans 8:1"); the primer puts a chosen passage into the session
+    # reference instead, so history is never read for one.
+    async def none(*args, **kwargs):
+        return "NONE"
+
+    monkeypatch.setattr(hermeneutics, "simple_completion", none)
     history = [{"role": "user", "text": "Let's look at John 3:16"}]
     resolved = await hermeneutics.resolve_passage("go on", reference=None, history=history)
-    assert resolved.reference == "JHN 3:16"
+    assert resolved.reference is None
 
 
 async def test_resolve_passage_returns_none_when_no_passage_anywhere():

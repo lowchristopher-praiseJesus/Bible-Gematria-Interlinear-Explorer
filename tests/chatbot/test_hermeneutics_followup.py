@@ -50,7 +50,7 @@ async def test_followup_route_names_the_digest_path(no_rerun, fake_chat):
 async def test_a_new_passage_starts_a_fresh_run(monkeypatch, fake_chat):
     ran = {}
 
-    async def fake_run(reference, message, history=None):
+    async def fake_run(reference, message, history=None, **kwargs):
         ran["reference"] = reference
         yield {"kind": "final", "result": {"type": "chat", "message": "ran", "data": None}}
 
@@ -64,7 +64,7 @@ async def test_a_new_passage_starts_a_fresh_run(monkeypatch, fake_chat):
 async def test_a_newly_named_parable_starts_a_fresh_run(monkeypatch, fake_chat):
     ran = {}
 
-    async def fake_run(reference, message, history=None):
+    async def fake_run(reference, message, history=None, **kwargs):
         ran["called"] = True
         yield {"kind": "final", "result": {"type": "chat", "message": "ran", "data": None}}
 
@@ -86,7 +86,7 @@ async def test_a_vague_question_stays_on_the_digest(no_rerun, fake_chat):
 
 
 async def test_no_digest_means_run_the_pipeline(monkeypatch, fake_chat):
-    async def fake_run(reference, message, history=None):
+    async def fake_run(reference, message, history=None, **kwargs):
         yield {"kind": "final", "result": {"type": "chat", "message": "ran", "data": None}}
 
     monkeypatch.setattr(hermeneutics, "run", fake_run)
@@ -95,7 +95,7 @@ async def test_no_digest_means_run_the_pipeline(monkeypatch, fake_chat):
 
 
 async def test_answer_returns_the_last_final_event(monkeypatch, fake_chat):
-    async def fake_run(reference, message, history=None):
+    async def fake_run(reference, message, history=None, **kwargs):
         yield {"kind": "phase", "phase": {"index": 1, "title": "t", "status": "done", "markdown": ""}}
         yield {"kind": "final", "result": {"type": "chat", "message": "done", "data": None}}
 

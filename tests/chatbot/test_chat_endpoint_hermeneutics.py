@@ -6,7 +6,7 @@ from chatbot import api
 def test_buffered_endpoint_dispatches_to_hermeneutics(client, monkeypatch):
     captured = {}
 
-    async def fake_answer(reference, message, history=None, run_digest=None):
+    async def fake_answer(reference, message, history=None, run_digest=None, scope_chapter=None):
         captured.update(reference=reference, message=message, run_digest=run_digest)
         return {"type": "chat", "message": "report", "data": None, "route": "hermeneutics → x"}
 

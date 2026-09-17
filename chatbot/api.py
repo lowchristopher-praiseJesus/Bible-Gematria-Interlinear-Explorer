@@ -270,6 +270,7 @@ async def post_chat(request: ChatRequest):
             result = await hermeneutics.answer(
                 params.get("reference"), request.message, history,
                 run_digest=params.get("run_digest"),
+                scope_chapter=params.get("scope_chapter"),
             )
             return _with_trace(result)
 
@@ -470,6 +471,7 @@ async def _stream_chat_response(
             async for event in _with_keepalive(hermeneutics.stream(
                 params.get("reference"), request.message, history,
                 run_digest=params.get("run_digest"),
+                scope_chapter=params.get("scope_chapter"),
             )):
                 if event is None:
                     yield ": keepalive\n\n"

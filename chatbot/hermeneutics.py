@@ -18,7 +18,7 @@ from chatbot.data.hermeneutic_rulings import render_rulings, rulings_for
 from chatbot.data.parables import PARABLES
 from chatbot.ollama_client import llm_unconfigured_error, simple_completion, call_ollama_with_context, generate_llm_follow_ups
 from chatbot.router import _USFM_TO_BOOK, _resolve_verse_reference, _find_flexible_verse_refs, _format_reference
-from chatbot.socratic import _detect_reference, _reference_from_history
+from chatbot.socratic import _detect_reference
 from chatbot.tools import fetch_interlinear, fetch_strongs_local, search_english, fetch_verse_translations
 from chatbot.hermeneutics_phases import PHASES, SYNTHESIS_PROMPT
 
@@ -99,30 +99,68 @@ _NUMBER_WORDS = {
     "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
 }
 
+# Articles and connectives dropped from both the name and the message
+# before phrase matching, so "the sheep and goats" still names "The Sheep
+# and the Goats".
+_STOPWORDS = {"the", "of", "a", "an", "and", "in", "at", "under", "as"}
+
 # Words carried by so many parable names that matching on them alone would
 # pick a parable arbitrarily.
-_WEAK_TOKENS = {"the", "of", "a", "and", "parable", "story", "lost", "good", "great", "rich", "wise"}
+_WEAK_TOKENS = _STOPWORDS | {"parable", "story", "lost", "good", "great", "rich", "wise"}
+
+# Names that are also ordinary English or other Scripture ("a thief in the
+# night", "faith as a grain of mustard seed", "Abraham had two sons"). These
+# are recognised only when the message also says "parable", so a claim that
+# happens to use the phrase reaches the classifier instead of silently
+# running a parable.
+_PARABLE_REQUIRED = {
+    "The Sower", "The Leaven", "The Net", "The Talents", "The Hidden Treasure",
+    "The Mustard Seed", "The Two Sons", "The Strong Man", "The Empty House",
+    "The Growing Seed", "The Thief in the Night", "The Fig Tree as a Sign",
+    "New Wine in Old Wineskins", "The Lamp Under a Bushel", "The Two Debtors",
+    "The Wedding Feast", "The Great Banquet",
+}
 
 
-def _tokens(text: str) -> set:
+def _words(text: str) -> List[str]:
     words = re.findall(r"[a-z0-9]+", text.lower())
-    return {_NUMBER_WORDS.get(w, w) for w in words}
+    return [_NUMBER_WORDS.get(w, w) for w in words if w not in _STOPWORDS]
+
+
+def _contains_phrase(haystack: List[str], needle: List[str]) -> bool:
+    n = len(needle)
+    return any(haystack[i:i + n] == needle for i in range(len(haystack) - n + 1))
 
 
 def find_parable_reference(text: str) -> Optional[str]:
     """A curated parable named in `text`, as a USFM reference.
 
-    Matches when every distinctive word of the parable's name appears in
-    the message, so "the parable of the ten virgins", "ten virgins" and
-    "the 10 virgins" all hit. A name whose only tokens are weak ones
-    cannot match at all.
+    Matches when the parable's full name appears as a phrase, in order
+    ("the parable of the ten virgins", "ten virgins", "the 10 virgins",
+    "the good samaritan"). When the message also says "parable", every
+    distinctive word of the name is enough ("the parable about the sower").
+    A name that is also an ordinary phrase needs "parable" to match at all
+    (see _PARABLE_REQUIRED), and a lone word shared with ordinary speech
+    ("sheep", "fool", "net") never matches by itself.
     """
-    message_tokens = _tokens(text)
+    message_words = _words(text)
+    message_tokens = set(message_words)
+    says_parable = bool(message_tokens & {"parable", "parables"})
     best: Optional[Tuple[int, str]] = None
     for parable in PARABLES:
-        name_tokens = _tokens(parable["name"])
-        distinctive = name_tokens - _WEAK_TOKENS
-        if not distinctive or not distinctive <= message_tokens:
+        name_words = _words(parable["name"])
+        distinctive = set(name_words) - _WEAK_TOKENS
+        if not distinctive:
+            continue
+        if says_parable:
+            matched = distinctive <= message_tokens
+        else:
+            matched = (
+                parable["name"] not in _PARABLE_REQUIRED
+                and len(name_words) >= 2
+                and _contains_phrase(message_words, name_words)
+            )
+        if not matched:
             continue
         # Prefer the most specific name when two parables both match
         # (e.g. "The Lost Sheep" vs "The Lost Coin" given both words).
@@ -193,42 +231,80 @@ async def resolve_description(text: str) -> Resolution:
             _DESCRIPTION_SYSTEM_PROMPT, ask, max_tokens=_CLASSIFIER_MAX_TOKENS,
             timeout=LLM_TIMEOUT_SECONDS,
         ) or "").translate(_DASHES)
-        refs = _find_flexible_verse_refs(reply)
+        # Models decorate the marker ("`CLAIM: ...`", "**CLAIM:** ...",
+        # "Answer: CLAIM: ..."); a claim misread as a description would be
+        # run, which is the one outcome this call exists to prevent.
+        plain = re.sub(r"[`*\"'“”‘’]", "", reply)
+        refs = _find_flexible_verse_refs(plain)
         bearing = _format_reference(*refs[0]) if refs else None
-        if reply.strip().upper().startswith("CLAIM"):
+        if re.search(r"\bCLAIM\b", plain, re.IGNORECASE):
             return Resolution(bearing, "claim")
         if refs:
             return Resolution(bearing, "description")
     return Resolution(None, "none")
 
 
+# "verses 1-5", "vv. 1-5", "just verse 3" — a range with no book, which
+# only means something against the chapter the previous turn narrowed.
+_RELATIVE_VERSES_RE = re.compile(
+    r"^(?:.*\b(?:verses?|vv?\.?|vs\.?)\s*)?(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*[.!?]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def named_passage(message: str, scope_chapter: Optional[str] = None) -> Optional[Resolution]:
+    """The passage named in *this* message, with no LLM call and no
+    session state: a typed reference (ranges kept), a verse range against
+    the chapter the last reply asked the user to narrow, or a curated
+    parable. The one detector both a fresh run and follow-up routing use,
+    so they can never disagree about what the user asked for."""
+    text = message.translate(_DASHES)
+    refs = _find_flexible_verse_refs(text)
+    if refs:
+        return Resolution(_format_reference(*refs[0]), "reference")
+    # A bare chapter ("Genesis 1") — run() answers it with a narrowing reply.
+    chapter = _detect_reference(text)
+    if chapter:
+        return Resolution(chapter, "reference")
+    if scope_chapter:
+        relative = _RELATIVE_VERSES_RE.match(text.strip())
+        if relative:
+            start, end = relative.group(1), relative.group(2)
+            ref = f"{scope_chapter}:{start}" + (f"-{end}" if end else "")
+            return Resolution(ref, "reference")
+    from_table = find_parable_reference(text)
+    if from_table:
+        return Resolution(from_table, "description")
+    return None
+
+
 async def resolve_passage(
     message: str,
     reference: Optional[str],
-    history: Optional[List[Dict[str, str]]],
+    history: Optional[List[Dict[str, str]]] = None,
+    scope_chapter: Optional[str] = None,
 ) -> Resolution:
     """What passage (if any) this turn is about.
 
     A passage named in *this* message always wins over the one the session
     was previously grounded on — the same precedence socratic.answer()
-    uses. Classification is only reached when no explicit reference is
-    available anywhere, so "the ten virgins — actually, Matthew 25:1" runs
-    the verse the user corrected themselves to, and "verify this claim from
-    1 Thess 4:16 — ..." runs the verse they cited rather than stopping to
-    argue about the claim.
+    uses — so "the ten virgins — actually, Matthew 25:1" runs the verse the
+    user corrected themselves to, and "verify this claim from 1 Thess
+    4:16 — ..." runs the verse they cited rather than stopping to argue
+    about the claim.
+
+    The session reference comes next (the primer's pick, so "go" runs it);
+    the LLM classifier only after that. Conversation history is
+    deliberately NOT a source: this mode's own replies quote example
+    references ("for example Romans 8:1"), and reading those back would run
+    a passage nobody chose. `history` is accepted only for call-site
+    compatibility.
     """
-    explicit = _detect_reference(message)
-    if not explicit:
-        # Try flexible matching for abbreviated book names like "1 Thess"
-        refs = _find_flexible_verse_refs(message)
-        if refs:
-            explicit = _format_reference(*refs[0])
-    if not explicit:
-        explicit = reference
-    if not explicit:
-        explicit = _reference_from_history(history or [])
-    if explicit:
-        return Resolution(explicit, "reference")
+    named = named_passage(message, scope_chapter)
+    if named:
+        return named
+    if reference:
+        return Resolution(reference, "reference")
     return await resolve_description(message)
 
 
@@ -430,9 +506,20 @@ async def run(
     reference: Optional[str],
     message: str,
     history: Optional[List[Dict[str, str]]] = None,
+    scope_chapter: Optional[str] = None,
+    resolution: Optional[Resolution] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Run the eight phases, yielding each as it completes, then the final
-    assembled report."""
+    assembled report.
+
+    `resolution` is the passage stream() already detected in this message;
+    when given it is used as-is rather than re-resolved against the session
+    reference.
+
+    Only a completed run hands back `data.reference` (the frontend's session
+    reference). The claim redirect, the narrowing reply and the no-text
+    reply deliberately do not: persisting a passage the user never chose
+    would make their next, unrelated message run it."""
     llm_error = llm_unconfigured_error()
     if llm_error:
         yield _final({
@@ -441,7 +528,8 @@ async def run(
         })
         return
 
-    resolution = await resolve_passage(message, reference, history)
+    if resolution is None:
+        resolution = await resolve_passage(message, reference, history, scope_chapter)
     resolved = resolution.reference
     was_described = resolution.source == "description"
 
@@ -463,7 +551,7 @@ async def run(
                 "That's a claim to test rather than a passage to interpret, and I run "
                 "the eight phases over one passage at a time." + offer
             ),
-            "data": {"reference": resolved},
+            "data": None,
             "route": "hermeneutics → claim, not a passage",
             "follow_up_questions": ([f"Run {resolved}"] if resolved else []),
         })
@@ -483,8 +571,13 @@ async def run(
     try:
         usfm, chapter, start, end = parse_scope(resolved)
     except ScopeError as exc:
+        # The chapter (not a reference) comes back so "verses 1-5" next turn
+        # can be read against it — see named_passage().
+        chapter_part = resolved.split(":", 1)[0].strip()
         yield _final({
-            "type": "chat", "message": exc.message, "data": {"reference": resolved},
+            "type": "chat", "message": exc.message,
+            "data": ({"scopeChapter": chapter_part}
+                     if re.match(r"^[1-3]?[A-Z]{2,3}\s+\d{1,3}$", chapter_part) else None),
             "route": "hermeneutics → out of scope",
         })
         return
@@ -506,7 +599,7 @@ async def run(
                 + (" — I may have read your description wrong." if was_described else ".")
                 + " Could you give me the reference you have in mind?"
             ),
-            "data": {"reference": resolved},
+            "data": None,
             "route": "hermeneutics → passage has no text",
         })
         return
@@ -625,29 +718,27 @@ FOLLOW_UP_SYSTEM_PROMPT = """You are a Biblical Hermeneutics Engine answering a 
 Answer from those findings. Be concise — a short paragraph. Do not re-run the phases, do not re-list them, and do not introduce a verse reference the analysis did not establish."""
 
 
-def _is_new_passage(message: str, current: Optional[str]) -> bool:
-    """True when this follow-up turn actually names a different passage.
-
-    Consults the parable table as well as the reference regex, so "now do
-    the prodigal son" starts a fresh run instead of being answered from the
-    previous passage's digest. The LLM fallback is deliberately NOT used
-    here — it would cost a completion on every follow-up turn, and a
-    description vague enough to need it is more likely a question about the
-    passage in hand than a request for a new one.
-    """
-    named = _detect_reference(message) or find_parable_reference(message)
-    return bool(named) and named != current
-
-
 async def stream(
     reference: Optional[str],
     message: str,
     history: Optional[List[Dict[str, str]]] = None,
     run_digest: Optional[str] = None,
+    scope_chapter: Optional[str] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Phase events + final for a fresh run; a single final for a
-    follow-up answered from the digest."""
-    if run_digest and not _is_new_passage(message, reference):
+    follow-up answered from the digest.
+
+    After a completed run, a turn is a follow-up unless it names a
+    different passage. "Names" is decided by named_passage() — the same
+    detector run() resolves with — and the detected passage is handed to
+    run() explicitly, so "now do the prodigal son" runs the prodigal son
+    rather than re-resolving to the session's previous passage. The LLM
+    classifier is deliberately NOT consulted here: it would cost a
+    completion on every follow-up turn, and a description vague enough to
+    need it is more likely a question about the passage in hand.
+    """
+    named = named_passage(message, scope_chapter)
+    if run_digest and (named is None or named.reference == reference):
         result = await call_ollama_with_context(
             message,
             research_data=f"PASSAGE: {reference}\n\nANALYSIS FINDINGS:\n{run_digest}",
@@ -663,7 +754,7 @@ async def stream(
         yield _final(result)
         return
 
-    async for event in run(reference, message, history):
+    async for event in run(reference, message, history, scope_chapter=scope_chapter, resolution=named):
         yield event
 
 
@@ -672,11 +763,12 @@ async def answer(
     message: str,
     history: Optional[List[Dict[str, str]]] = None,
     run_digest: Optional[str] = None,
+    scope_chapter: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Buffered entry point: drives the same pipeline and returns only the
     final result, so POST /chat behaves identically to /chat/stream."""
     result: Dict[str, Any] = {}
-    async for event in stream(reference, message, history, run_digest):
+    async for event in stream(reference, message, history, run_digest, scope_chapter):
         if event["kind"] == "final":
             result = event["result"]
     return result

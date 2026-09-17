@@ -94,10 +94,13 @@ a share link shows the finished run. The whole report also opens in the
 artifact pane (`hermeneutics_report`, carried inline like `devotional`).
 
 A passage can be named by reference **or described** ("the parable of the
-ten virgins", "Jesus feeding the 5000"): resolution tries the reference
-regex, then a normalised name match against the existing
-`chatbot/data/parables.py` table (no LLM call), then one short LLM completion
-with a single retry. That same call also distinguishes a passage from a
+ten virgins", "Jesus feeding the 5000"): resolution tries a reference typed
+in this message (ranges kept), then the parable's full name as a phrase
+against the existing `chatbot/data/parables.py` table (or the word "parable"
+plus its distinctive words — no LLM call), then the session's chosen passage,
+then one short LLM completion with a single retry. Conversation history is
+never a reference source, and only a completed run or the primer sets the
+session reference — the claim, narrowing and no-text replies do not. That same call also distinguishes a passage from a
 doctrinal **claim** ("verify this claim — the patriarchs rise with the
 Church"): a claim is never run, because the eight phases interpret one
 passage and a claim is a proposition to test across several. The mode says
