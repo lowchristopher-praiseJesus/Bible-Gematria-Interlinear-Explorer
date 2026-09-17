@@ -74,6 +74,24 @@ clients already saw — so pool changes must be rare and deliberate and will
 trip `test_devotional_rotation.py::test_rotation_sequence_is_pinned`. See
 `docs/superpowers/specs/2026-09-10-devotional-annual-rotation-design.md`.
 
+## Devotional audio (Listen) and devotional-of-the-day
+
+The "Listen" button (`DevotionalListenOverlay`, `POST
+/devotional/audio`) turns a devotional's text into narration + a fixed
+background bed via Google Cloud TTS (Neural2) and `ffmpeg`, mixed at
+settings that are locked constants, not user-configurable, for v1
+(`chatbot/devotional_audio.py`). The "Pick one for me" rotation path
+additionally caches the first devotional generated each GMT+8 calendar
+day (`chatbot/devotional_of_day.py`) and serves it to every later
+rotation request that same day; typed-reference and theme picks never
+touch that cache. Both `devotional_of_day` calls in
+`chatbot/devotional.py` fail open — a read/write failure there falls
+back to (or simply skips) the cache rather than blocking generation. See
+`docs/superpowers/specs/2026-09-17-devotional-audio-design.md` for the
+full design, and `DEPLOYMENT.md`'s "Devotional audio (Listen) and
+devotional-of-the-day" section for the Docker volumes and the manual GCP
+credential step.
+
 ## Deep Study mode (internal id `hermeneutics`)
 
 Runs a passage (a verse or a range of at most 25 verses — see

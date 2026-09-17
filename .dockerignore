@@ -9,6 +9,7 @@
 .claude
 CACHED_PAGES
 frontend/CACHED_PAGES
+AUDIO_CACHE
 
 # Large data — mounted read-only at runtime, never baked into an image
 Complete.db

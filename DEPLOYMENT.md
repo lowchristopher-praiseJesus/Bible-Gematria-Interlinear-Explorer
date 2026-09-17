@@ -237,6 +237,37 @@ backup considerations as `feedback.db`. There is no admin UI and no
 expiry — rows accumulate; an operator can prune old rows directly with
 `sqlite3` if ever needed.
 
+### Devotional audio (Listen) and devotional-of-the-day
+
+The "Listen" button on a devotional turns its text into a mixed MP3 via
+Google Cloud Text-to-Speech (Neural2). Generated files are cached on the
+`audio-cache` named volume, mounted into `chatbot` at `/app/AUDIO_CACHE`
+(env `AUDIO_CACHE_DIR`), keyed by a content hash of the text and the
+locked voice/rate/music settings. There is no eviction — files accumulate
+indefinitely; an operator can clear the volume directly if it grows too
+large.
+
+The "Pick one for me" rotation path also caches the first devotional
+generated each GMT+8 calendar day and serves it to every later rotation
+request that same day. That cache lives in `devotional-of-day.db`, via
+the same `dataset`-library pattern as `shares.db` above, on the
+`devotional-of-day-db` named volume mounted at
+`/app/devotional-of-day-db` (env `DEVOTIONAL_OF_DAY_DB_URL`).
+
+**Manual step — GCP credentials (not automated by `docker compose up`):**
+Google Cloud TTS requires a service-account JSON key with the "Cloud
+Text-to-Speech User" role. Obtain that key from the GCP console, place it
+somewhere on the host **outside the repo** (never commit it), and set
+`GOOGLE_APPLICATION_CREDENTIALS_HOST_PATH` in `.env` to its absolute
+path — docker-compose bind-mounts that path read-only into the `chatbot`
+container at `/run/secrets/gcp-tts.json`.
+
+`docker compose up` will succeed even if this is never configured — the
+volume mount falls back to `/dev/null` when the env var is unset or
+empty — but every "Listen" request will then fail with a 502 until the
+credential is actually wired up. Nothing else surfaces this gap, so it's
+worth checking explicitly after a fresh deploy.
+
 ---
 
 ## 4. Open the firewall — in TWO places

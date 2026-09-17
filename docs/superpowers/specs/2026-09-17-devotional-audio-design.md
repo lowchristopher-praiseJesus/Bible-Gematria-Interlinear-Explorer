@@ -76,7 +76,7 @@ the LLM provider behind the app's own function names.
      — voice `en-US-Neural2-C`, `speaking_rate=0.90`, MP3 encoding.
   3. Concatenate the chunk MP3s via ffmpeg (`concat` demuxer).
   4. Mix the concatenated narration with the bundled background track
-     (`chatbot/data/devotional-stillness.mp3`) using the locked ffmpeg
+     (`chatbot/data/devotional_stillness.mp3`) using the locked ffmpeg
      filter: `volume=0.168`, `afade` in 2s / out 4s, `amix duration=first`
      (narration length wins).
   5. Return the final MP3 bytes.
@@ -236,7 +236,7 @@ that day), so it's an instant serve too.
 - `requirements.txt`: add `google-cloud-texttospeech`.
 - `Dockerfile.chatbot`: install `ffmpeg` (`apt-get install -y ffmpeg`) —
   not present in `python:3.13-slim`.
-- `chatbot/data/devotional-stillness.mp3`: the fixed background track,
+- `chatbot/data/devotional_stillness.mp3`: the fixed background track,
   committed to the repo (static, reused asset — not user data).
 - `docker-compose.yml` (`chatbot` service):
   - New writable named volume for `AUDIO_CACHE/`.
