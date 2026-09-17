@@ -234,6 +234,24 @@ summary:focus-visible,
   .settings-panel[data-state='closed'] { animation: settings-card-out 130ms ease-in; }
 }
 
+@keyframes devotional-listen-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.devotional-listen-bg {
+  background: linear-gradient(
+    120deg,
+    var(--color-surface),
+    var(--color-accent-dark),
+    var(--color-surface-alt),
+    var(--color-accent)
+  );
+  background-size: 300% 300%;
+  animation: devotional-listen-gradient 20s ease-in-out infinite;
+}
+
 /* Hebrew/Greek word element */
 w {
   display: inline;
