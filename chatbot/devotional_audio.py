@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -26,9 +27,21 @@ MUSIC_GAIN = 0.168
 MUSIC_FADE_IN_SECONDS = 2
 MUSIC_FADE_OUT_SECONDS = 4
 
-# Google's synthesizeSpeech caps input at 5,000 characters; this leaves
-# headroom so a chunk never lands right at the limit.
+# Google's synthesizeSpeech caps the request at 5,000 bytes of UTF-8-encoded
+# input, not 5,000 characters — this devotional-writer voice reliably
+# produces curly apostrophes (U+2019) and em dashes (U+2014), which are 3
+# bytes each in UTF-8, so a character-count budget can silently exceed the
+# real byte cap. MAX_CHUNK_CHARS is therefore a byte budget (the name is
+# kept for continuity with callers/tests); 4800 leaves headroom under 5,000.
 MAX_CHUNK_CHARS = 4800
+
+# Sentence-boundary split used as a fallback when a single paragraph is
+# itself over the byte budget (see _split_oversized_paragraph).
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _byte_len(text: str) -> int:
+    return len(text.encode("utf-8"))
 
 AUDIO_CACHE_DIR = Path(os.environ.get("AUDIO_CACHE_DIR", "AUDIO_CACHE"))
 AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,28 +64,66 @@ def cache_key(text: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _split_oversized_paragraph(paragraph: str, max_chars: int) -> List[str]:
+    """A single paragraph that's over the byte budget on its own: split on
+    sentence boundaries and pack those pieces the same way paragraphs are
+    packed in _chunk_text, so no chunk exceeds the byte cap while still
+    never splitting mid-sentence. If a single "sentence" is itself over
+    budget (last resort — should never happen for devotional prose), it's
+    kept as its own oversized chunk; the TTS call for it will fail with a
+    clear DevotionalAudioError rather than this function raising anything
+    else."""
+    sentences = [s.strip() for s in _SENTENCE_SPLIT_RE.split(paragraph) if s.strip()]
+    if not sentences:
+        return [paragraph]
+
+    chunks: List[str] = []
+    current = ""
+    for sentence in sentences:
+        candidate = f"{current} {sentence}" if current else sentence
+        if _byte_len(candidate) > max_chars and current:
+            chunks.append(current)
+            current = sentence
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def _chunk_text(text: str, max_chars: int = MAX_CHUNK_CHARS) -> List[str]:
     """Split on blank-line paragraph boundaries, packing consecutive
-    paragraphs into chunks up to max_chars without ever splitting a
-    paragraph. A single paragraph longer than max_chars is kept whole
-    (devotional prose paragraphs never run that long in practice; TTS
-    simply raises for that pathological input rather than silently
-    cutting a sentence)."""
+    paragraphs into chunks up to max_chars UTF-8-encoded bytes (Google's
+    synthesizeSpeech cap is byte-based, not a character count, and this
+    devotional-writer voice reliably produces multi-byte curly quotes and
+    em dashes) without ever splitting a paragraph mid-sentence. A single
+    paragraph that's over budget on its own is split on sentence boundaries
+    via _split_oversized_paragraph rather than kept whole."""
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     if not paragraphs:
         return [text]
 
     chunks: List[str] = []
     current = ""
+
+    def flush() -> None:
+        nonlocal current
+        if current:
+            chunks.append(current)
+            current = ""
+
     for paragraph in paragraphs:
+        if _byte_len(paragraph) > max_chars:
+            flush()
+            chunks.extend(_split_oversized_paragraph(paragraph, max_chars))
+            continue
         candidate = f"{current}\n\n{paragraph}" if current else paragraph
-        if len(candidate) > max_chars and current:
+        if _byte_len(candidate) > max_chars and current:
             chunks.append(current)
             current = paragraph
         else:
             current = candidate
-    if current:
-        chunks.append(current)
+    flush()
     return chunks
 
 

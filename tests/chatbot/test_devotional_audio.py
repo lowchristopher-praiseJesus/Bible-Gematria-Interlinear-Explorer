@@ -26,11 +26,52 @@ def test_chunk_text_never_exceeds_max_chars_when_paragraphs_allow():
     assert all(len(c) <= 200 for c in chunks)
 
 
-def test_chunk_text_keeps_an_oversized_paragraph_whole():
-    huge_paragraph = "word " * 2000  # ~10,000 chars, over any max_chars we'd use
-    text = f"Short intro.\n\n{huge_paragraph}"
+def test_chunk_text_splits_an_oversized_paragraph_on_sentence_boundaries():
+    # A paragraph with no blank-line split points but many sentences, well
+    # over max_chars on its own — it must be split on sentence boundaries
+    # rather than kept whole or split mid-sentence/mid-word.
+    huge_paragraph = "This is a sentence about faith and hope. " * 200  # ~8,600 chars
+    text = f"Short intro.\n\n{huge_paragraph.strip()}"
     chunks = da._chunk_text(text, max_chars=4800)
-    assert huge_paragraph.strip() in chunks  # never split mid-paragraph
+
+    assert len(chunks) > 2  # intro chunk + multiple sentence-packed chunks
+    assert all(len(c.encode("utf-8")) <= 4800 for c in chunks)
+    # No sentence was dropped or mangled — every one still appears somewhere.
+    for sentence in huge_paragraph.strip().split(". ")[:-1]:
+        assert any(sentence in c for c in chunks)
+
+
+def test_chunk_text_never_exceeds_byte_cap_for_single_absurd_sentence():
+    # Last-resort case: a single "sentence" (no ./!/? at all) longer than
+    # max_chars on its own. It's kept as one oversized chunk rather than
+    # split mid-word — synthesize_devotional_audio's TTS call is expected
+    # to raise DevotionalAudioError for it, not this function.
+    absurd_sentence = "word " * 2000  # ~10,000 chars, no sentence punctuation
+    chunks = da._chunk_text(absurd_sentence, max_chars=4800)
+    assert chunks == [absurd_sentence.strip()]
+
+
+def test_chunk_text_respects_byte_cap_not_character_count():
+    # Curly apostrophes (U+2019) and em dashes (U+2014) are 3 bytes each in
+    # UTF-8. Build two paragraphs whose combined *character* count is under
+    # max_chars but whose combined *byte* count is over it — a naive
+    # len()-based check would pack them into one chunk; the byte-aware
+    # check must not.
+    unit = "Can’t you see—this is grace." * 40  # curly quote + em dash, repeated
+    paragraph_a = unit
+    paragraph_b = unit
+    text = f"{paragraph_a}\n\n{paragraph_b}"
+
+    char_len = len(text)
+    byte_len = len(text.encode("utf-8"))
+    assert byte_len > char_len  # multi-byte characters are actually present
+
+    max_chars = char_len - 10  # under the combined char count...
+    assert byte_len > max_chars  # ...and over the combined byte count
+
+    chunks = da._chunk_text(text, max_chars=max_chars)
+    assert len(chunks) == 2  # split apart, not packed into one oversized chunk
+    assert all(len(c.encode("utf-8")) <= max_chars for c in chunks)
 
 
 def test_cache_key_changes_with_text():

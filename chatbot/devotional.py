@@ -15,6 +15,7 @@ and typed-reference picks have no such fallback — a DevotionalError there
 propagates to the caller unchanged.
 """
 
+import logging
 import random
 import re
 from typing import AsyncIterator, Dict, Optional, Tuple
@@ -32,6 +33,8 @@ from chatbot.ollama_client import (
 )
 from chatbot.devotional_rotation import pick_from_rotation
 from chatbot import devotional_of_day
+
+logger = logging.getLogger(__name__)
 
 
 class DevotionalError(Exception):
@@ -327,7 +330,11 @@ async def stream_devotional(
     is_rotation_pick = _is_rotation_pick(raw, source, rotation)
 
     if is_rotation_pick:
-        cached = devotional_of_day.get_today(devotional_of_day.get_default_db())
+        cached = None
+        try:
+            cached = devotional_of_day.get_today(devotional_of_day.get_default_db())
+        except Exception:  # noqa: BLE001 — the daily cache must fail open, not block "Pick one for me"
+            logger.warning("devotional_of_day.get_today failed; falling back to fresh generation", exc_info=True)
         if cached is not None:
             yield {
                 "type": "done",
@@ -351,13 +358,16 @@ async def stream_devotional(
             yield {"type": "error", "message": ev["message"]}
             return
 
-    if is_rotation_pick:
-        devotional_of_day.capture_if_absent(
-            devotional_of_day.get_default_db(),
-            reference=reference,
-            translations=translations,
-            text=full,
-        )
+    if is_rotation_pick and full.strip():
+        try:
+            devotional_of_day.capture_if_absent(
+                devotional_of_day.get_default_db(),
+                reference=reference,
+                translations=translations,
+                text=full,
+            )
+        except Exception:  # noqa: BLE001 — capture failure must never block the stream's "done" event
+            logger.warning("devotional_of_day.capture_if_absent failed; this generation was not captured", exc_info=True)
 
     yield {
         "type": "done",
