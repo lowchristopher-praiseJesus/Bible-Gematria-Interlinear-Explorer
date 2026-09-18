@@ -140,6 +140,9 @@ interface ChatStreamHandlers {
   /** Called once per completed phase of a Hermeneutics run, in order.
    * Never called for any other mode. */
   onPhase?: (phase: PhaseResult) => void
+  /** Called once, before any phase, with the Hermeneutics run's resolved
+   * passage reference. Never called for any other mode. */
+  onPassage?: (reference: string) => void
 }
 
 /**
@@ -197,6 +200,8 @@ export async function postChatStream(
       handlers.onChunk?.(String(event.text ?? ''))
     } else if (event.type === 'phase') {
       handlers.onPhase?.(event.phase as PhaseResult)
+    } else if (event.type === 'passage') {
+      handlers.onPassage?.(String(event.reference ?? ''))
     } else if (event.type === 'final') {
       result = event.result as ChatApiResponse
     } else if (event.type === 'trace') {

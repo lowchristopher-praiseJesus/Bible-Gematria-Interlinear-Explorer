@@ -1,10 +1,12 @@
 import { renderMarkdown } from '@/lib/renderMarkdown'
+import { PassageVerseBox } from '@/components/chatbot/PassageVerseBox'
 import type { HermeneuticsArtifactParams } from '@/types/session'
 
 export function HermeneuticsArtifact({ reference, phases, summary }: HermeneuticsArtifactParams) {
   return (
     <div className="flex flex-col gap-4 max-w-prose">
       <h2 className="text-sm font-semibold">{reference}</h2>
+      <PassageVerseBox reference={reference} />
       {phases.map((phase) => (
         <section key={phase.index} className="flex flex-col gap-1.5">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">

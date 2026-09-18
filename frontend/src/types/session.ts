@@ -100,6 +100,10 @@ export interface SessionMessage extends ChatMessage {
    * pills can be re-rendered as answered instead of disappearing. */
   resolvedChoiceLabel?: string
   phases?: PhaseResult[]
+  /** Hermeneutics mode: the resolved passage reference, delivered ahead of
+   * the phases so its verse box (VerseRangeContent, fetched by reference
+   * like everywhere else) has something to read while they run. */
+  passageReference?: string
 }
 
 export interface Note {

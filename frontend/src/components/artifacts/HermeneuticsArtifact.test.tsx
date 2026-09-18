@@ -1,7 +1,23 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
 import { HermeneuticsArtifact } from './HermeneuticsArtifact'
+import * as chatApi from '@/lib/chatApi'
 import type { PhaseResult } from '@/types/session'
+import type { ChapterResponse } from '@/types/api'
+
+const romansFixture: ChapterResponse = {
+  book: 'Romans',
+  chapter: 8,
+  verseCount: 1,
+  verses: [
+    {
+      versenumber: 28118,
+      vnum: 1,
+      ref: 'Romans 8:1',
+      translations: { 'eng-KJV': 'There is therefore now no condemnation...' },
+    },
+  ],
+}
 
 const phases: PhaseResult[] = [
   { index: 1, title: 'Contextual Scope', status: 'done', markdown: 'Addressed to the Church.' },
@@ -11,6 +27,10 @@ const phases: PhaseResult[] = [
 ]
 
 describe('HermeneuticsArtifact', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('renders repeated witnesses and verdicts without key collisions', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<HermeneuticsArtifact reference="ROM 8:1" summary="s" phases={[
@@ -43,5 +63,11 @@ describe('HermeneuticsArtifact', () => {
   it('handles a report with no phases', () => {
     render(<HermeneuticsArtifact reference="ROM 8:1" phases={[]} summary="Only a summary." />)
     expect(screen.getByText(/only a summary/i)).toBeInTheDocument()
+  })
+
+  it('shows the passage text, fetched by reference like every other verse box', async () => {
+    vi.spyOn(chatApi, 'fetchChapter').mockResolvedValue(romansFixture)
+    render(<HermeneuticsArtifact reference="ROM 8:1" phases={[]} summary="s" />)
+    expect(await screen.findByText(/no condemnation/)).toBeInTheDocument()
   })
 })

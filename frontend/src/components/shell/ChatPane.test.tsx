@@ -1000,6 +1000,31 @@ describe('ChatPane', () => {
     expect(assistant.phases?.map((p) => p.index)).toEqual([1, 2])
   })
 
+  it('shows the passage text sent ahead of the phases, so there is something to read', async () => {
+    vi.spyOn(chatApi, 'fetchChapter').mockResolvedValue({
+      book: 'Romans', chapter: 8, verseCount: 1,
+      verses: [{
+        versenumber: 28118, vnum: 1, ref: 'Romans 8:1',
+        translations: { 'eng-KJV': 'There is therefore now no condemnation...' },
+      }],
+    })
+    vi.spyOn(chatApi, 'postChatStream').mockImplementation(async (_payload, handlers) => {
+      handlers?.onPassage?.('ROM 8:1')
+      handlers?.onPhase?.({ index: 1, title: 'Context', status: 'done', markdown: 'a' })
+      return { type: 'chat', message: 'report', data: { reference: 'ROM 8:1' } } as never
+    })
+
+    const session = useSessionsStore.getState().createSession('hermeneutics', { reference: 'ROM 8:1' })
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'run it')
+    await userEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(await screen.findByText(/no condemnation/)).toBeInTheDocument()
+    const messages = useSessionsStore.getState().sessions[session.id].messages
+    const assistant = messages[messages.length - 1]
+    expect(assistant.passageReference).toBe('ROM 8:1')
+  })
+
   it('persists the reference and run digest into modeParams after a run', async () => {
     mockStreamWithPhases([], {
       type: 'chat',

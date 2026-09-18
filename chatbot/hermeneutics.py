@@ -629,6 +629,15 @@ async def run(
         })
         return
 
+    # The resolved reference is sent up front, ahead of any phase, so the
+    # frontend can show the passage's own text (fetched by reference the
+    # same way every other verse box in the app does — see
+    # VerseRangeContent) while the eight phases work through it, rather than
+    # a bare heading with no verse text anywhere in the mode. A dedicated
+    # `passage` event (not folded into the `phase` stream) since it isn't a
+    # phase and always fires, even for a reference the user typed verbatim.
+    yield {"kind": "passage", "reference": resolved}
+
     # A passage the user described rather than cited is echoed back before
     # any phase runs, so a wrong reading is visible immediately instead of
     # ninety seconds later with the report. Index 0 keeps this on the

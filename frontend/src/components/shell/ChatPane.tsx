@@ -14,6 +14,7 @@ import { StrongsBubble } from './StrongsBubble'
 import { StudyBubble } from './StudyBubble'
 import { ChapterReadingBubble } from './ChapterReadingBubble'
 import { PhaseList } from '@/components/chatbot/PhaseList'
+import { PassageVerseBox } from '@/components/chatbot/PassageVerseBox'
 import { PromptChips } from './PromptChips'
 import { ChatNotesMenu } from './ChatNotesMenu'
 import { ReportIssueDialog } from './ReportIssueDialog'
@@ -244,6 +245,7 @@ export function ChatPane({ sessionId }: Props) {
                 collected.push(phase)
                 put({ phases: [...collected] })
               },
+              onPassage: (reference: string) => put({ passageReference: reference }),
             }
         const response = opts?.openAiApiKey
           ? await postChatStream(payload, handlers, opts.openAiApiKey)
@@ -803,6 +805,7 @@ export function ChatPane({ sessionId }: Props) {
                     </div>
                   )}
                 </div>
+                {!!msg.passageReference && <PassageVerseBox reference={msg.passageReference} />}
                 {!!msg.phases?.length && <PhaseList phases={msg.phases} />}
                 {!msg.choicesStatus && (
                   <div className="flex items-center gap-0.5 text-[var(--color-text-secondary)]">

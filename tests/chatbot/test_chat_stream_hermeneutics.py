@@ -34,6 +34,26 @@ def test_stream_emits_phase_events_then_one_final_then_trace(client, monkeypatch
     assert [p["phase"]["index"] for p in phases] == [1, 2]
 
 
+def test_stream_forwards_a_passage_event_before_the_phases(client, monkeypatch):
+    async def fake_stream(reference, message, history=None, run_digest=None, scope_chapter=None):
+        yield {"kind": "passage", "reference": "ROM 8:1"}
+        yield {"kind": "phase", "phase": {
+            "index": 1, "title": "Phase 1", "status": "done", "markdown": "text",
+        }}
+        yield {"kind": "final", "result": {
+            "type": "chat", "message": "report", "data": None, "route": "hermeneutics → 1 phase",
+        }}
+
+    monkeypatch.setattr(api.hermeneutics, "stream", fake_stream)
+    response = client.post("/chat/stream", json={
+        "message": "run it", "mode": "hermeneutics", "mode_params": {"reference": "ROM 8:1"},
+    })
+    events = _events(response.text)
+    assert events[0]["type"] == "passage"
+    assert events[0]["reference"] == "ROM 8:1"
+    assert events[1]["type"] == "phase"
+
+
 def test_stream_phase_event_carries_the_full_phase_payload(client, monkeypatch):
     async def fake_stream(reference, message, history=None, run_digest=None, scope_chapter=None):
         yield {"kind": "phase", "phase": {

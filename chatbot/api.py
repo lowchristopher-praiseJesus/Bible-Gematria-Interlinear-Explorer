@@ -520,6 +520,8 @@ async def _stream_chat_response(
                     continue
                 if event["kind"] == "phase":
                     yield await sse_event("phase", {"phase": event["phase"]})
+                elif event["kind"] == "passage":
+                    yield await sse_event("passage", {"reference": event["reference"]})
                 else:
                     _note_outcome(event["result"])
                     yield await sse_event("final", {"result": event["result"]})

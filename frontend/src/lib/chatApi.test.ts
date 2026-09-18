@@ -284,4 +284,16 @@ describe('postChatStream phase events', () => {
     ])
     await expect(postChatStream({ message: 'run it' })).resolves.toMatchObject({ message: 'report' })
   })
+
+  it('calls onPassage with the resolved reference before any phase', async () => {
+    mockStreamFetch([
+      'data: {"type":"passage","reference":"ROM 8:1"}\n\n',
+      'data: {"type":"phase","phase":{"index":1,"title":"Context","status":"done","markdown":"a"}}\n\n',
+      'data: {"type":"final","result":{"type":"chat","message":"report"}}\n\n',
+    ])
+    let received: string | undefined
+    const result = await postChatStream({ message: 'run it' }, { onPassage: (r) => { received = r } })
+    expect(received).toBe('ROM 8:1')
+    expect(result.message).toBe('report')
+  })
 })

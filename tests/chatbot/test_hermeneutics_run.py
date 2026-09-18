@@ -59,16 +59,24 @@ async def test_run_final_carries_the_synthesis_and_an_artifact(fake_llm):
     assert len(artifact["params"]["phases"]) == 8
 
 
+async def test_run_sends_the_resolved_reference_before_any_phase(fake_llm):
+    events = await _collect("ROM 8:1")
+    passage = events[0]
+    assert passage["kind"] == "passage"
+    assert passage["reference"] == "ROM 8:1"
+
+
 async def test_a_described_passage_is_echoed_back_before_any_phase(monkeypatch, fake_llm):
     async def from_table(text):
         return hermeneutics.Resolution("MAT 25:1-13", "description")
 
     monkeypatch.setattr(hermeneutics, "resolve_description", from_table)
     events = await _collect(None, message="run the parable of the ten virgins")
-    first = events[0]["phase"]
-    assert first["index"] == 0
-    assert "MAT 25:1-13" in first["markdown"]
-    assert events[1]["phase"]["index"] == 1, "the notice precedes phase 1"
+    assert events[0]["kind"] == "passage", "the verse text precedes everything else"
+    second = events[1]["phase"]
+    assert second["index"] == 0
+    assert "MAT 25:1-13" in second["markdown"]
+    assert events[2]["phase"]["index"] == 1, "the notice precedes phase 1"
 
 
 async def test_the_echo_notice_is_not_part_of_the_report(monkeypatch, fake_llm):
@@ -83,7 +91,8 @@ async def test_the_echo_notice_is_not_part_of_the_report(monkeypatch, fake_llm):
 
 async def test_an_explicit_reference_is_not_echoed_back(fake_llm):
     events = await _collect("1TH 4:15-18")
-    assert events[0]["phase"]["index"] == 1, "no notice for a reference the user typed"
+    assert events[0]["kind"] == "passage"
+    assert events[1]["phase"]["index"] == 1, "no notice for a reference the user typed"
 
 
 async def test_run_carries_audience_and_speaker_forward(fake_llm):

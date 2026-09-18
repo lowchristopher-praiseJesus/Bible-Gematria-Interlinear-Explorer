@@ -1,110 +1,26 @@
-import { useMemo, useState } from 'react'
-import { fetchChapter } from '@/lib/chatApi'
-import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
-import { pickDefaultTranslationCode, translationLabel } from '@/lib/translationLabel'
-import { useArtifactStore } from '@/store/useArtifactStore'
-import { useTranslationSettingsStore } from '@/store/useTranslationSettingsStore'
-import { VerseFullscreen, type VerseFullscreenVerse } from './VerseFullscreen'
-import type { ChapterResponse } from '@/types/api'
+import { useState } from 'react'
+import { VerseRangeContent } from './VerseRangeContent'
 import type { ArtifactLink } from '@/types/session'
 
 interface Props {
   link: ArtifactLink
 }
 
-type Status = 'idle' | 'loading' | 'ready' | 'error'
-
-function collectTranslationCodes(data: ChapterResponse): string[] {
-  const codes = new Set<string>()
-  for (const verse of data.verses) {
-    for (const code of Object.keys(verse.translations)) codes.add(code)
-  }
-  return Array.from(codes)
-}
-
-/** Merges a full multi-translation fetch onto the already-displayed fast
- * (KJV-only) data — adding every other translation without disturbing the
- * text the reader already has on screen, in case the two sources differ
- * slightly in wording for the same translation code. */
-function mergeChapterResponses(fast: ChapterResponse, full: ChapterResponse): ChapterResponse {
-  const fullByVerse = new Map(full.verses.map((v) => [v.versenumber, v]))
-  return {
-    ...full,
-    verses: fast.verses.map((v) => {
-      const fullVerse = fullByVerse.get(v.versenumber)
-      return fullVerse ? { ...fullVerse, translations: { ...fullVerse.translations, ...v.translations } } : v
-    }),
-  }
-}
-
+/** The collapsible "Read X ▸" pill a reading-plan/parable message posts.
+ * Expanding it mounts VerseRangeContent, which does the actual fetch and
+ * rendering — the same component Deep Study's always-open passage box
+ * uses, so the two read identically. */
 export function ChapterReadingBubble({ link }: Props) {
   const [expanded, setExpanded] = useState(false)
-  const [status, setStatus] = useState<Status>('idle')
-  // Tracks the background fetch that fills in every other translation
-  // after the fast KJV-only paint — independent of `status` so it never
-  // re-triggers the loading view the reader is already past.
-  const [backgroundStatus, setBackgroundStatus] = useState<Status>('idle')
-  const [data, setData] = useState<ChapterResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  // null means "no manual pick yet" — the displayed translation is then
-  // derived from the user's default-translation setting below, so it
-  // upgrades on its own once the background fetch adds more translations
-  // (the fast paint is KJV-only) without needing an effect to sync it.
-  const [manualTranslation, setManualTranslation] = useState<string | null>(null)
-  const [fullscreen, setFullscreen] = useState(false)
-  const openArtifact = useArtifactStore((s) => s.openArtifact)
-  const preferredAbbr = useTranslationSettingsStore((s) => s.defaultTranslationAbbr)
-
-  async function toggle() {
-    setExpanded((prev) => !prev)
-    if (status !== 'idle') return
-    setStatus('loading')
-    const reference = link.params.reference as string
-    let fastResult: ChapterResponse
-    try {
-      fastResult = await fetchChapter(reference, { fast: true })
-      setData(fastResult)
-      setStatus('ready')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setStatus('error')
-      return
-    }
-
-    // The reader already has the KJV text to read — keep fetching every
-    // other translation in the background instead of making them wait.
-    setBackgroundStatus('loading')
-    try {
-      const fullResult = await fetchChapter(reference)
-      setData((prev) => mergeChapterResponses(prev ?? fastResult, fullResult))
-      setBackgroundStatus('ready')
-    } catch {
-      // The KJV text already on screen is still perfectly usable; a failed
-      // background fetch just means no other translations show up.
-      setBackgroundStatus('error')
-    }
-  }
-
   const label = link.label.replace(/\s*▸\s*$/, '')
   const passageLabel = label.replace(/^Read\s+/, '')
-  const translationCodes = useMemo(() => (data ? collectTranslationCodes(data) : []), [data])
-  const translation =
-    manualTranslation && translationCodes.includes(manualTranslation)
-      ? manualTranslation
-      : translationCodes.length > 0
-        ? pickDefaultTranslationCode(translationCodes, preferredAbbr)
-        : null
-
-  const fullscreenVerses: VerseFullscreenVerse[] = useMemo(
-    () => (data ? data.verses.map((v) => ({ reference: v.ref, translations: v.translations })) : []),
-    [data]
-  )
+  const reference = link.params.reference as string
 
   return (
     <div className="mt-1">
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
         className="text-xs px-2 py-1 rounded-full border border-[var(--color-theme-border)] hover:bg-[var(--color-surface)]"
       >
@@ -112,78 +28,8 @@ export function ChapterReadingBubble({ link }: Props) {
       </button>
 
       {expanded && (
-        <div className="mt-2 border border-[var(--color-theme-border)] rounded-lg p-2 max-w-md">
-          {status === 'loading' && (
-            <div className="text-xs text-[var(--color-text-secondary)]">Loading…</div>
-          )}
-          {status === 'error' && <div className="text-xs text-red-600">{error}</div>}
-          {status === 'ready' && data && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-xs">{passageLabel}</span>
-                {backgroundStatus === 'loading' && (
-                  <span className="text-[10px] text-[var(--color-text-secondary)]">More translations loading…</span>
-                )}
-                <div className="flex items-center gap-1.5">
-                  {translationCodes.length > 0 && translation && (
-                    <select
-                      value={translation}
-                      onChange={(e) => setManualTranslation(e.target.value)}
-                      aria-label="Translation"
-                      className="text-xs border border-[var(--color-theme-border)] rounded px-1.5 py-0.5 bg-[var(--color-surface)]"
-                    >
-                      {translationCodes.map((code) => (
-                        <option key={code} value={code}>
-                          {translationLabel(code)}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setFullscreen(true)}
-                    aria-label={`Compare all verses in ${passageLabel}`}
-                    className="text-xs px-1.5 py-0.5 rounded border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
-                  >
-                    ⛶
-                  </button>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto text-sm">
-                {data.verses.map((verse) => (
-                  <div key={verse.versenumber} className="flex items-baseline gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openArtifact({
-                          type: 'interlinear',
-                          label: `${verse.ref} ▸`,
-                          params: { versenumber: verse.versenumber },
-                        })
-                      }
-                      aria-label={`Open ${verse.ref} in the original language`}
-                      className="shrink-0 text-[var(--color-theme-accent)] hover:underline text-xs font-mono"
-                    >
-                      {verse.vnum}
-                    </button>
-                    <span>
-                      {translation && verse.translations[translation]
-                        ? decodeHtmlEntities(verse.translations[translation])
-                        : <span className="italic text-[var(--color-text-secondary)]">(translation unavailable)</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {translation && (
-                <VerseFullscreen
-                  verses={fullscreenVerses}
-                  initialTranslationCode={translation}
-                  open={fullscreen}
-                  onClose={() => setFullscreen(false)}
-                />
-              )}
-            </div>
-          )}
+        <div className="mt-2">
+          <VerseRangeContent reference={reference} label={passageLabel} />
         </div>
       )}
     </div>
