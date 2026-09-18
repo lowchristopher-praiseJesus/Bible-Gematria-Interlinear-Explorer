@@ -31,6 +31,9 @@ export interface ModeParams {
    * against it. */
   scopeChapter?: string
   surprise?: boolean
+  /** Hermeneutics mode: "Explain what are those 8 phases" starter — asks
+   * for the canned methodology explainer instead of running a passage. */
+  explainPhases?: boolean
 }
 
 export interface ArtifactLink {

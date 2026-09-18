@@ -272,7 +272,10 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
                 'hermeneutics',
                 '📚 Deep Study',
                 'Name a passage and I\'ll run it through all eight phases — context, semantics, witnesses, covenant, typology and the validation tests.',
-                [{ label: 'Surprise me', modeParams: { surprise: true } }]
+                [
+                  { label: 'Surprise me', modeParams: { surprise: true } },
+                  { label: 'Explain what are those 8 phases', modeParams: { explainPhases: true } },
+                ]
               )
             }
           >

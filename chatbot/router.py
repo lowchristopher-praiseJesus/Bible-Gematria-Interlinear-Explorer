@@ -1010,6 +1010,32 @@ from chatbot.tools import random_verse
 
 _FULL_NAME_TO_USFM = {full: usfm for usfm, full in _USFM_TO_BOOK.items()}
 
+# Canned, non-LLM explainer for the Deep Study "Explain what are those 8
+# phases" starter — kept verbatim/static so the wording never drifts between
+# runs or gets paraphrased by a model call.
+HERMENEUTICS_PHASES_EXPLAINER = """\
+**The Eight Phases of Deep Study**
+
+When you run a passage through Deep Study, I walk it through eight steps designed to keep the interpretation grounded in the whole Bible instead of guesswork. Here's what each one does, in plain terms:
+
+1. **Set the scene.** Who said it, to whom, when, and why? I also check whether the passage was written *to* Jews, Gentiles, or the Church — not everything in the Bible was written *to* you, even though all of it is written *for* you.
+
+2. **Let Scripture explain Scripture.** Instead of guessing what a word or phrase means, I look at how the Bible uses it elsewhere. For example, "thorn in the flesh" usually means an annoying *person*, not a physical illness.
+
+3. **Separate the report from the truth.** The Bible faithfully records what people said — even when they were wrong, lying, or confused. Job saying "the Lord takes away" is recorded accurately, but it's Job's mistaken opinion, not a statement of how God actually works.
+
+4. **Get two or three witnesses.** I won't build an interpretation on one isolated verse. A real conclusion should show up in at least two or three clear places in Scripture.
+
+5. **Let clear verses lead.** If a plain verse says one thing and a confusing, symbolic verse seems to say another, the clear verse wins — confusing verses get interpreted in light of clear ones, never the other way around.
+
+6. **Read it through the cross.** I sort out what belongs to the Old Covenant (Law) and what belongs to the New Covenant (Grace), since the cross changed how some commands and promises apply.
+
+7. **Look for Jesus.** Old Testament people, objects, and events (like the Passover lamb or the bronze serpent) often point forward to Christ. I also look at what God's names reveal — "Elohim" emphasizes God as Creator, while "Yahweh" emphasizes His personal, covenant-keeping love.
+
+8. **Run a gut check.** Before giving a final answer, I ask three questions: Does this make you love Jesus more? Does it honor what He already finished on the cross? Does it match the truth that your sins are forgiven? If an interpretation fails any of these, I throw it out.
+
+💡 Want to see this in action? Tell me a passage and I'll run it through all eight steps."""
+
 
 async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Build the seeded first assistant turn for a newly created mode session."""
@@ -1222,6 +1248,15 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
         }
 
     if mode == "hermeneutics":
+        if mode_params.get("explain_phases"):
+            return {
+                "type": "chat",
+                "message": HERMENEUTICS_PHASES_EXPLAINER,
+                "data": None,
+                "route": "Mode primer → hermeneutics explain phases",
+                "follow_up_questions": [],
+            }
+
         reference = mode_params.get("reference")
         if not reference and mode_params.get("surprise"):
             book, chapter, verse = await random_verse()
