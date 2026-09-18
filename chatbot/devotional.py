@@ -111,6 +111,7 @@ WRITING CHARACTERISTICS:
 - If the verse has a difficult or surprising meaning, acknowledge that honestly before explaining its hope or significance.
 - Avoid clichés, excessive Christian jargon, generic motivational language, and overly polished corporate-sounding prose.
 - Do not sound like a textbook, sermon outline, Bible study worksheet, or theological essay.
+- Write in plain, simple English a high-school-level reader (including one still learning English) can follow easily: short sentences, common everyday words. If a theological term is genuinely necessary, briefly explain it in the same sentence rather than assuming the reader already knows it.
 
 LENGTH:
 
