@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -92,6 +92,8 @@ describe('App', () => {
     await userEvent.click(menu)
     expect(menu).toHaveAttribute('aria-expanded', 'true')
 
+    // "Topical Study" isn't the active session's category, so it starts collapsed.
+    await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
     await userEvent.click(screen.getByText(describeSession(otherSession)))
 
     expect(menu).toHaveAttribute('aria-expanded', 'false')
@@ -124,6 +126,8 @@ describe('App', () => {
     // Simulate the sidebar note click: open the note, then select its session.
     useArtifactStore.getState().openNote(other.id, note.id)
     await userEvent.click(screen.getByRole('button', { name: 'Conversations' }))
+    // "Topical Study" isn't the active session's category, so it starts collapsed.
+    await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
     // The sidebar note row is a <button>; scope to it since the open
     // NoteEditor also renders the note body text.
     await userEvent.click(screen.getByRole('button', { name: /carry me over/ }))
@@ -163,7 +167,13 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('a shared devotional')).toBeInTheDocument()
+    // The imported session's sidebar row and its chat bubble show the same
+    // text, so wait for the chat bubble specifically (outside the nav).
+    await waitFor(() => {
+      const nav = screen.getByRole('navigation', { name: 'Conversations' })
+      const matches = screen.getAllByText('a shared devotional')
+      expect(matches.some((el) => !nav.contains(el))).toBe(true)
+    })
     expect(window.location.hash).toBe('')
     const sessions = Object.values(useSessionsStore.getState().sessions)
     expect(sessions).toHaveLength(1)

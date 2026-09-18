@@ -57,6 +57,17 @@ function groupByMode(sessions: Session[]): Partial<Record<SessionMode, Session[]
   return groups
 }
 
+type CategoryKey = SessionMode | 'imported'
+
+function categoryOf(session: Session | undefined): CategoryKey | null {
+  if (!session) return null
+  return session.imported ? 'imported' : session.mode
+}
+
+function collapseAllExcept(active: CategoryKey | null): Partial<Record<SessionMode, boolean>> {
+  return Object.fromEntries(MODE_ORDER.map((mode) => [mode, mode !== active])) as Partial<Record<SessionMode, boolean>>
+}
+
 function SessionRow({
   session,
   activeSessionId,
@@ -146,12 +157,33 @@ function SessionRow({
 
 export function SessionsPane({ activeSessionId, onSelectSession, onNewSession }: Props) {
   const sessions = useSessionsStore((s) => s.sessions)
-  // Every category starts expanded; collapsing one just hides its rows —
-  // nothing here needs to survive a reload, so plain component state is
-  // enough. The search box is the same: transient, reset on reload.
-  const [collapsed, setCollapsed] = useState<Partial<Record<SessionMode, boolean>>>({})
-  const [importedCollapsed, setImportedCollapsed] = useState(false)
+  const activeCategory = useSessionsStore((s) =>
+    categoryOf(activeSessionId ? s.sessions[activeSessionId] : undefined)
+  )
+  // Every category starts collapsed except the active session's — collapsing
+  // one just hides its rows, nothing here needs to survive a reload, so
+  // plain component state is enough. The search box is the same: transient,
+  // reset on reload.
+  const [collapsed, setCollapsed] = useState<Partial<Record<SessionMode, boolean>>>(() =>
+    collapseAllExcept(activeCategory)
+  )
+  const [importedCollapsed, setImportedCollapsed] = useState(() => activeCategory !== 'imported')
   const [query, setQuery] = useState('')
+
+  // Re-expand only the active session's category whenever it changes (a new
+  // or newly-selected session), collapsing the rest. Exiting to "New chat"
+  // (activeCategory -> null) is left alone, so the just-exited conversation's
+  // category stays open rather than everything collapsing. Adjusted during
+  // render rather than in an effect, per
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevActiveCategory, setPrevActiveCategory] = useState(activeCategory)
+  if (activeCategory !== prevActiveCategory) {
+    setPrevActiveCategory(activeCategory)
+    if (activeCategory) {
+      setCollapsed(collapseAllExcept(activeCategory))
+      setImportedCollapsed(activeCategory !== 'imported')
+    }
+  }
 
   const searching = query.trim().length > 0
   const filtered = filterSessions(Object.values(sessions), query)

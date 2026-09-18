@@ -47,6 +47,8 @@ describe('SessionsPane', () => {
     const note = useSessionsStore.getState().addNote(other.id, 'from the other one')!
     const onSelectSession = vi.fn()
     render(<SessionsPane activeSessionId={active.id} onSelectSession={onSelectSession} onNewSession={() => {}} />)
+    // "Parable Study" isn't the active session's category, so it starts collapsed.
+    await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
     await userEvent.click(screen.getByText('from the other one'))
     expect(onSelectSession).toHaveBeenCalledWith(other.id)
     expect(useArtifactStore.getState().activeNote).toEqual({ sessionId: other.id, noteId: note.id })
@@ -64,7 +66,7 @@ describe('SessionsPane', () => {
   it('lists a session under its mode section, with a description and calls onSelectSession when clicked', async () => {
     const session = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
     const onSelectSession = vi.fn()
-    render(<SessionsPane activeSessionId={null} onSelectSession={onSelectSession} onNewSession={() => {}} />)
+    render(<SessionsPane activeSessionId={session.id} onSelectSession={onSelectSession} onNewSession={() => {}} />)
 
     expect(screen.getByText(/Parable Study/)).toBeInTheDocument()
     expect(screen.getByText(describeSession(session))).toBeInTheDocument()
@@ -79,7 +81,7 @@ describe('SessionsPane', () => {
     useSessionsStore.setState((state) => ({
       sessions: { ...state.sessions, [session.id]: { ...state.sessions[session.id], createdAt: now } },
     }))
-    render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+    render(<SessionsPane activeSessionId={session.id} onSelectSession={() => {}} onNewSession={() => {}} />)
     expect(screen.getByText(/^Today, \d{1,2}:\d{2} (AM|PM)$/)).toBeInTheDocument()
   })
 
@@ -106,7 +108,7 @@ describe('SessionsPane', () => {
 
   it('collapses a section on click, hiding its sessions, and expands it again on a second click', async () => {
     const session = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
-    render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+    render(<SessionsPane activeSessionId={session.id} onSelectSession={() => {}} onNewSession={() => {}} />)
     const header = screen.getByRole('button', { name: /Parable Study/ })
     expect(header).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText(describeSession(session))).toBeInTheDocument()
@@ -126,6 +128,12 @@ describe('SessionsPane', () => {
     const parableSession = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
     const topicSession = useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
     render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+    // Both start collapsed (neither is the active session) — open both first.
+    await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
+    expect(screen.getByText(describeSession(parableSession))).toBeInTheDocument()
+    expect(screen.getByText(describeSession(topicSession))).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
 
@@ -149,7 +157,7 @@ describe('SessionsPane', () => {
         [newer.id]: { ...state.sessions[newer.id], updatedAt: 2000 },
       },
     }))
-    render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+    render(<SessionsPane activeSessionId={newer.id} onSelectSession={() => {}} onNewSession={() => {}} />)
     const rows = screen.getAllByText(/lost sheep|prodigal son/i)
     expect(rows.map((r) => r.textContent)).toEqual(['Prodigal son', 'Lost sheep'])
   })
@@ -192,6 +200,8 @@ describe('SessionsPane', () => {
       error: null,
     })
     render(<SessionsPane activeSessionId={active.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+    // "Parable Study" isn't the active session's category, so it starts collapsed.
+    await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
     const otherRow = screen.getByText(describeSession(other)).closest('div')!.parentElement!
     await userEvent.click(within(otherRow).getByRole('button', { name: /delete session/i }))
     expect(useArtifactStore.getState().status).toBe('ready')
@@ -200,9 +210,9 @@ describe('SessionsPane', () => {
   it('re-renders when sessions are mutated externally via store', async () => {
     render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
     expect(screen.queryByText(/Parable Study/)).not.toBeInTheDocument()
-    const session = useSessionsStore.getState().createSession('parable', { parableId: 'lost_sheep' })
+    useSessionsStore.getState().createSession('parable', { parableId: 'lost_sheep' })
     await waitFor(() => {
-      expect(screen.getByText(describeSession(session))).toBeInTheDocument()
+      expect(screen.getByText(/Parable Study/)).toBeInTheDocument()
     })
   })
 
@@ -283,6 +293,9 @@ describe('SessionsPane', () => {
       const parable = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
       const topic = useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
       render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+      // Both start collapsed (neither is the active session) — open both first.
+      await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
+      await userEvent.click(screen.getByRole('button', { name: /Topical Study/ }))
       const box = screen.getByRole('searchbox', { name: /search conversations/i })
 
       await userEvent.type(box, 'prodigal')
@@ -298,7 +311,7 @@ describe('SessionsPane', () => {
       const session = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
       render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
 
-      await userEvent.click(screen.getByRole('button', { name: /Parable Study/ }))
+      // "Parable Study" isn't the active session's category, so it's already collapsed.
       expect(screen.queryByText(describeSession(session))).not.toBeInTheDocument()
 
       await userEvent.type(screen.getByRole('searchbox', { name: /search conversations/i }), 'prodigal')
@@ -321,5 +334,61 @@ describe('SessionsPane', () => {
     render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
     // The label differs from the mode id on purpose — see Global Constraints.
     expect(screen.getByText('Deep Study')).toBeInTheDocument()
+  })
+
+  describe('default expansion', () => {
+    it('starts every category collapsed when there is no active session', () => {
+      useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
+      render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: /Topical Study/ })).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    it("expands only the active session's category on mount, leaving the rest collapsed", () => {
+      useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
+      const active = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      render(<SessionsPane activeSessionId={active.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getByRole('button', { name: /Topical Study/ })).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    it('expands the Imported section on mount when the active session is imported', () => {
+      const imported = useSessionsStore.getState().importSession({
+        token: 't3', mode: 'devotional', modeParams: { source: 'system' }, title: 'Devotional',
+        messages: [{ id: 'x', role: 'user', text: 'shared line' }], notes: [],
+      })
+      render(<SessionsPane activeSessionId={imported.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      expect(screen.getByRole('button', { name: /Imported/ })).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('switches which category is expanded when a different session becomes active', () => {
+      const parableSession = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      const topicSession = useSessionsStore.getState().createSession('topic', { conceptSlug: 'faith' })
+      const { rerender } = render(
+        <SessionsPane activeSessionId={parableSession.id} onSelectSession={() => {}} onNewSession={() => {}} />
+      )
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveAttribute('aria-expanded', 'true')
+
+      rerender(<SessionsPane activeSessionId={topicSession.id} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: /Topical Study/ })).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('keeps the previous category expanded after exiting to no active session', () => {
+      const parableSession = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      const { rerender } = render(
+        <SessionsPane activeSessionId={parableSession.id} onSelectSession={() => {}} onNewSession={() => {}} />
+      )
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveAttribute('aria-expanded', 'true')
+
+      rerender(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+
+      expect(screen.getByRole('button', { name: /Parable Study/ })).toHaveAttribute('aria-expanded', 'true')
+    })
   })
 })
