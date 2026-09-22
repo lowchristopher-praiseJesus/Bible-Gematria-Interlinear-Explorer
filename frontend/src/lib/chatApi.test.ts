@@ -176,6 +176,10 @@ describe('chatApi', () => {
     })
   })
 
+  it('toWireModeParams maps characterId to character_id', () => {
+    expect(toWireModeParams({ characterId: 'david' })).toEqual({ character_id: 'david' })
+  })
+
   it('toWireModeParams maps rotationSeed and rotationCursor to snake_case', () => {
     expect(toWireModeParams({ rotationSeed: 7, rotationCursor: 2 })).toEqual({
       rotation_seed: 7,

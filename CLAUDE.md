@@ -144,6 +144,31 @@ are *disclosure, never enforcement*: a failed test is reported with a
 caution banner and never triggers a rewrite. See
 `docs/superpowers/specs/2026-09-16-hermeneutics-mode-design.md`.
 
+## Chat with a Character mode (internal id `character`)
+
+The user picks one of the profiles in `characters/*.md` (49; `characters/README.md`
+is the manifest — id, name, testament, one-line summary — parsed by
+`chatbot/character_loader.py`) and talks with that person. The LLM answers in the
+first person **as the character, grounded solely on that profile**: the whole
+profile goes into every turn (0.7k–2.8k words, so no retrieval), and the persona
+prompt in `chatbot/character_chat.py` forbids adding anything the profile does not
+say, breaking character, or mentioning the profile or how it was made. Uncovered
+questions get an in-character "I don't know / it wasn't recorded". Scripture
+references in replies are linked via `wiki_refs`; follow-ups come from
+`generate_llm_follow_ups`. The session's opening turn is a short in-character
+greeting (`character_chat.greeting`, static fallback if the LLM fails).
+
+Wiring mirrors Socratic/Topical: `GET /characters` lists them; every turn of a
+`mode=character` session (`mode_params.character_id`) routes to
+`character_chat.answer` in both `post_chat` and `_stream_chat_response` (whole reply
+in one `final` event, no token streaming); the frontend picker is
+`CharacterPickerScreen` (opened from `ModePickerScreen`), and the character lives in
+`modeParams` (`characterId`/`characterName`) so reloads and share links restore it.
+**Jesus is deliberately excluded** (`EXCLUDED_IDS` in `character_loader.py`) because
+voicing him in the first person may be sensitive — removing that entry re-enables
+him. `characters/` must ship in the chatbot image (`Dockerfile.chatbot`, covered by
+`test_chatbot_image_ships_the_profiles`).
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.

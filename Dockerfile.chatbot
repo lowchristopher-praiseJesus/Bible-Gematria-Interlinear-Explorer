@@ -35,6 +35,12 @@ COPY chatbot/ ./chatbot/
 # this line get_book_context() returns None for every book.
 COPY context.md ./
 
+# Character profiles for Chat with a Character mode, read by
+# chatbot/character_loader.py as <pkg parent>/characters/ == /app/characters
+# (README.md there is the manifest). Without this line the character picker
+# is empty.
+COPY characters/ ./characters/
+
 # Vendored external package — produced by scripts/vendor-mybibletoolbox.sh.
 # Contains src/, .claude/skills/quote-bible/scripts/ (book_codes, biblehub_fetcher),
 # bible-study-tools/tool-registry.yaml, and EMPTY data/{commentary,strongs}/ dirs.

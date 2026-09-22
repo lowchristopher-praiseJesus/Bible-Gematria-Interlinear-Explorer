@@ -13,6 +13,19 @@ export interface StudyWikiEntry {
   description: string
 }
 
+export interface CharacterEntry {
+  id: string
+  name: string
+  testament: 'OT' | 'NT'
+  summary: string
+}
+
+export async function listCharacters(): Promise<CharacterEntry[]> {
+  const res = await fetch('/api/bible-chat/characters')
+  const body = await parseJsonResponse<{ characters: CharacterEntry[] }>(res)
+  return body.characters
+}
+
 export async function listParables(): Promise<ParableEntry[]> {
   const res = await fetch('/api/bible-chat/parables')
   const body = await parseJsonResponse<{ parables: ParableEntry[] }>(res)

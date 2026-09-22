@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from chatbot.schemas import (
     BookContextResponse,
+    CharactersResponse,
     ChatRequest,
     ChatResponse,
     DevotionalAudioRequest,
@@ -38,7 +39,7 @@ from chatbot.devotional_audio import (
     synthesize_devotional_audio,
 )
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics
+from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader
 from chatbot.router import (
     build_mode_primer,
     route_deterministic,
@@ -216,6 +217,12 @@ async def list_study_wikis():
     return StudyWikisResponse(study_wikis=wiki_loader.list_series())
 
 
+@router.get("/characters", response_model=CharactersResponse)
+async def list_characters():
+    """List the Bible characters available for Chat with a Character mode."""
+    return CharactersResponse(characters=character_loader.list_characters())
+
+
 @router.post("/devotional/audio", response_model=DevotionalAudioResponse)
 async def post_devotional_audio(request: DevotionalAudioRequest):
     """Generate (or reuse a cached) Neural2 MP3 for a devotional's full
@@ -289,6 +296,13 @@ async def post_chat(request: ChatRequest):
         if request.mode == "socratic":
             reference = (request.mode_params or {}).get("reference")
             result = await socratic.answer(reference, request.message, history)
+            return _with_trace(result)
+
+        # Every turn in a Chat with a Character session is spoken by that
+        # character, from their own profile only.
+        if request.mode == "character":
+            character_id = (request.mode_params or {}).get("character_id", "")
+            result = await character_chat.answer(character_id, request.message, history)
             return _with_trace(result)
 
         # Every turn in a Hermeneutics session needs the phase pipeline (or
@@ -502,6 +516,15 @@ async def _stream_chat_response(
         if request.mode == "socratic":
             reference = (request.mode_params or {}).get("reference")
             result = await socratic.answer(reference, request.message, history)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        # Same special case as post_chat(): the reply arrives whole, as with
+        # Socratic Study, not token by token.
+        if request.mode == "character":
+            character_id = (request.mode_params or {}).get("character_id", "")
+            result = await character_chat.answer(character_id, request.message, history)
             _note_outcome(result)
             yield await sse_event("final", {"result": result})
             return

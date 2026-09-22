@@ -20,8 +20,8 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Optional conversation ID for context")
     history: Optional[List["HistoryMessage"]] = Field(None, description="Recent conversation turns for context")
     page_context: Optional[str] = Field(None, description="Verse reference currently displayed on the Explorer page (e.g. 'John 3:16')")
-    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, socratic, hermeneutics, freeform")
-    mode_params: Optional[Dict[str, Any]] = Field(None, description="Mode-specific parameters, e.g. {'plan': 'chronological', 'day_index': 0}")
+    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, socratic, hermeneutics, character, freeform")
+    mode_params: Optional[Dict[str, Any]] = Field(None, description="Mode-specific parameters, e.g. {'plan': 'chronological', 'day_index': 0} or, for character mode, {'character_id': 'david'}")
     use_openai_llm: Optional[bool] = Field(
         None,
         description=(
@@ -98,6 +98,17 @@ class StudyWikiEntry(BaseModel):
 
 class StudyWikisResponse(BaseModel):
     study_wikis: List[StudyWikiEntry] = Field(..., description="List of registered study wiki series")
+
+
+class CharacterEntry(BaseModel):
+    id: str = Field(..., description="Profile id, e.g. 'david' (the characters/<id>.md file stem)")
+    name: str = Field(..., description="Display name, e.g. 'Mary (Mother of Jesus)'")
+    testament: str = Field(..., description="'OT' or 'NT'")
+    summary: str = Field(..., description="One-line description of who the character is")
+
+
+class CharactersResponse(BaseModel):
+    characters: List[CharacterEntry] = Field(..., description="Characters available for Chat with a Character mode")
 
 
 class SSEChunk(BaseModel):

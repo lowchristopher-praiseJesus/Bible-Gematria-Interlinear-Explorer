@@ -38,6 +38,19 @@ describe('useSessionsStore', () => {
     expect(session.title).toBe('Topical Study — the life of rest')
   })
 
+  it('titles a character session "Chat with <name>"', () => {
+    const session = useSessionsStore.getState().createSession('character', {
+      characterId: 'david',
+      characterName: 'David',
+    })
+    expect(session.title).toBe('Chat with David')
+  })
+
+  it('titles a character session with no name generically', () => {
+    const session = useSessionsStore.getState().createSession('character', {})
+    expect(session.title).toBe('Chat with a Character')
+  })
+
   it('appendMessage adds a message and bumps updatedAt', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     const before = useSessionsStore.getState().sessions[session.id].updatedAt

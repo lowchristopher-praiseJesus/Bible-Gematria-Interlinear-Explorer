@@ -1,8 +1,9 @@
 """LLM client for AI-powered chat responses with tool use.
 
-Talks to one of two providers, selected by the LLM_PROVIDER env var:
+Talks to one of three providers, selected by the LLM_PROVIDER env var:
   - "ollama" (default): Ollama native API      -> POST {url}/api/chat
   - "nvidia": NVIDIA NIM, OpenAI-compatible API -> POST {url}/v1/chat/completions
+  - "openrouter": OpenRouter, OpenAI-compatible -> POST {url}/v1/chat/completions
 
 The public functions (call_ollama_with_context, chat_with_ollama,
 stream_chat_with_ollama) keep their names regardless of provider.
@@ -170,10 +171,12 @@ async def _fetch_research_data(
 #   "nvidia"           -> NVIDIA NIM, OpenAI-compatible: POST
 #                         {url}/chat/completions, top-level sampling params,
 #                         SSE stream ("data: {...}" / "data: [DONE]").
+#   "openrouter"       -> OpenRouter, OpenAI-compatible: same wire format
+#                         as "nvidia" above, https://openrouter.ai/api/v1.
 #
-# The OLLAMA_* vars keep their meaning. The NVIDIA_* vars mirror them for the
-# hosted build.nvidia.com endpoint. Callers that never set LLM_PROVIDER get
-# the unchanged Ollama behaviour.
+# The OLLAMA_* vars keep their meaning. The NVIDIA_*/OPENROUTER_* vars mirror
+# them for their respective hosted endpoints. Callers that never set
+# LLM_PROVIDER get the unchanged Ollama behaviour.
 # ---------------------------------------------------------------------------
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").strip().lower()
 
@@ -188,11 +191,18 @@ NVIDIA_API_URL = os.environ.get("NVIDIA_API_URL", "https://integrate.api.nvidia.
 NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
 
+# --- OpenRouter (OpenAI-compatible /v1/chat/completions) ---
+OPENROUTER_API_URL = os.environ.get("OPENROUTER_API_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.8-27b:free")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+
 
 def _llm_config():
     """(provider, base_url, model, api_key) for the active LLM provider."""
     if LLM_PROVIDER == "nvidia":
         return ("nvidia", NVIDIA_API_URL.rstrip("/"), NVIDIA_MODEL, NVIDIA_API_KEY)
+    if LLM_PROVIDER == "openrouter":
+        return ("openrouter", OPENROUTER_API_URL.rstrip("/"), OPENROUTER_MODEL, OPENROUTER_API_KEY)
     return ("ollama", OLLAMA_API_URL.rstrip("/"), OLLAMA_MODEL, OLLAMA_API_KEY)
 
 
@@ -202,6 +212,10 @@ def llm_unconfigured_error():
     if provider == "nvidia":
         if not api_key:
             return "NVIDIA_API_KEY required for NVIDIA NIM. Please set your API key."
+        return None
+    if provider == "openrouter":
+        if not api_key:
+            return "OPENROUTER_API_KEY required for OpenRouter. Please set your API key."
         return None
     # ollama: a local daemon needs no key; a remote/HTTPS endpoint does.
     is_cloud = "api.ollama.com" in base_url or base_url.startswith("https://")
@@ -215,7 +229,8 @@ def active_model_label(llm_override: Optional[Dict[str, str]] = None):
     if llm_override:
         return f"OpenAI ({llm_override.get('model', OPENAI_VOICE_MODEL)})"
     provider, _base_url, model, _api_key = _llm_config()
-    return f"{'NVIDIA' if provider == 'nvidia' else 'Ollama'} ({model})"
+    label = {"nvidia": "NVIDIA", "openrouter": "OpenRouter"}.get(provider, "Ollama")
+    return f"{label} ({model})"
 
 
 # --- OpenAI (BYOK override, voice mode only — see chatbot/api.py) ---
@@ -248,7 +263,7 @@ def _build_request(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    if provider in ("nvidia", "openai"):
+    if provider in ("nvidia", "openai", "openrouter"):
         # base_url already ends with /v1 (OpenAI-compatible surface).
         url = f"{base_url}/chat/completions"
         payload = {
@@ -283,7 +298,7 @@ def _build_request(
 
 def _extract_content(provider, result):
     """(content, error) from a non-streaming chat response body."""
-    if provider in ("nvidia", "openai"):
+    if provider in ("nvidia", "openai", "openrouter"):
         choices = result.get("choices") or []
         content = ""
         if choices:
@@ -298,7 +313,7 @@ def _extract_content(provider, result):
 
 def _extract_tokens(provider, result):
     """(prompt_tokens, completion_tokens) from a non-streaming response body."""
-    if provider in ("nvidia", "openai"):
+    if provider in ("nvidia", "openai", "openrouter"):
         usage = result.get("usage") or {}
         return usage.get("prompt_tokens"), usage.get("completion_tokens")
     return result.get("prompt_eval_count"), result.get("eval_count")
@@ -313,7 +328,7 @@ def _stream_delta(provider, line):
     if not line:
         return None
 
-    if provider in ("nvidia", "openai"):
+    if provider in ("nvidia", "openai", "openrouter"):
         if not line.startswith("data:"):
             return None  # SSE ": comment" keep-alives, "event:" lines, etc.
         data = line[len("data:"):].strip()

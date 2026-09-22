@@ -121,3 +121,23 @@ def test_proxy_still_returns_503_on_a_connection_error(client, monkeypatch):
 
     assert resp.status_code == 503
     assert resp.get_json()["error"].startswith("Chatbot service unavailable")
+
+
+def test_proxy_returns_504_instead_of_crashing_on_a_read_timeout(client, monkeypatch):
+    # Regression test: a slow LLM turn (e.g. Chat with a Character's
+    # greeting) can take close to the chatbot's own internal LLM-call
+    # timeout. The proxy's `requests.request(..., timeout=180)` read
+    # timeout used to fire around the same moment and wasn't caught —
+    # only ConnectionError was — so it reached the client as an unhandled
+    # 500 with a raw traceback instead of a clean error.
+    import requests as requests_module
+
+    def raise_read_timeout(*a, **k):
+        raise requests_module.exceptions.ReadTimeout("boom")
+
+    monkeypatch.setattr(myproject.requests, "request", raise_read_timeout)
+
+    resp = client.post("/api/bible-chat/chat", json={"message": "", "mode": "character"})
+
+    assert resp.status_code == 504
+    assert "timed out" in resp.get_json()["error"].lower()

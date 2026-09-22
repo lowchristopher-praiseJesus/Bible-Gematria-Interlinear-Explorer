@@ -199,6 +199,9 @@ minutes of the free VM's 2 OCPUs per build).
 cp .env.example .env
 # Default: LLM_PROVIDER=nvidia — set NVIDIA_API_KEY (an "nvapi-..." key from
 # build.nvidia.com); adjust NVIDIA_MODEL if you don't want the default.
+# To use OpenRouter instead: set LLM_PROVIDER=openrouter and fill in
+# OPENROUTER_API_KEY (an "sk-or-..." key from openrouter.ai/keys); adjust
+# OPENROUTER_MODEL if you don't want the default.
 # To use Ollama instead: set LLM_PROVIDER=ollama and fill in OLLAMA_API_KEY /
 # OLLAMA_API_URL / OLLAMA_MODEL.
 ```
@@ -236,6 +239,14 @@ mounted at `/app/shares-db` (env `SHARE_DB_URL`). Same persistence and
 backup considerations as `feedback.db`. There is no admin UI and no
 expiry — rows accumulate; an operator can prune old rows directly with
 `sqlite3` if ever needed.
+
+### Character profiles (Chat with a Character)
+
+The 49 profiles in `characters/` (plus its `README.md`, which is the manifest) are
+baked into the chatbot image by `Dockerfile.chatbot` (`COPY characters/`) — there is
+nothing to mount. Editing a profile or adding one means rebuilding the `chatbot`
+service (`docker compose build chatbot && docker compose up -d chatbot`). Jesus is
+deliberately excluded (`EXCLUDED_IDS` in `chatbot/character_loader.py`).
 
 ### Devotional audio (Listen) and devotional-of-the-day
 

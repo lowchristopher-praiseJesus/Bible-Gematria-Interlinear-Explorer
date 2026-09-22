@@ -1005,7 +1005,7 @@ async def route_claude(
 
 from chatbot.data.parables import get_parable
 from chatbot.data.reading_plans import get_day_reading
-from chatbot import wiki_loader, wiki_qa
+from chatbot import wiki_loader, wiki_qa, character_chat
 from chatbot.tools import random_verse
 
 _FULL_NAME_TO_USFM = {full: usfm for usfm, full in _USFM_TO_BOOK.items()}
@@ -1246,6 +1246,9 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
             "artifacts": _reading_artifacts(ref),
             "follow_up_questions": ["I'm stuck — give me a hint.", "What's the historical context here?"],
         }
+
+    if mode == "character":
+        return await character_chat.greeting(mode_params.get("character_id", ""))
 
     if mode == "hermeneutics":
         if mode_params.get("explain_phases"):

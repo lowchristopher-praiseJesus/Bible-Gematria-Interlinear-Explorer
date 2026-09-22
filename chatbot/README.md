@@ -40,6 +40,7 @@ app.mount("/api/bible-chat", create_chatbot_app())
 | GET | `/book_context/{book}` | Fetch book-level context (historical setting, themes, etc.) for a NT book |
 | GET | `/parables` | List curated parables for Parable Study mode |
 | GET | `/study-wikis` | List registered study-wiki series for Topical Study mode |
+| GET | `/characters` | List the Bible characters available for Chat with a Character mode (profiles live in `characters/`; Jesus is deliberately excluded) |
 | GET | `/study-wikis/{series_id}/pages/{slug}` | Fetch one rendered concept/entity/source page from a registered study wiki |
 
 ## Example Requests

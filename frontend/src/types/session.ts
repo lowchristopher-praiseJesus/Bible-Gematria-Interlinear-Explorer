@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character'
 
 export interface ModeParams {
   plan?: 'chronological' | 'canonical'
@@ -34,6 +34,11 @@ export interface ModeParams {
   /** Hermeneutics mode: "Explain what are those 8 phases" starter — asks
    * for the canned methodology explainer instead of running a passage. */
   explainPhases?: boolean
+  /** Character mode: which profile the session is a conversation with
+   * (`characterName` is kept only so the session title survives a reload
+   * without refetching the list). */
+  characterId?: string
+  characterName?: string
 }
 
 export interface ArtifactLink {

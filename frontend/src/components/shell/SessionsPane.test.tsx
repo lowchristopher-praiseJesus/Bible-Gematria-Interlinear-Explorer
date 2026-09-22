@@ -336,6 +336,12 @@ describe('SessionsPane', () => {
     expect(screen.getByText('Deep Study')).toBeInTheDocument()
   })
 
+  it('groups character sessions under a "Chat with a Character" heading', () => {
+    useSessionsStore.getState().createSession('character', { characterId: 'david', characterName: 'David' })
+    render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+    expect(screen.getByRole('button', { name: /Chat with a Character/ })).toBeInTheDocument()
+  })
+
   describe('default expansion', () => {
     it('starts every category collapsed when there is no active session', () => {
       useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })

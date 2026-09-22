@@ -5,11 +5,11 @@ import { ModePickerScreen } from './ModePickerScreen'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import * as chatApi from '@/lib/chatApi'
-import { listStudyWikis } from '@/lib/modeData'
+import { listCharacters, listStudyWikis } from '@/lib/modeData'
 
 vi.mock('@/lib/modeData', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/modeData')>()
-  return { ...actual, listStudyWikis: vi.fn() }
+  return { ...actual, listStudyWikis: vi.fn(), listCharacters: vi.fn() }
 })
 
 describe('ModePickerScreen', () => {
@@ -208,5 +208,52 @@ describe('ModePickerScreen', () => {
     expect(session.messages[0]).toMatchObject({ role: 'user', text: '📚 Deep Study' })
     expect(session.messages[1].choicesStatus).toBe('ready')
     expect(session.messages[1].choices).toEqual([{ label: 'Surprise me', modeParams: { surprise: true } }])
+  })
+
+  describe('Chat with a Character', () => {
+    beforeEach(() => {
+      vi.mocked(listCharacters).mockResolvedValue([
+        { id: 'david', name: 'David', testament: 'OT', summary: 'The shepherd boy who became king.' },
+      ])
+    })
+
+    it('opens the character picker from its own starter', async () => {
+      render(<ModePickerScreen onSessionStarted={() => {}} />)
+      await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
+
+      expect(await screen.findByRole('button', { name: /david/i })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /bible in a year/i })).not.toBeInTheDocument()
+      expect(Object.values(useSessionsStore.getState().sessions)).toHaveLength(0)
+    })
+
+    it('picking a character starts a character session and fetches the in-character greeting', async () => {
+      const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Peace. I am David.' })
+      const onSessionStarted = vi.fn()
+      render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
+      await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
+      await userEvent.click(await screen.findByRole('button', { name: /david/i }))
+
+      expect(onSessionStarted).toHaveBeenCalled()
+      const session = firstSession()
+      expect(session.mode).toBe('character')
+      expect(session.modeParams).toEqual({ characterId: 'david', characterName: 'David' })
+      expect(session.title).toBe('Chat with David')
+      expect(session.messages[0]).toMatchObject({ role: 'user', text: '💬 Chat with David' })
+      expect(session.messages[1]).toMatchObject({ role: 'assistant', text: 'Peace. I am David.' })
+      expect(postChat).toHaveBeenCalledWith({
+        message: '',
+        mode: 'character',
+        mode_params: { characterId: 'david', characterName: 'David' },
+      })
+    })
+
+    it('Back returns to the mode starters', async () => {
+      render(<ModePickerScreen onSessionStarted={() => {}} />)
+      await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
+      await screen.findByRole('button', { name: /david/i })
+      await userEvent.click(screen.getByRole('button', { name: /back/i }))
+
+      expect(screen.getByRole('button', { name: /bible in a year/i })).toBeInTheDocument()
+    })
   })
 })

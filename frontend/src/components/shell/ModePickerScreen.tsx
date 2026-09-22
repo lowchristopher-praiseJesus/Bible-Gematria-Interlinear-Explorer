@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout } from 'lucide-react'
+import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, UserRound } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
-import { listParables, listStudyWikis } from '@/lib/modeData'
+import { listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
+import { CharacterPickerScreen } from './CharacterPickerScreen'
 import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
 
 interface Props {
@@ -25,6 +26,7 @@ const STARTER_BUBBLE =
 export function ModePickerScreen({ onSessionStarted }: Props) {
   const [askInput, setAskInput] = useState('')
   const [asking, setAsking] = useState(false)
+  const [pickingCharacter, setPickingCharacter] = useState(false)
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
@@ -123,6 +125,17 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     }
     setAskInput('')
     onSessionStarted(session.id)
+  }
+
+  if (pickingCharacter) {
+    return (
+      <CharacterPickerScreen
+        onBack={() => setPickingCharacter(false)}
+        onPick={(c: CharacterEntry) =>
+          startSession('character', `💬 Chat with ${c.name}`, { characterId: c.id, characterName: c.name })
+        }
+      />
+    )
   }
 
   return (
@@ -280,6 +293,9 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
             }
           >
             <Layers className="h-4 w-4 shrink-0" aria-hidden="true" /> Deep Study
+          </button>
+          <button className={STARTER_BUBBLE} onClick={() => setPickingCharacter(true)}>
+            <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" /> Chat with a Character
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
             <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything

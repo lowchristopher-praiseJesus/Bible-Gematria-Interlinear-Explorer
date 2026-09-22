@@ -2142,7 +2142,12 @@ def chatbot_proxy(subpath=None):
 	headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
 	headers['Host'] = 'localhost:8000'
 
-	# Forward the request
+	# Forward the request. Read timeout is longer than the chatbot's own
+	# internal LLM-call timeout (180s, see chatbot/ollama_client.py) so a
+	# slow-but-successful turn (e.g. Chat with a Character's greeting) has
+	# the chatbot's own timeout fire and return a clean in-band error first,
+	# rather than this proxy giving up first and turning it into a broken
+	# connection the client sees as a generic failure.
 	try:
 		resp = requests.request(
 			method=request.method,
@@ -2151,7 +2156,7 @@ def chatbot_proxy(subpath=None):
 			data=request.get_data(),
 			cookies=request.cookies,
 			allow_redirects=False,
-			timeout=180,
+			timeout=(10, 200),
 			stream=True,
 		)
 
@@ -2187,6 +2192,8 @@ def chatbot_proxy(subpath=None):
 		return Response(stream_with_context(forward()), status=resp.status_code, headers=response_headers)
 	except requests.exceptions.ConnectionError:
 		return jsonify({'error': 'Chatbot service unavailable. Please ensure the chatbot is running on port 8000.'}), 503
+	except requests.exceptions.Timeout:
+		return jsonify({'error': 'The chatbot service timed out.'}), 504
 
 
 @app.route('/api/feedback', methods=['POST'])
