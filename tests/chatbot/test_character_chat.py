@@ -149,6 +149,16 @@ async def test_persona_speaks_from_lived_experience_never_about_the_bible(llm):
     assert "popular ideas" in prompt
 
 
+async def test_persona_never_recites_narration_about_itself_in_third_person(llm):
+    # The profile stores Genesis 3:6 as narration — "gave also unto her
+    # husband with her; and he did eat" — not dialogue. Quoting that
+    # verbatim makes Adam call himself "her husband"/"he" instead of "I".
+    await character_chat.answer("adam", "What happened when Eve gave you the fruit?")
+    prompt = llm.calls[0]["system_prompt"]
+    assert "retell it in your own first-person words" in prompt
+    assert "never copy it exactly" in prompt
+
+
 async def test_persona_only_cites_references_it_can_name_in_full(llm):
     # The profiles often show bare "(6:14–16)" refs under a book-level
     # paragraph; a guessed book turns into a wrong verse link.
