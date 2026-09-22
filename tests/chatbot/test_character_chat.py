@@ -7,7 +7,7 @@ from chatbot import character_chat, character_loader
 def llm(monkeypatch):
     """Stubs the LLM boundary; records what the chat module sent it."""
     calls = []
-    state = {"reply": {"type": "chat", "message": "I was a shepherd.", "data": None}}
+    state = {"reply": {"type": "chat", "message": "I was a shepherd.", "data": None}, "replies": None}
 
     async def fake_call(message, research_data, conversation_history=None, page_context=None, system_prompt=None):
         calls.append({
@@ -16,6 +16,11 @@ def llm(monkeypatch):
             "history": conversation_history,
             "system_prompt": system_prompt,
         })
+        # `state["replies"]`, when set, is a queue consumed one per call (for
+        # tests exercising a rewrite-on-leak second call); otherwise every
+        # call gets `state["reply"]`.
+        if state["replies"]:
+            return dict(state["replies"].pop(0))
         return dict(state["reply"])
 
     async def fake_follow_ups(user_message, assistant_message, page_context=None):
@@ -53,6 +58,73 @@ async def test_persona_is_first_person_as_the_named_character_and_profile_only(l
     assert "first person" in prompt
     assert "Never add" in prompt
     assert "never say you are an ai" in prompt.lower()
+
+
+def test_persona_leak_detector_catches_known_phrasings():
+    leaking = [
+        "as it is written in the third chapter of Genesis",
+        "the Bible tells us God forbade it",
+        "Scripture says I was formed from the ground",
+        "it is not recorded in the text",
+    ]
+    for text in leaking:
+        assert character_chat._breaks_persona(text), text
+
+
+def test_persona_leak_detector_does_not_flag_a_clean_reply():
+    clean = (
+        "God told me not to eat from that tree. I remember the day well, "
+        "and I never saw another like it."
+    )
+    assert not character_chat._breaks_persona(clean)
+
+
+async def test_answer_rewrites_once_when_the_reply_breaks_persona(llm):
+    llm.state["replies"] = [
+        {"type": "chat", "message": "As it is written in Genesis, I did eat.", "data": None},
+        {"type": "chat", "message": "God told me not to eat, and I ate anyway.", "data": None},
+    ]
+
+    result = await character_chat.answer("adam", "Did you eat the fruit?")
+
+    assert len(llm.calls) == 2
+    assert result["message"] == "God told me not to eat, and I ate anyway."
+    rewrite_call = llm.calls[1]
+    assert "As it is written in Genesis, I did eat." in rewrite_call["message"]
+    assert "never refers to" in rewrite_call["message"] or "rewrite" in rewrite_call["message"].lower()
+
+
+async def test_answer_does_not_rewrite_a_clean_reply(llm):
+    llm.state["reply"] = {"type": "chat", "message": "God told me not to eat from that tree.", "data": None}
+
+    result = await character_chat.answer("adam", "Did you eat the fruit?")
+
+    assert len(llm.calls) == 1
+    assert result["message"] == "God told me not to eat from that tree."
+
+
+async def test_answer_falls_back_to_the_original_if_the_rewrite_call_fails(llm):
+    llm.state["replies"] = [
+        {"type": "chat", "message": "As it is written, I ate the fruit.", "data": None},
+        {"type": "error", "message": "LLM API error: boom", "data": None},
+    ]
+
+    result = await character_chat.answer("adam", "Did you eat the fruit?")
+
+    assert result["type"] == "chat"
+    assert result["message"] == "As it is written, I ate the fruit."
+
+
+async def test_greeting_rewrites_once_when_it_breaks_persona(llm):
+    llm.state["replies"] = [
+        {"type": "chat", "message": "As it is written, I am David.", "data": None},
+        {"type": "chat", "message": "Peace. I am David.", "data": None},
+    ]
+
+    result = await character_chat.greeting("david")
+
+    assert len(llm.calls) == 2
+    assert result["message"] == "Peace. I am David."
 
 
 async def test_persona_answers_at_length_but_stays_spoken_not_written(llm):

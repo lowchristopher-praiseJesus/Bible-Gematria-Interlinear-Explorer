@@ -2,10 +2,25 @@
 the chosen Bible character in the first person, grounded solely on that
 character's profile (characters/<id>.md, see chatbot/character_loader.py)."""
 
+import re
 from typing import Any, Dict, List, Optional
 
 from chatbot import character_loader, wiki_refs
 from chatbot.ollama_client import call_ollama_with_context, generate_llm_follow_ups
+
+# Catches a reply that talks ABOUT its own source (a book, a chapter, "the
+# record") instead of speaking as lived memory — the persona prompt already
+# forbids this, but live testing showed the model still slips into it
+# occasionally ("as it is written in the third chapter of Genesis"), so this
+# backstops the prompt with a mechanical check + one rewrite pass.
+_PERSONA_LEAK_RE = re.compile(
+    r"\b(the bible|scriptures?|the text|the verses|the record|is written|chapter)\b",
+    re.IGNORECASE,
+)
+
+
+def _breaks_persona(message: str) -> bool:
+    return bool(_PERSONA_LEAK_RE.search(message))
 
 STARTER_QUESTIONS = [
     "Who are you?",
@@ -56,6 +71,27 @@ def _to_llm_history(history: Optional[List[Dict[str, str]]]) -> Optional[List[Di
     return [{"role": m["role"], "content": m["text"]} for m in history]
 
 
+async def _rewrite_if_breaks_persona(character: Dict[str, Any], message: str) -> str:
+    """If `message` refers to its own source (a book, a chapter, "the
+    record") instead of speaking as lived memory, ask the model once to
+    rewrite it in-voice. Falls back to the original on any failure — an
+    imperfectly-phrased but accurate reply beats blocking the turn."""
+    if not _breaks_persona(message):
+        return message
+    result = await call_ollama_with_context(
+        "Rewrite your reply below so it never refers to your life as something "
+        "written, recorded, or found in a book, chapter, text or verse — speak "
+        "only from your own memory, the way you would actually talk. Keep every "
+        "fact and every quotation exactly as before, in the same voice and "
+        f"about the same length.\n\nREPLY TO REWRITE:\n{message}",
+        research_data=_grounding_for(character["profile"]),
+        system_prompt=_persona_for(character["name"]),
+    )
+    if result.get("type") == "chat" and result.get("message"):
+        return result["message"]
+    return message
+
+
 async def answer(
     character_id: str,
     message: str,
@@ -76,6 +112,7 @@ async def answer(
     if result.get("type") != "chat" or not result.get("message"):
         return result
 
+    result["message"] = await _rewrite_if_breaks_persona(character, result["message"])
     result["message"] = wiki_refs.resolve_scripture_refs(result["message"])
     follow_ups = await generate_llm_follow_ups(message, result["message"])
     if follow_ups:
@@ -96,7 +133,7 @@ async def greeting(character_id: str) -> Dict[str, Any]:
         system_prompt=_persona_for(character["name"]),
     )
     if result.get("type") == "chat" and result.get("message"):
-        message = result["message"]
+        message = await _rewrite_if_breaks_persona(character, result["message"])
     else:
         message = (
             f"You are now talking with **{character['name']}**. "
