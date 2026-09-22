@@ -13,8 +13,17 @@ from chatbot.ollama_client import call_ollama_with_context, generate_llm_follow_
 # forbids this, but live testing showed the model still slips into it
 # occasionally ("as it is written in the third chapter of Genesis"), so this
 # backstops the prompt with a mechanical check + one rewrite pass.
+#
+# The second alternative catches a narrower but related leak: a profile's own
+# third-person narration (e.g. Genesis 3:6's "gave also unto her husband
+# with her; and he did eat") copied verbatim instead of retold as "I"/"me".
+# Bare "her husband"/"his wife" is NOT banned — that's a legitimate way to
+# name a third party's spouse (e.g. David on Bathsheba and Uriah) — only the
+# archaic "gave...unto her husband/his wife" construction is unsafe, since
+# no one describes themselves that way in first-person speech.
 _PERSONA_LEAK_RE = re.compile(
-    r"\b(the bible|scriptures?|the text|the verses|the record|is written|chapter)\b",
+    r"\b(the bible|scriptures?|the text|the verses|the record|is written|chapter)\b"
+    r"|\bgave\b.{0,20}\bunto (?:her husband|his wife)\b",
     re.IGNORECASE,
 )
 
@@ -74,23 +83,35 @@ def _to_llm_history(history: Optional[List[Dict[str, str]]]) -> Optional[List[Di
 
 async def _rewrite_if_breaks_persona(character: Dict[str, Any], message: str) -> str:
     """If `message` refers to its own source (a book, a chapter, "the
-    record") instead of speaking as lived memory, ask the model once to
-    rewrite it in-voice. Falls back to the original on any failure — an
-    imperfectly-phrased but accurate reply beats blocking the turn."""
+    record"), or recites third-person narration about itself verbatim
+    ("gave...unto her husband...and he did eat") instead of speaking as
+    lived memory, ask the model to rewrite it in-voice — up to twice, since
+    live testing showed a single pass sometimes leaves the violation
+    untouched. Falls back to the best attempt (or the original, if every
+    attempt errored) rather than blocking the turn."""
     if not _breaks_persona(message):
         return message
-    result = await call_ollama_with_context(
-        "Rewrite your reply below so it never refers to your life as something "
-        "written, recorded, or found in a book, chapter, text or verse — speak "
-        "only from your own memory, the way you would actually talk. Keep every "
-        "fact and every quotation exactly as before, in the same voice and "
-        f"about the same length.\n\nREPLY TO REWRITE:\n{message}",
-        research_data=_grounding_for(character["profile"]),
-        system_prompt=_persona_for(character["name"]),
-    )
-    if result.get("type") == "chat" and result.get("message"):
-        return result["message"]
-    return message
+    current = message
+    for _ in range(2):
+        result = await call_ollama_with_context(
+            "Your reply below breaks character in one of two ways: either it talks "
+            "about your life as something written, recorded, or found in a book, "
+            "chapter, text or verse (instead of speaking only from memory), or it "
+            "describes you in the third person using a relationship word — such as "
+            "\"her husband\", \"his wife\", \"her brother\" — where it should say "
+            "\"I\"/\"me\". Rewrite it fully in the first person, as your own spoken "
+            "memory, fixing whichever of those it is. Keep every fact and every "
+            "quotation exactly as before, in the same voice and about the same "
+            f"length.\n\nREPLY TO REWRITE:\n{current}",
+            research_data=_grounding_for(character["profile"]),
+            system_prompt=_persona_for(character["name"]),
+        )
+        if result.get("type") != "chat" or not result.get("message"):
+            break
+        current = result["message"]
+        if not _breaks_persona(current):
+            break
+    return current
 
 
 async def answer(

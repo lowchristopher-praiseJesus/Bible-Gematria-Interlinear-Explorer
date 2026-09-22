@@ -79,6 +79,28 @@ def test_persona_leak_detector_does_not_flag_a_clean_reply():
     assert not character_chat._breaks_persona(clean)
 
 
+def test_persona_leak_detector_catches_narration_copied_verbatim():
+    # Genesis 3:6's own narration, in the archaic "gave...unto her husband"
+    # construction — the same verse leaked twice live despite the prompt
+    # rule, in both a mixed-person and fully third-person form.
+    assert character_chat._breaks_persona(
+        "she gave also unto her husband with her, and I did eat"
+    )
+    assert character_chat._breaks_persona(
+        "she gave also unto her husband with her, and he did eat"
+    )
+    assert character_chat._breaks_persona("she gave it unto his wife")
+
+
+def test_persona_leak_detector_does_not_flag_someone_elses_spouse():
+    # "her husband"/"his wife" alone is a legitimate way to refer to a
+    # THIRD party's spouse (e.g. David on Bathsheba and Uriah) — only the
+    # archaic "gave...unto her husband/his wife" construction is unsafe.
+    assert not character_chat._breaks_persona(
+        "Bathsheba was the wife of Uriah, her husband, a Hittite in my army."
+    )
+
+
 async def test_answer_rewrites_once_when_the_reply_breaks_persona(llm):
     llm.state["replies"] = [
         {"type": "chat", "message": "As it is written in Genesis, I did eat.", "data": None},
@@ -92,6 +114,21 @@ async def test_answer_rewrites_once_when_the_reply_breaks_persona(llm):
     rewrite_call = llm.calls[1]
     assert "As it is written in Genesis, I did eat." in rewrite_call["message"]
     assert "never refers to" in rewrite_call["message"] or "rewrite" in rewrite_call["message"].lower()
+
+
+async def test_answer_retries_the_rewrite_once_more_if_the_first_pass_still_leaks(llm):
+    # Live testing showed a single rewrite pass sometimes leaves the
+    # original verbatim narration untouched.
+    llm.state["replies"] = [
+        {"type": "chat", "message": "As it is written, I did eat.", "data": None},
+        {"type": "chat", "message": "As it is written, I did eat.", "data": None},
+        {"type": "chat", "message": "God told me not to eat, and I ate anyway.", "data": None},
+    ]
+
+    result = await character_chat.answer("adam", "Did you eat the fruit?")
+
+    assert len(llm.calls) == 3
+    assert result["message"] == "God told me not to eat, and I ate anyway."
 
 
 async def test_answer_does_not_rewrite_a_clean_reply(llm):
