@@ -171,18 +171,27 @@ him. `characters/` must ship in the chatbot image (`Dockerfile.chatbot`, covered
 
 ## Tell a Story mode (internal id `story`)
 
-Turns an existing conversation — live or a previously-saved session — into a
-short, original children's story. From either the live-conversation trigger
-in `ChatPane` or `ModePickerScreen`'s "Tell a Story" tile (which opens
-`frontend/src/components/shell/SessionPickerScreen.tsx` to pick a past
-session as the source), the frontend creates a new `mode: 'story'` session
-and sends the source transcript once. `chatbot/story_mode.py`'s
-`derive_themes` (one LLM call) returns up to three candidate
-theme/lesson objects plus a compact digest of the source conversation;
-`frontend/src/components/shell/ThemePicker.tsx` renders them as checkboxes
-alongside a target-age radio group (3–6 / 7–8 / 9–10, scaling the
-word-count target 500–800 / 800–1200 / 1200–1800 — see `AGE_WORD_BANDS`).
-Submitting calls `story_mode.generate_story`, which always invents generic
+Turns a theme into a short, original children's story, from either of two
+entry points. The live-conversation trigger in `ChatPane` ("Tell a Story"
+in the chat header) creates a new `mode: 'story'` session, sends that
+conversation's transcript once, and `chatbot/story_mode.py`'s
+`derive_themes` (one LLM call) returns up to three candidate theme/lesson
+objects plus a compact digest — needing no user-typed theme. The
+`ModePickerScreen` "Tell a Story" tile instead opens
+`frontend/src/components/shell/StoryStarterScreen.tsx`, a few example
+lesson chips (clicking one fills, not submits, an editable text box) plus
+free text, so the user states the theme directly; this path needs no LLM
+call and no derivation step — it synthesizes a single `{id: 'custom',
+label: <the text>, description: ''}` theme, already selected, and lands
+straight on the same next step the derived-themes path does. (An earlier
+version of this tile opened a picker listing past conversations to derive
+themes from — replaced because as a *starting* screen, before the user has
+picked a theme, that list read as confusing rather than useful.)
+
+Either way, `frontend/src/components/shell/ThemePicker.tsx` renders the
+theme(s) as checkboxes alongside a target-age radio group (3–6 / 7–8 /
+9–10, scaling the word-count target 500–800 / 800–1200 / 1200–1800 — see
+`AGE_WORD_BANDS`). Submitting calls `story_mode.generate_story`, which always invents generic
 characters (a child, an animal, etc.) — **never** named biblical
 figures — so the story reads as a parable-style tale, not a dramatized
 retelling; this is prompt-enforced only, with no automated detector like
@@ -201,9 +210,10 @@ mode-specific branch. `build_mode_primer` dispatches `mode == "story"`
 entirely to `story_mode.build_primer(mode_params)`, which itself decides
 between the theme-derivation and story-generation turns by whether
 `story_selected_theme_ids` is present — no separate marker field, and no
-code path in `api.py` to keep in sync. See
-`frontend/src/lib/tellAStory.ts` for the shared session-creation/primer
-helper both entry points call.
+code path in `api.py` to keep in sync. `frontend/src/lib/tellAStory.ts`
+holds the live-conversation trigger's session-creation/primer helper;
+`StoryStarterScreen`'s typed-theme path builds its session inline in
+`ModePickerScreen` instead, since it has no primer call to share.
 
 ## Key Conventions
 

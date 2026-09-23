@@ -3,6 +3,18 @@
 **Date:** 2026-09-23
 **Status:** Approved for planning
 
+**Post-launch update (2026-09-23):** `ModePickerScreen`'s "Tell a Story"
+tile no longer opens a `SessionPickerScreen` picking a past conversation
+to derive themes from — that read as confusing when it's the very first
+thing the user sees, before they've stated what the story should be
+about. It now opens `StoryStarterScreen` (a few example lesson chips plus
+free text), which needs no LLM derivation call: the user's own words
+become the theme directly. The live in-conversation trigger in `ChatPane`
+is unchanged and still derives themes from that conversation. Everywhere
+below that describes `SessionPickerScreen` or "pick a past conversation"
+as this tile's behavior reflects the original (now superseded) design;
+see `CLAUDE.md`'s Tell a Story section for the current behavior.
+
 ## Purpose
 
 "Tell a Story" (internal id `story`) turns an existing conversation — in

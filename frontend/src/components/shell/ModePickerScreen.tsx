@@ -5,9 +5,8 @@ import { listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeDat
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { CharacterPickerScreen } from './CharacterPickerScreen'
-import { SessionPickerScreen } from './SessionPickerScreen'
-import { startTellAStory } from '@/lib/tellAStory'
-import type { MessageChoice, ModeParams, Session, SessionMessage, SessionMode } from '@/types/session'
+import { StoryStarterScreen } from './StoryStarterScreen'
+import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
 
 interface Props {
   onSessionStarted: (sessionId: string) => void
@@ -29,17 +28,10 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   const [askInput, setAskInput] = useState('')
   const [asking, setAsking] = useState(false)
   const [pickingCharacter, setPickingCharacter] = useState(false)
-  const [pickingStorySource, setPickingStorySource] = useState(false)
-  // True while startTellAStoryFrom's primer call is in flight — that call
-  // can take up to ~120s (a full theme-derivation LLM call), and
-  // SessionPickerScreen sits visually frozen the whole time. Guards
-  // startTellAStoryFrom against re-entry (a second click on a session
-  // card before the first resolves) and disables the picker's cards.
-  const [startingStory, setStartingStory] = useState(false)
+  const [pickingStoryIdea, setPickingStoryIdea] = useState(false)
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
-  const updateModeParams = useSessionsStore((s) => s.updateModeParams)
   const readingPlanProgress = useReadingPlanStore((s) => s.progress)
 
   // A starter that already knows what it needs (no sub-choice) starts the
@@ -137,15 +129,27 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     onSessionStarted(session.id)
   }
 
-  async function startTellAStoryFrom(source: Session) {
-    if (startingStory) return
-    setStartingStory(true)
-    try {
-      const newId = await startTellAStory({ createSession, appendMessage, updateModeParams }, source)
-      onSessionStarted(newId)
-    } finally {
-      setStartingStory(false)
-    }
+  // The user states the story's theme directly (typed, or picked from a
+  // few example ideas) rather than an old conversation being derived into
+  // one — no LLM call is needed here at all, so this runs synchronously
+  // and lands straight in the same ThemePicker/"Make my story" step a
+  // derived theme would, with that one theme already selected.
+  function startTellAStoryWithTheme(theme: string) {
+    const themeObj = { id: 'custom', label: theme, description: '' }
+    const session = createSession('story', {
+      storyThemes: [themeObj],
+      storySelectedThemeIds: ['custom'],
+      storyAgeRange: '3-6',
+    })
+    appendMessage(session.id, { id: genId(), role: 'user', text: `✨ Tell a Story about "${theme}"` })
+    appendMessage(session.id, {
+      id: genId(),
+      role: 'assistant',
+      text: "Great idea — pick an age range, then I'll write it.",
+      type: 'chat',
+      data: { themes: [themeObj], digest: '' },
+    })
+    onSessionStarted(session.id)
   }
 
   if (pickingCharacter) {
@@ -159,14 +163,8 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     )
   }
 
-  if (pickingStorySource) {
-    return (
-      <SessionPickerScreen
-        onBack={() => setPickingStorySource(false)}
-        onPick={(picked) => void startTellAStoryFrom(picked)}
-        submitting={startingStory}
-      />
-    )
+  if (pickingStoryIdea) {
+    return <StoryStarterScreen onBack={() => setPickingStoryIdea(false)} onSubmit={startTellAStoryWithTheme} />
   }
 
   return (
@@ -328,7 +326,7 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
           <button className={STARTER_BUBBLE} onClick={() => setPickingCharacter(true)}>
             <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" /> Chat with a Character
           </button>
-          <button className={STARTER_BUBBLE} onClick={() => setPickingStorySource(true)}>
+          <button className={STARTER_BUBBLE} onClick={() => setPickingStoryIdea(true)}>
             <Wand2 className="h-4 w-4 shrink-0" aria-hidden="true" /> Tell a Story
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>

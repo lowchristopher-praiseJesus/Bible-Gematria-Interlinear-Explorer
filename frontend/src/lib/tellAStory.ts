@@ -44,10 +44,11 @@ interface StartTellAStoryDeps {
  * Creates a new Tell a Story session sourced from `sourceSession`'s
  * transcript, fires the theme-derivation primer, and stores the derived
  * themes/digest into the new session's modeParams. Returns the new
- * session's id so the caller can navigate to it. Shared by the live
- * "Tell a Story from this conversation" trigger (ChatPane) and the
- * past-conversation picker (ModePickerScreen + SessionPickerScreen), so
- * both stay in lockstep with the backend contract.
+ * session's id so the caller can navigate to it. Used by the live "Tell a
+ * Story from this conversation" trigger in ChatPane — the sole entry
+ * point that derives themes from an existing conversation. (Starting from
+ * ModePickerScreen instead goes through StoryStarterScreen, which needs
+ * no derivation: the user states the theme directly.)
  */
 export async function startTellAStory(
   deps: StartTellAStoryDeps,

@@ -257,53 +257,44 @@ describe('ModePickerScreen', () => {
     })
   })
 
-  it('opens the session picker and starts a Tell a Story session from the chosen conversation', async () => {
-    const source = useSessionsStore.getState().createSession('socratic', {})
-    useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'Tell me about the prodigal son.' })
-    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
-      type: 'chat', message: "Here's what stood out…",
-      data: { themes: [{ id: 't1', label: 'Trust', description: 'desc' }], digest: 'a digest' },
-    })
+  it('opens the story starter screen and starts a Tell a Story session from a typed theme, needing no LLM call', async () => {
+    const postChat = vi.spyOn(chatApi, 'postChat')
     const onSessionStarted = vi.fn()
 
     render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
     await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
-    await userEvent.click(screen.getByText('Socratic Study'))
+    await userEvent.type(screen.getByPlaceholderText(/what should the story be about/i), 'A brave little mouse')
+    await userEvent.click(screen.getByRole('button', { name: /^go$/i }))
 
-    // ModePickerScreen and ChatPane are rendered XOR by App.tsx — no chat
-    // surface exists inside ModePickerScreen itself to show the assistant
-    // reply, so (matching this file's existing async-assertion pattern at
-    // lines 115/131/144) we assert against the store instead of the DOM.
-    await waitFor(() => expect(onSessionStarted).toHaveBeenCalled())
+    // No backend round-trip: the theme came straight from the user, so
+    // this lands directly in the ThemePicker step with it pre-selected.
+    expect(postChat).not.toHaveBeenCalled()
+    expect(onSessionStarted).toHaveBeenCalled()
     const storySession = Object.values(useSessionsStore.getState().sessions).find((s) => s.mode === 'story')
-    expect(storySession?.messages[1]).toMatchObject({ role: 'assistant', text: "Here's what stood out…" })
-    expect(storySession?.modeParams.storyThemes).toEqual([{ id: 't1', label: 'Trust', description: 'desc' }])
+    expect(storySession?.messages[0]).toMatchObject({ role: 'user', text: '✨ Tell a Story about "A brave little mouse"' })
+    expect(storySession?.modeParams.storyThemes).toEqual([{ id: 'custom', label: 'A brave little mouse', description: '' }])
+    expect(storySession?.modeParams.storySelectedThemeIds).toEqual(['custom'])
+    expect(storySession?.modeParams.storyAgeRange).toBe('3-6')
   })
 
-  it('ignores a second click on a session card while the first Tell a Story primer call is still in flight', async () => {
-    const source = useSessionsStore.getState().createSession('socratic', {})
-    useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'Tell me about the prodigal son.' })
-    let resolvePostChat!: (value: chatApi.ChatApiResponse) => void
-    const postChat = vi.spyOn(chatApi, 'postChat').mockReturnValue(
-      new Promise((resolve) => {
-        resolvePostChat = resolve
-      })
-    )
+  it('starts a Tell a Story session from a clicked starter idea', async () => {
     const onSessionStarted = vi.fn()
-
     render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
     await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
-    const sessionCard = await screen.findByText('Socratic Study')
-    await userEvent.click(sessionCard)
-    // Session cards are disabled while a pick is in flight, so a second
-    // click on the same (now-disabled) card is a no-op — this simulates a
-    // rapid double-click reaching the handler before React re-renders.
-    await userEvent.click(sessionCard)
+    await userEvent.click(screen.getByRole('button', { name: /sharing what you have/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^go$/i }))
 
-    expect(postChat).toHaveBeenCalledTimes(1)
-    expect(Object.values(useSessionsStore.getState().sessions).filter((s) => s.mode === 'story')).toHaveLength(1)
+    expect(onSessionStarted).toHaveBeenCalled()
+    const storySession = Object.values(useSessionsStore.getState().sessions).find((s) => s.mode === 'story')
+    expect(storySession?.modeParams.storyThemes).toEqual([
+      { id: 'custom', label: 'Sharing what you have', description: '' },
+    ])
+  })
 
-    resolvePostChat({ type: 'chat', message: 'themes', data: { themes: [], digest: '' } })
-    await waitFor(() => expect(onSessionStarted).toHaveBeenCalled())
+  it('returns to the mode grid from the story starter screen on Back', async () => {
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
+    await userEvent.click(screen.getByRole('button', { name: /back/i }))
+    expect(screen.getByRole('button', { name: /tell a story/i })).toBeInTheDocument()
   })
 })
