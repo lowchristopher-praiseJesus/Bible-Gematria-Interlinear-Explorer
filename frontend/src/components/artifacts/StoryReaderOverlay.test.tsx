@@ -58,9 +58,10 @@ describe('StoryReaderOverlay', () => {
       yield { index: 0, image_url: '/story-images/page0.png' }
     }
     streamStoryIllustrations.mockReturnValue(stream())
-    const { container } = render(<StoryReaderOverlay artifact={artifact} open onClose={() => {}} />)
+    render(<StoryReaderOverlay artifact={artifact} open onClose={() => {}} />)
+    // Dialog.Portal renders into document.body, not the render() container.
     await waitFor(() => {
-      expect(container.querySelector('img')?.getAttribute('src')).toBe('/story-images/cover.png')
+      expect(document.body.querySelector('img')?.getAttribute('src')).toBe('/story-images/cover.png')
     })
   })
 
@@ -95,7 +96,7 @@ describe('StoryReaderOverlay', () => {
     streamStoryIllustrations.mockReturnValueOnce(firstStream)
     streamStoryIllustrations.mockReturnValueOnce(emptyStream())
 
-    const { rerender, container } = render(
+    const { rerender } = render(
       <StoryReaderOverlay artifact={artifact} open onClose={() => {}} />
     )
     rerender(<StoryReaderOverlay artifact={artifact} open={false} onClose={() => {}} />)
@@ -104,6 +105,7 @@ describe('StoryReaderOverlay', () => {
     resolveFirst({ index: -1, image_url: '/story-images/stale.png' })
     await new Promise((r) => setTimeout(r, 0))
 
-    expect(container.querySelector('img')).not.toBeInTheDocument()
+    // Dialog.Portal renders into document.body, not the render() container.
+    expect(document.body.querySelector('img')).not.toBeInTheDocument()
   })
 })
