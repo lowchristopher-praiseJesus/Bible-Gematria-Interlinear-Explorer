@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { BookOpen, Check, Copy } from 'lucide-react'
 import { renderMarkdown } from '@/lib/renderMarkdown'
+import { StoryReaderOverlay } from './StoryReaderOverlay'
 import type { StoryArtifactParams } from '@/types/session'
 
 const AGE_RANGE_LABELS: Record<string, string> = {
@@ -9,12 +10,14 @@ const AGE_RANGE_LABELS: Record<string, string> = {
   '9-10': 'Ages 9-10',
 }
 
-export function StoryArtifact({ title, themes, age_range, text, word_count }: StoryArtifactParams) {
+export function StoryArtifact(props: StoryArtifactParams) {
+  const { title, themes, age_range, word_count, pages } = props
   const [copied, setCopied] = useState(false)
+  const [readerOpen, setReaderOpen] = useState(false)
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(pages.map((p) => p.text).join('\n\n'))
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -27,18 +30,28 @@ export function StoryArtifact({ title, themes, age_range, text, word_count }: St
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
-        <button
-          onClick={copy}
-          aria-label="Copy story"
-          title="Copy"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
-        >
-          {copied ? (
-            <Check className="h-3.5 w-3.5 text-[var(--color-green)]" aria-hidden="true" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setReaderOpen(true)}
+            aria-label="Read full screen"
+            title="Read full screen"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
+          >
+            <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            onClick={copy}
+            aria-label="Copy story"
+            title="Copy"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-[var(--color-green)]" aria-hidden="true" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+          </button>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
         <span className="px-2 py-0.5 rounded-full border border-[var(--color-theme-border)]">
@@ -50,8 +63,9 @@ export function StoryArtifact({ title, themes, age_range, text, word_count }: St
           </span>
         ))}
       </div>
-      <div className="text-sm leading-relaxed max-w-prose">{renderMarkdown(text)}</div>
+      <div className="text-sm leading-relaxed max-w-prose">{renderMarkdown(pages[0]?.text ?? '')}</div>
       <p className="text-xs text-[var(--color-text-secondary)]">{word_count} words</p>
+      <StoryReaderOverlay artifact={props} open={readerOpen} onClose={() => setReaderOpen(false)} />
     </div>
   )
 }
