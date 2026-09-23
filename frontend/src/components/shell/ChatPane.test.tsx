@@ -1461,6 +1461,37 @@ describe('ChatPane', () => {
       expect(newSession.messages[1]).toMatchObject({ role: 'assistant', text: "Here's what stood out…" })
     })
 
+    it('shows a busy indicator on the source conversation while themes are being derived', async () => {
+      // Regression: clicking "Tell a Story" fires a single up-to-120s LLM
+      // call with no navigation and no other UI change until it resolves —
+      // reported as the app appearing to hang.
+      const source = useSessionsStore.getState().createSession('socratic', {})
+      useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'hi' })
+      let resolvePostChat!: (value: ChatApiResponse) => void
+      vi.spyOn(chatApi, 'postChat').mockReturnValue(
+        new Promise((resolve) => {
+          resolvePostChat = resolve
+        })
+      )
+      const onNavigateToSession = vi.fn()
+
+      render(<ChatPane sessionId={source.id} onNavigateToSession={onNavigateToSession} />)
+      const button = screen.getByRole('button', { name: /tell a story/i })
+      await userEvent.click(button)
+
+      expect(button).toBeDisabled()
+      expect(screen.getByRole('button', { name: /reading/i })).toBeInTheDocument()
+      expect(screen.getByRole('status', { name: /reading the conversation for themes/i })).toBeInTheDocument()
+
+      resolvePostChat({
+        type: 'chat', message: "Here's what stood out…",
+        data: { themes: [{ id: 't1', label: 'Trust', description: 'desc' }], digest: 'a digest' },
+      })
+      await waitFor(() => expect(onNavigateToSession).toHaveBeenCalled())
+      expect(screen.getByRole('button', { name: /^tell a story$/i })).toBeEnabled()
+      expect(screen.queryByRole('status', { name: /reading the conversation for themes/i })).not.toBeInTheDocument()
+    })
+
     it('submitting the ThemePicker generates a story and appends it as a new message', async () => {
       const story = useSessionsStore.getState().createSession('story', {
         storyThemes: [{ id: 't1', label: 'Trust', description: 'desc' }],

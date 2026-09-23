@@ -89,6 +89,12 @@ const READING_PLAN_TOTAL_DAYS = 365
 // multi-second wait from reading as frozen.
 const DEVOTIONAL_STATUS_PHRASES = ['Finding a verse…', 'Reading it over…', 'Writing your devotional…']
 
+// Tell a Story's theme-derivation primer is a single LLM call (up to 120s,
+// see STORY_LLM_TIMEOUT_SECONDS) with no intermediate progress of its own —
+// unlike devotional generation, one static phrase is enough to say "this is
+// working," not frozen.
+const TELLING_STORY_STATUS = 'Reading the conversation for themes…'
+
 const VOICE_STATUS_LABEL: Record<string, string> = {
   connecting: 'Connecting…',
   listening: 'Listening…',
@@ -170,9 +176,12 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   const devotionalAutoFired = useRef<string | null>(null)
 
   // Any in-flight backend round-trip that leaves the message area idle —
-  // a new question, a regenerate, a choice being resolved, or a day being
-  // marked complete. Drives the "thinking" indicator.
-  const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete
+  // a new question, a regenerate, a choice being resolved, a day being
+  // marked complete, or a "Tell a Story" trigger reading this conversation
+  // for themes. Drives the "thinking" indicator — without it, that last
+  // case in particular (an up-to-120s LLM call with no other UI change
+  // until the new story session is ready) reads as the app hanging.
+  const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete || tellingStory
 
   // Only the devotional generation leg of `isBusy` runs long enough (~10s+)
   // that the plain dots read as frozen — narrow the rotating status text to
@@ -810,8 +819,12 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
               title={session.messages.length === 0 ? 'Nothing to turn into a story yet' : undefined}
               className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
-              <Wand2 className="w-3 h-3" aria-hidden="true" />
-              Tell a Story
+              {tellingStory ? (
+                <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+              ) : (
+                <Wand2 className="w-3 h-3" aria-hidden="true" />
+              )}
+              {tellingStory ? 'Reading…' : 'Tell a Story'}
             </button>
           )}
           <button
@@ -1017,13 +1030,22 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
             role="status"
             aria-live="polite"
             aria-label={
-              devotionalPending ? DEVOTIONAL_STATUS_PHRASES[devotionalStatusIndex] : 'Assistant is thinking'
+              devotionalPending
+                ? DEVOTIONAL_STATUS_PHRASES[devotionalStatusIndex]
+                : tellingStory
+                  ? TELLING_STORY_STATUS
+                  : 'Assistant is thinking'
             }
           >
             <div className="max-w-[85%] px-3.5 py-3 rounded-2xl rounded-bl-sm bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] flex items-center gap-2">
               {devotionalPending && (
                 <span key={devotionalStatusIndex} className="chat-typing-status text-sm" aria-hidden="true">
                   {DEVOTIONAL_STATUS_PHRASES[devotionalStatusIndex]}
+                </span>
+              )}
+              {tellingStory && (
+                <span className="chat-typing-status text-sm" aria-hidden="true">
+                  {TELLING_STORY_STATUS}
                 </span>
               )}
               <div className="chat-typing" aria-hidden="true">
