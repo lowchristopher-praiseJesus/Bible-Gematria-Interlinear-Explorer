@@ -18,13 +18,14 @@ End-to-end user experience:
 1. From an existing conversation (live or past), the user asks for a
    story to be made from it.
 2. The app reads that conversation, proposes up to three candidate
-   themes/lessons drawn from it, and asks the user to pick one or more.
-3. Once the user picks, the app writes a single 500–800 word story for a
-   3–6 year old that illustrates the chosen theme(s), using original
-   invented characters (never named biblical figures) rather than
-   retelling the source passage or discussion directly.
-4. The user can regenerate a fresh story from the same theme choice, or
-   pick different themes, without starting over.
+   themes/lessons drawn from it, and asks the user to pick one or more,
+   alongside a target age range (3–6, 7–8, or 9–10).
+3. Once the user picks, the app writes a single story, sized and written
+   for the chosen age range, that illustrates the chosen theme(s), using
+   original invented characters (never named biblical figures) rather
+   than retelling the source passage or discussion directly.
+4. The user can regenerate a fresh story from the same theme/age choice,
+   or change either, without starting over.
 
 ### Naming
 
@@ -40,11 +41,15 @@ naturally next to "Deep Study" and "Chat with a Character" on a tile.
   on an existing chat session, or (b) a new session-picker screen reached
   from `ModePickerScreen`.
 - Backend theme derivation (1–3 themes) from a source conversation's
-  transcript, and story generation (500–800 words, ages 3–6, generic
-  invented characters, multiple selected themes woven into one story).
+  transcript, and story generation sized to a user-chosen target age
+  range, generic invented characters, multiple selected themes woven into
+  one story.
+- A configurable target age range — 3–6, 7–8, or 9–10 — selected in the
+  same step as theme selection, with word-count target and vocabulary/
+  plot complexity scaled to the chosen band (see Architecture).
 - A bespoke multi-select theme-picker UI, distinct from the existing
   single-pick `MessageChoice` pills, that stays interactive after a story
-  is delivered so the user can change their pick or regenerate.
+  is delivered so the user can change their pick(s) or regenerate.
 - Delivering the finished story as an inline artifact (`'story'` type),
   reusing the existing artifact-pane pattern.
 - A new `SessionPickerScreen` for choosing a past conversation as the
@@ -117,29 +122,39 @@ conversation without mutating it.
 4. The primer's `ChatResponse` carries `story_themes` (the derived list).
    Frontend writes `storyThemes` and `storyDigest` into the new session's
    `modeParams` and renders the `ThemePicker` component in place of a
-   normal assistant bubble.
-5. User checks one or more themes and clicks "Make my story." Frontend
-   writes `storySelectedThemeIds` into `modeParams` and sends
-   `POST /chat` with `message: ''`, `mode: 'story'`,
-   `mode_params: { storyDigest, storyThemes, storySelectedThemeIds }`
-   (no `source_messages` this time).
+   normal assistant bubble. `ThemePicker` shows the theme checkboxes
+   *and* an age-range selector (radio: 3–6 / 7–8 / 9–10, defaulting to
+   3–6) in the same step.
+5. User checks one or more themes, picks an age range, and clicks "Make
+   my story." Frontend writes `storySelectedThemeIds` and
+   `storyAgeRange` into `modeParams` and sends `POST /chat` with
+   `message: ''`, `mode: 'story'`,
+   `mode_params: { storyDigest, storyThemes, storySelectedThemeIds,
+   storyAgeRange }` (no `source_messages` this time).
 6. Backend's generation branch (distinguished from the primer branch by
    the presence of `storySelectedThemeIds` and the absence of
    `source_messages` — see Transport below) calls
-   `story_mode.generate_story(digest, selected_themes)`: one LLM call
-   producing 500–800 words, invented generic characters (a child, an
-   animal, etc. — never a named biblical figure), weaving every selected
-   theme into a single story.
+   `story_mode.generate_story(digest, selected_themes, age_range)`: one
+   LLM call producing invented generic characters (a child, an animal,
+   etc. — never a named biblical figure), weaving every selected theme
+   into a single story, sized and written for `age_range` per the table
+   below.
+
+   | Age range | Word-count target | Complexity                          |
+   |-----------|--------------------|--------------------------------------|
+   | 3–6       | ~500–800 words     | Simple sentences, concrete imagery, one clear lesson stated plainly |
+   | 7–8       | ~800–1200 words    | Slightly longer sentences, a light subplot, gentle vocabulary growth |
+   | 9–10      | ~1200–1800 words   | Fuller plot/dialogue, richer vocabulary, lesson may be shown rather than stated outright |
 7. The response's `ChatResponse.artifacts` carries one
    `{type: 'story', label: 'Read the story ▸', params: {title, themes,
    text, wordCount}}` entry, delivered exactly like `devotional`/
    `hermeneutics_report` artifacts today — no new fetch path.
 8. **Try again**: resending the identical `mode_params` re-invokes step 6
    and appends a new assistant message + artifact (prior attempts are not
-   deleted). **Different themes**: the `ThemePicker` remains interactive
-   after delivery (unlike `MessageChoice`, which locks after one pick), so
-   the user can change the checked themes and resubmit, which also
-   re-invokes step 6.
+   deleted). **Different themes or age range**: the `ThemePicker` remains
+   interactive after delivery (unlike `MessageChoice`, which locks after
+   one pick), so the user can change the checked themes and/or the age
+   range and resubmit, which also re-invokes step 6.
 
 ### Transport
 
@@ -185,12 +200,17 @@ enforcement.
 ### `chatbot/story_mode.py` (new)
 - `MAX_STORY_SOURCE_MESSAGES = 60` — caps the one-time transcript sent to
   `derive_themes`.
+- `AGE_WORD_BANDS = {"3-6": (500, 800), "7-8": (800, 1200), "9-10": (1200, 1800)}`
+  — word-count target per age range, keyed by the same `storyAgeRange`
+  values the frontend sends.
 - `derive_themes(source_messages: list[HistoryMessage]) -> ThemesResult`
   — one LLM call; prompt asks for 1–3 JSON `{id, label, description}`
   theme objects plus a short digest. Never pads to 3 if fewer are
-  genuine.
-- `generate_story(digest: str, selected_themes: list[Theme]) -> StoryResult`
-  — one LLM call; prompt fixes the 500–800 word target, ages 3–6,
+  genuine. Not age-dependent — themes are derived once, age range is
+  chosen alongside them but does not change what themes are offered.
+- `generate_story(digest: str, selected_themes: list[Theme], age_range: str) -> StoryResult`
+  — one LLM call; prompt fixes the word-count target and complexity for
+  `age_range` (per `AGE_WORD_BANDS` and the Architecture table),
   invented-characters-only constraint, and weaves every selected theme
   into one story. If the returned word count is far outside the target
   band, retries once with a corrective instruction appended (same
@@ -216,15 +236,17 @@ enforcement.
 - `ChatResponse.story_themes: Optional[List[StoryTheme]]` where
   `StoryTheme = {id: str, label: str, description: str}`.
 - `ArtifactLink` gains `'story'` to its `type` union;
-  `StoryArtifactParams = {title: str, themes: List[str], text: str,
-  wordCount: int}`.
+  `StoryArtifactParams = {title: str, themes: List[str], ageRange: str,
+  text: str, wordCount: int}`.
 
 ### `frontend/src/types/session.ts`
 - `ModeParams` gains `storyDigest?`, `storyThemes?: StoryTheme[]`,
-  `storySelectedThemeIds?: string[]`, `storySourceSessionId?`,
+  `storySelectedThemeIds?: string[]`,
+  `storyAgeRange?: '3-6' | '7-8' | '9-10'`, `storySourceSessionId?`,
   `storySourceLabel?`.
 - `ArtifactLink` union gains `'story'`; `StoryArtifactParams` interface
-  added.
+  added (including `ageRange`, so a delivered story's artifact records
+  which band it was written for).
 
 ### `frontend/src/components/shell/SessionPickerScreen.tsx` (new)
 Sibling of `CharacterPickerScreen`: lists past sessions with at least one
@@ -245,17 +267,19 @@ Clicking it runs the same `createSession('story', ...)` flow, using the
 *current* session as the source, then navigates to the new session.
 
 ### `frontend/src/components/chat/ThemePicker.tsx` (new)
-Renders `modeParams.storyThemes` as checkboxes (not radio buttons), a
-"Make my story" / "Try again" submit button (label depends on whether a
-story has already been generated for the current selection), and stays
-mounted and interactive after a story is delivered so the user can change
-their selection. Loading/error states mirror `choicesStatus`'s
-`'loading'`/`'error'` treatment (spinner text; Retry button that re-fires
-the primer call).
+Renders `modeParams.storyThemes` as checkboxes (not radio buttons)
+alongside a three-way age-range radio group (3–6 / 7–8 / 9–10, defaulting
+to 3–6), and a "Make my story" / "Try again" submit button (label depends
+on whether a story has already been generated for the current
+selection). Stays mounted and interactive after a story is delivered so
+the user can change their theme and/or age selection. Loading/error
+states mirror `choicesStatus`'s `'loading'`/`'error'` treatment (spinner
+text; Retry button that re-fires the primer call).
 
 ### `frontend/src/components/artifacts/StoryArtifact.tsx` (new)
-Mirrors `DevotionalArtifact.tsx`: header with title and theme chips, a
-Copy button, and the markdown-rendered story body.
+Mirrors `DevotionalArtifact.tsx`: header with title, theme chips, and an
+age-range badge (e.g. "Ages 7–8"), a Copy button, and the
+markdown-rendered story body.
 
 ### `frontend/src/store/useArtifactStore.ts`
 Adds a `'story'` case to `fetchForLink`'s switch, returning `link.params`
@@ -289,19 +313,21 @@ ChatResponse{ story_themes:[...] }
   → renders ThemePicker
   │
   ▼
-User checks "God's patience" + "coming home is always possible"
+User checks "God's patience" + "coming home is always possible",
+picks age range "7-8"
   → "Make my story"
   → POST /chat { message:'', mode:'story',
                  mode_params:{storyDigest, storyThemes,
-                              storySelectedThemeIds} }
+                              storySelectedThemeIds, storyAgeRange:'7-8'} }
   │
   ▼
 api.py: mode=='story', message=='', storySelectedThemeIds present,
         no source_messages in this request
-  → story_mode.generate_story(digest, selected themes)
-  → 1 LLM call, word count checked (retry once if far off)
+  → story_mode.generate_story(digest, selected themes, '7-8')
+  → 1 LLM call, word count checked against AGE_WORD_BANDS['7-8']
+    (retry once if far off)
   → ChatResponse{ message: short intro,
-                   artifacts:[{type:'story', params:{...}}] }
+                   artifacts:[{type:'story', params:{..., ageRange:'7-8'}}] }
   │
   ▼
 Frontend appends assistant message + "Read the story ▸" pill
@@ -311,10 +337,11 @@ Frontend appends assistant message + "Read the story ▸" pill
 Regeneration / different themes:
 
 ```
-"Try again" (same selection)              Different themes checked
+"Try again" (same selection)         Different themes/age checked
   │                                          │
   ▼                                          ▼
-resend identical mode_params      updateModeParams(storySelectedThemeIds)
+resend identical mode_params      updateModeParams(storySelectedThemeIds,
+  │                                             storyAgeRange)
   │                                          │
   └──────────────► POST /chat (generation branch) ◄──────────────┘
                           │
@@ -368,9 +395,13 @@ TDD throughout: each test below is written before the code it covers.
 - `generate_story` with 1 selected theme produces a single-theme story;
   with 2+ selected themes, the story addresses all of them (weaving, not
   a single-theme story that ignores the rest).
-- `generate_story`'s word count is checked; a mocked out-of-band response
-  triggers exactly one retry with a corrective prompt, and the
-  (possibly still out-of-band) result is returned rather than raising.
+- `generate_story` called with each of `'3-6'`, `'7-8'`, `'9-10'` targets
+  the corresponding `AGE_WORD_BANDS` range; an unrecognized age range
+  value is rejected rather than silently defaulting.
+- `generate_story`'s word count is checked against the requested age
+  band; a mocked out-of-band response triggers exactly one retry with a
+  corrective prompt, and the (possibly still out-of-band) result is
+  returned rather than raising.
 - A small smoke assertion that generated output avoids a short denylist
   of well-known biblical proper nouns, documented in the test as
   best-effort rather than a guarantee.
@@ -393,21 +424,24 @@ TDD throughout: each test below is written before the code it covers.
 - `SessionPickerScreen`: lists only non-empty, non-`story` past sessions;
   selecting one triggers the same session-creation flow with that
   session's id/messages as source.
-- `ThemePicker`: renders returned themes as checkboxes; submit is
-  disabled until at least one is checked; remains interactive and
-  re-submittable after a story has been delivered (supports "Try again"
-  and "different themes" without remounting).
-- `StoryArtifact`: renders title, theme chips, and markdown body; Copy
-  button copies the story text.
+- `ThemePicker`: renders returned themes as checkboxes and an age-range
+  radio group defaulting to 3–6; submit is disabled until at least one
+  theme is checked; remains interactive and re-submittable after a story
+  has been delivered (supports "Try again" and "different themes/age"
+  without remounting).
+- `StoryArtifact`: renders title, theme chips, age-range badge, and
+  markdown body; Copy button copies the story text.
 - `useArtifactStore`: `'story'`-type links resolve synchronously from
   `link.params` with no network fetch, matching `'devotional'`.
 
 ### Manual smoke
 
 Run a real Socratic conversation about a parable end-to-end: trigger
-button → themes appear → select two → story generated → "Try again" →
-new story appended → repeat the whole flow via `SessionPickerScreen`,
-choosing a different, previously-saved session as the source.
+button → themes appear → select two, pick age range 7–8 → story
+generated at the expected length → "Try again" → new story appended →
+switch age range to 9–10 and resubmit → longer, more complex story
+appended → repeat the whole flow via `SessionPickerScreen`, choosing a
+different, previously-saved session as the source.
 
 ## Open questions
 
@@ -426,3 +460,6 @@ choosing a different, previously-saved session as the source.
 4. No Listen/audio narration for v1, consistent with treating this as a
    text-first mode; revisit if requested later (would follow the
    `devotional_audio.py` pattern).
+5. The `AGE_WORD_BANDS` ranges (500–800 / 800–1200 / 1200–1800) are a
+   starting proposal — may need tuning once real generated stories are
+   reviewed for how well length tracks actual reading level per band.
