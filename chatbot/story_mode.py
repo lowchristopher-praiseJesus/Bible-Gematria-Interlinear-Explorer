@@ -113,7 +113,14 @@ AGE_WORD_BANDS = {
 }
 
 AGE_COMPLEXITY = {
-    "3-6": "Simple sentences, concrete imagery, and one clear lesson stated plainly.",
+    "3-6": (
+        "Simple sentences and concrete, sensory imagery all the way "
+        "through — including the ending. Do not end with an abstract "
+        "metaphor or simile (for example, comparing the friendship to the "
+        "wind, the moon, or the stars) and do not tack on a summarizing "
+        "moral (for example, \"The lesson is...\"). Instead end on one "
+        "concrete, in-scene action that shows the lesson already happened."
+    ),
     "7-8": "Slightly longer sentences, a light subplot, and gentle vocabulary growth.",
     "9-10": (
         "A fuller plot with some dialogue, richer vocabulary, and a lesson "

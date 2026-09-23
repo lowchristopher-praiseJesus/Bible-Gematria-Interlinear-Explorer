@@ -142,7 +142,7 @@ conversation without mutating it.
 
    | Age range | Word-count target | Complexity                          |
    |-----------|--------------------|--------------------------------------|
-   | 3–6       | ~500–800 words     | Simple sentences, concrete imagery, one clear lesson stated plainly |
+   | 3–6       | ~500–800 words     | Simple sentences, concrete imagery throughout (including the ending — no abstract metaphor/simile or tacked-on "the lesson is..." moral) |
    | 7–8       | ~800–1200 words    | Slightly longer sentences, a light subplot, gentle vocabulary growth |
    | 9–10      | ~1200–1800 words   | Fuller plot/dialogue, richer vocabulary, lesson may be shown rather than stated outright |
 7. The response's `ChatResponse.artifacts` carries one

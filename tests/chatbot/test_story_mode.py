@@ -122,6 +122,21 @@ async def test_generate_story_uses_the_word_band_for_the_age_range(llm):
     assert len(llm.calls) == 1
 
 
+async def test_generate_story_prompt_for_ages_3_6_forbids_abstract_endings(llm):
+    # Real usage (a "Report an Issue" submission) showed the 3-6 band's
+    # stories reliably closing on an abstract simile ("like the wind and
+    # the leaves") and a tacked-on "The lesson is..." moral — both lose a
+    # 3-6-year-old even when the rest of the story lands. The prompt must
+    # tell the model not to do that.
+    llm.state["replies"] = ["Title: Test\n\n" + ("word " * 650)]
+    await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Sharing", "description": "..."}], "3-6"
+    )
+    prompt = llm.calls[0]["user_prompt"].lower()
+    assert "abstract" in prompt
+    assert "moral" in prompt
+
+
 async def test_generate_story_weaves_multiple_themes_into_the_prompt(llm):
     llm.state["replies"] = ["Title: Two Lessons\n\n" + ("word " * 650)]
     themes = [
