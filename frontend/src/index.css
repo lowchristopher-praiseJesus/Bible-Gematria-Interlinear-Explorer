@@ -261,6 +261,29 @@ summary:focus-visible,
   animation: devotional-listen-gradient 20s ease-in-out infinite;
 }
 
+@keyframes story-reader-gradient {
+  0% { background-position: 0% 0%, 0% 50%; }
+  50% { background-position: 0% 0%, 100% 50%; }
+  100% { background-position: 0% 0%, 0% 50%; }
+}
+
+/* Same technique as .devotional-listen-bg (see its comment above) — a
+   dark scrim over an animated themed gradient keeps white reader text
+   legible across every reader theme. */
+.story-reader-bg {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.65)),
+    linear-gradient(
+      120deg,
+      var(--color-surface),
+      var(--color-accent-dark),
+      var(--color-surface-alt),
+      var(--color-accent)
+    );
+  background-size: 100% 100%, 300% 300%;
+  animation: story-reader-gradient 20s ease-in-out infinite;
+}
+
 /* Hebrew/Greek word element */
 w {
   display: inline;
