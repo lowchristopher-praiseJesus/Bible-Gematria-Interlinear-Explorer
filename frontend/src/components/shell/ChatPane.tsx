@@ -570,10 +570,20 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     try {
       const newId = await startTellAStory({ createSession, appendMessage, updateModeParams }, session)
       onNavigateToSession?.(newId)
+    } catch (err) {
+      // startTellAStory catches its own internal errors (appending them to
+      // the new session it creates) and normally never rejects. This is
+      // defense-in-depth for the case where it throws before that session
+      // exists — there's nothing to append the error to but the current one.
+      appendMessage(sessionId, {
+        id: genId(),
+        role: 'assistant',
+        text: 'Sorry, something went wrong: ' + errorMessage(err),
+      })
     } finally {
       setTellingStory(false)
     }
-  }, [session, tellingStory, createSession, appendMessage, updateModeParams, onNavigateToSession])
+  }, [session, sessionId, tellingStory, createSession, appendMessage, updateModeParams, onNavigateToSession])
 
   const toggleStoryTheme = useCallback(
     (themeId: string) => {
@@ -863,18 +873,25 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
                       })}
                     </div>
                   )}
-                  {session.mode === 'story' && Array.isArray((msg.data as { themes?: unknown } | undefined)?.themes) && (
-                    <ThemePicker
-                      themes={(msg.data as { themes: { id: string; label: string; description: string }[] }).themes}
-                      selectedIds={session.modeParams.storySelectedThemeIds ?? []}
-                      ageRange={session.modeParams.storyAgeRange ?? '3-6'}
-                      onToggleTheme={toggleStoryTheme}
-                      onChangeAgeRange={setStoryAgeRange}
-                      onSubmit={submitStory}
-                      submitting={storySubmitting}
-                      hasStory={session.messages.some((m) => m.artifacts?.some((a) => a.type === 'story'))}
-                    />
-                  )}
+                  {(() => {
+                    const storyThemes = (msg.data as { themes?: { id: string; label: string; description: string }[] } | undefined)?.themes
+                    return (
+                      session.mode === 'story' &&
+                      Array.isArray(storyThemes) &&
+                      storyThemes.length > 0 && (
+                        <ThemePicker
+                          themes={storyThemes}
+                          selectedIds={session.modeParams.storySelectedThemeIds ?? []}
+                          ageRange={session.modeParams.storyAgeRange ?? '3-6'}
+                          onToggleTheme={toggleStoryTheme}
+                          onChangeAgeRange={setStoryAgeRange}
+                          onSubmit={submitStory}
+                          submitting={storySubmitting}
+                          hasStory={session.messages.some((m) => m.artifacts?.some((a) => a.type === 'story'))}
+                        />
+                      )
+                    )
+                  })()}
                 </div>
                 {!!msg.passageReference && <PassageVerseBox reference={msg.passageReference} />}
                 {!!msg.phases?.length && <PhaseList phases={msg.phases} />}
