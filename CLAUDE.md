@@ -169,6 +169,42 @@ voicing him in the first person may be sensitive — removing that entry re-enab
 him. `characters/` must ship in the chatbot image (`Dockerfile.chatbot`, covered by
 `test_chatbot_image_ships_the_profiles`).
 
+## Tell a Story mode (internal id `story`)
+
+Turns an existing conversation — live or a previously-saved session — into a
+short, original children's story. From either the live-conversation trigger
+in `ChatPane` or `ModePickerScreen`'s "Tell a Story" tile (which opens
+`frontend/src/components/shell/SessionPickerScreen.tsx` to pick a past
+session as the source), the frontend creates a new `mode: 'story'` session
+and sends the source transcript once. `chatbot/story_mode.py`'s
+`derive_themes` (one LLM call) returns up to three candidate
+theme/lesson objects plus a compact digest of the source conversation;
+`frontend/src/components/shell/ThemePicker.tsx` renders them as checkboxes
+alongside a target-age radio group (3–6 / 7–8 / 9–10, scaling the
+word-count target 500–800 / 800–1200 / 1200–1800 — see `AGE_WORD_BANDS`).
+Submitting calls `story_mode.generate_story`, which always invents generic
+characters (a child, an animal, etc.) — **never** named biblical
+figures — so the story reads as a parable-style tale, not a dramatized
+retelling; this is prompt-enforced only, with no automated detector like
+character mode's persona-leak rewriter. The finished story is delivered as
+a `'story'`-type artifact (`frontend/src/components/artifacts/StoryArtifact.tsx`),
+and the picker stays mounted afterward so the user can change themes/age and
+regenerate ("Try again") without losing the session.
+
+**Deliberately unlike every other special-cased mode: there is no
+`mode == "story"` branch in `chatbot/api.py`.** Every Tell a Story turn —
+the initial theme-derivation primer, the "Make my story" submission, and
+every "Try again"/regeneration — sends an empty `message`, and both
+`post_chat` and `_stream_chat_response` already route *any* empty-message
+request straight to `router.build_mode_primer()` before reaching any
+mode-specific branch. `build_mode_primer` dispatches `mode == "story"`
+entirely to `story_mode.build_primer(mode_params)`, which itself decides
+between the theme-derivation and story-generation turns by whether
+`story_selected_theme_ids` is present — no separate marker field, and no
+code path in `api.py` to keep in sync. See
+`frontend/src/lib/tellAStory.ts` for the shared session-creation/primer
+helper both entry points call.
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.
