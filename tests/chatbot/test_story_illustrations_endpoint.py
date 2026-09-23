@@ -61,9 +61,14 @@ def test_one_page_failure_does_not_block_the_others(client, monkeypatch, isolate
 
 
 def test_cache_hit_skips_regeneration(client, monkeypatch, isolated_image_cache):
-    prompt = build_prompt("Already generated scene.", "")
-    key = cache_key(prompt)
-    (isolated_image_cache / f"{key}.png").write_bytes(b"already-cached")
+    # Pre-cache both cover and page so synthesize_illustration is never called
+    cover_prompt = build_prompt("Some other cover.", "")
+    cover_key = cache_key(cover_prompt)
+    (isolated_image_cache / f"{cover_key}.png").write_bytes(b"cover-cached")
+
+    page_prompt = build_prompt("Already generated scene.", "")
+    page_key = cache_key(page_prompt)
+    (isolated_image_cache / f"{page_key}.png").write_bytes(b"page-cached")
 
     def fail_synthesize(prompt):
         raise AssertionError("synthesize_illustration must not be called on a cache hit")
@@ -78,7 +83,8 @@ def test_cache_hit_skips_regeneration(client, monkeypatch, isolated_image_cache)
 
     assert resp.status_code == 200
     items = {item["index"]: item for item in _lines(resp)}
-    assert items[0]["image_url"] == f"/story-images/{key}.png"
+    assert items[-1]["image_url"] == f"/story-images/{cover_key}.png"
+    assert items[0]["image_url"] == f"/story-images/{page_key}.png"
 
 
 def test_empty_page_scenes_returns_422(client, isolated_image_cache):

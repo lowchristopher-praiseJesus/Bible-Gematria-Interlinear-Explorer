@@ -269,8 +269,6 @@ async def _generate_one_illustration(
             image_bytes = await asyncio.to_thread(synthesize_illustration, prompt)
         except StoryIllustrationError as exc:
             return StoryIllustrationItem(index=index, error=str(exc))
-        except Exception as exc:
-            return StoryIllustrationItem(index=index, error=f"{type(exc).__name__}: {exc}")
         cache_path.write_bytes(image_bytes)
         return StoryIllustrationItem(index=index, image_url=f"/story-images/{key}.png")
 
