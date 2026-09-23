@@ -176,3 +176,77 @@ async def generate_story(digest: str, themes: List[Dict[str, str]], age_range: s
             word_count = len(parts["body"].split())
 
     return {"title": parts["title"], "text": parts["body"], "word_count": word_count}
+
+
+async def build_primer(mode_params: Dict[str, Any]) -> Dict[str, Any]:
+    """The mode's whole turn structure: every Tell a Story request is an
+    empty-message call (theme derivation, then "Make my story"/"Try
+    again"), so this single entry point — reached from
+    router.build_mode_primer on every turn — decides which by whether the
+    user has already picked themes."""
+    llm_error = llm_unconfigured_error()
+    if llm_error:
+        return {
+            "type": "error", "message": llm_error, "data": None,
+            "route": "Mode primer → story → LLM unconfigured",
+        }
+
+    selected_ids = mode_params.get("story_selected_theme_ids")
+    if selected_ids:
+        return await _story_turn(mode_params, selected_ids)
+    return await _themes_turn(mode_params)
+
+
+async def _themes_turn(mode_params: Dict[str, Any]) -> Dict[str, Any]:
+    source_messages = mode_params.get("source_messages") or []
+    result = await derive_themes(source_messages)
+    if not result["themes"]:
+        return {
+            "type": "chat",
+            "message": "Couldn't find a story in this conversation yet — try chatting a bit more first.",
+            "data": None,
+            "route": "Mode primer → story → no themes",
+        }
+    return {
+        "type": "chat",
+        "message": (
+            "Here's what stood out from that conversation — pick what you'd "
+            "like the story to be about, and an age range, then I'll write it."
+        ),
+        "data": {"themes": result["themes"], "digest": result["digest"]},
+        "route": "Mode primer → story → themes derived",
+        "follow_up_questions": [],
+    }
+
+
+async def _story_turn(mode_params: Dict[str, Any], selected_ids: List[str]) -> Dict[str, Any]:
+    all_themes = mode_params.get("story_themes") or []
+    selected = [t for t in all_themes if t.get("id") in set(selected_ids)]
+    if not selected:
+        return {
+            "type": "chat",
+            "message": "I lost track of which theme you picked — please choose again.",
+            "data": None,
+            "route": "Mode primer → story → no matching themes",
+        }
+    age_range = mode_params.get("story_age_range") or "3-6"
+    digest = mode_params.get("story_digest") or ""
+    story = await generate_story(digest, selected, age_range)
+    theme_labels = [t["label"] for t in selected]
+    return {
+        "type": "chat",
+        "message": f"Here's your story — **{story['title']}**.",
+        "data": None,
+        "route": "Mode primer → story → generated",
+        "artifacts": [{
+            "type": "story",
+            "label": "Read the story ▸",
+            "params": {
+                "title": story["title"],
+                "themes": theme_labels,
+                "age_range": age_range,
+                "text": story["text"],
+                "word_count": story["word_count"],
+            },
+        }],
+    }

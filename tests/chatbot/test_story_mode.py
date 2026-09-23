@@ -154,3 +154,60 @@ async def test_generate_story_targets_the_right_band_per_age_range(llm, age_rang
     assert len(llm.calls) == 1  # within band, no retry needed
     prompt = llm.calls[0]["user_prompt"]
     assert f"{low}-{high} words" in prompt
+
+
+async def test_build_primer_with_no_themes_yet_derives_them(llm):
+    result = await story_mode.build_primer(
+        {"source_messages": [{"role": "user", "text": "Tell me about the prodigal son."}]}
+    )
+    assert result["type"] == "chat"
+    assert result["data"]["themes"]
+    assert "pick" in result["message"].lower()
+
+
+async def test_build_primer_reports_when_no_themes_can_be_found(llm):
+    llm.state["replies"] = [""]
+    result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
+    assert result["type"] == "chat"
+    assert "couldn't find a story" in result["message"].lower()
+    assert result["data"] is None
+
+
+async def test_build_primer_generates_the_story_once_themes_are_selected(llm):
+    llm.state["replies"] = ["Title: The Brave Sparrow\n\n" + ("word " * 650)]
+    themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
+    result = await story_mode.build_primer({
+        "story_themes": themes,
+        "story_digest": "digest text",
+        "story_selected_theme_ids": ["t1"],
+        "story_age_range": "3-6",
+    })
+    assert result["artifacts"][0]["type"] == "story"
+    assert result["artifacts"][0]["params"]["title"] == "The Brave Sparrow"
+    assert result["artifacts"][0]["params"]["themes"] == ["Trusting God"]
+    assert result["artifacts"][0]["params"]["age_range"] == "3-6"
+
+
+async def test_build_primer_defaults_age_range_when_missing(llm):
+    llm.state["replies"] = ["Title: A Story\n\n" + ("word " * 650)]
+    themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
+    result = await story_mode.build_primer({
+        "story_themes": themes, "story_digest": "d", "story_selected_theme_ids": ["t1"],
+    })
+    assert result["artifacts"][0]["params"]["age_range"] == "3-6"
+
+
+async def test_build_primer_with_stale_selected_ids_asks_to_choose_again(llm):
+    result = await story_mode.build_primer({
+        "story_themes": [{"id": "t1", "label": "Trust", "description": "..."}],
+        "story_digest": "d",
+        "story_selected_theme_ids": ["not-a-real-id"],
+    })
+    assert result["type"] == "chat"
+    assert "choose again" in result["message"].lower()
+
+
+async def test_build_primer_is_an_error_when_llm_is_unconfigured(monkeypatch):
+    monkeypatch.setattr(story_mode, "llm_unconfigured_error", lambda: "LLM not configured.")
+    result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
+    assert result["type"] == "error"

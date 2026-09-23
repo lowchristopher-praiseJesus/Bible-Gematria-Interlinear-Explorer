@@ -1005,7 +1005,7 @@ async def route_claude(
 
 from chatbot.data.parables import get_parable
 from chatbot.data.reading_plans import get_day_reading
-from chatbot import wiki_loader, wiki_qa, character_chat
+from chatbot import wiki_loader, wiki_qa, character_chat, story_mode
 from chatbot.tools import random_verse
 
 _FULL_NAME_TO_USFM = {full: usfm for usfm, full in _USFM_TO_BOOK.items()}
@@ -1322,6 +1322,9 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
             "route": f"Mode primer → devotional ({source})",
             "follow_up_questions": [],
         }
+
+    if mode == "story":
+        return await story_mode.build_primer(mode_params)
 
     return {
         "type": "chat",
