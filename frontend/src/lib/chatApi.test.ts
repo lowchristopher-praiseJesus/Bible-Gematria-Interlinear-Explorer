@@ -9,6 +9,7 @@ import {
   postChat,
   postChatStream,
   postDevotionalAudio,
+  streamStoryIllustrations,
   toWireModeParams,
 } from './chatApi'
 import type { PhaseResult } from '@/types/session'
@@ -320,5 +321,51 @@ describe('postChatStream phase events', () => {
     const result = await postChatStream({ message: 'run it' }, { onPassage: (r) => { received = r } })
     expect(received).toBe('ROM 8:1')
     expect(result.message).toBe('report')
+  })
+})
+
+describe('streamStoryIllustrations', () => {
+  it('yields one item per newline-delimited JSON line', async () => {
+    mockStreamFetch([
+      '{"index":-1,"image_url":"/story-images/a.png"}\n{"index":0,"image_url":"/story-images/b.png"}\n',
+    ])
+    const items = []
+    for await (const item of streamStoryIllustrations({ characters: '', cover_scene: 'cover', page_scenes: ['p1'] })) {
+      items.push(item)
+    }
+    expect(items).toEqual([
+      { index: -1, image_url: '/story-images/a.png' },
+      { index: 0, image_url: '/story-images/b.png' },
+    ])
+  })
+
+  it('reassembles a line split across multiple read() chunks', async () => {
+    mockStreamFetch(['{"index":-1,"ima', 'ge_url":"/story-images/a.png"}\n'])
+    const items = []
+    for await (const item of streamStoryIllustrations({ characters: '', cover_scene: 'cover', page_scenes: [] })) {
+      items.push(item)
+    }
+    expect(items).toEqual([{ index: -1, image_url: '/story-images/a.png' }])
+  })
+
+  it('yields a trailing line with no terminating newline', async () => {
+    mockStreamFetch(['{"index":0,"image_url":null,"error":"rate limited"}'])
+    const items = []
+    for await (const item of streamStoryIllustrations({ characters: '', cover_scene: 'cover', page_scenes: ['p1'] })) {
+      items.push(item)
+    }
+    expect(items).toEqual([{ index: 0, image_url: null, error: 'rate limited' }])
+  })
+
+  it('posts to /api/bible-chat/story/illustrations with the given payload', async () => {
+    mockStreamFetch(['{"index":-1,"image_url":"/story-images/a.png"}\n'])
+    const payload = { characters: 'Zara: red hair.', cover_scene: 'A cover.', page_scenes: ['Page one.'] }
+    for await (const _item of streamStoryIllustrations(payload)) {
+      // drain the generator
+    }
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/bible-chat/story/illustrations',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) })
+    )
   })
 })

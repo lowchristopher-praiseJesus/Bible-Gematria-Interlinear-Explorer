@@ -301,6 +301,47 @@ export async function postDevotionalAudio(reference: string, text: string): Prom
   return { audio_url: `${CHAT_API}${json.audio_url}` }
 }
 
+export interface StoryIllustrationItem {
+  index: number
+  image_url: string | null
+  error?: string | null
+}
+
+interface StoryIllustrationsPayload {
+  characters: string
+  cover_scene: string
+  page_scenes: string[]
+}
+
+export async function* streamStoryIllustrations(
+  payload: StoryIllustrationsPayload,
+): AsyncGenerator<StoryIllustrationItem> {
+  const res = await fetch(`${CHAT_API}/story/illustrations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok || !res.body) return
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let newlineIndex = buffer.indexOf('\n')
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex).trim()
+      buffer = buffer.slice(newlineIndex + 1)
+      if (line) yield JSON.parse(line) as StoryIllustrationItem
+      newlineIndex = buffer.indexOf('\n')
+    }
+  }
+  const trailing = buffer.trim()
+  if (trailing) yield JSON.parse(trailing) as StoryIllustrationItem
+}
+
 export async function fetchGematria(value: number): Promise<GematriaResponse> {
   const res = await fetch(`/api/gematria?value=${value}`)
   return parseJsonResponse<GematriaResponse>(res)

@@ -105,17 +105,34 @@ export interface HermeneuticsArtifactParams {
   summary: string
 }
 
+export interface StoryPage {
+  text: string
+  scene: string
+  image_url: string | null
+}
+
+export interface StoryCover {
+  scene: string
+  image_url: string | null
+}
+
 /** Params for a `story`-type ArtifactLink — the finished story travels
  * inline (no fetch when the pane opens it), as the devotional and
- * hermeneutics report do. Field names match the backend's dict verbatim
- * (snake_case) — ArtifactLink params are never passed through
- * toWireModeParams's camelCase mapping, unlike ModeParams. */
+ * hermeneutics report do. Illustrations are fetched separately by
+ * StoryReaderOverlay via streamStoryIllustrations — `cover.image_url`
+ * and each page's `image_url` start null and are filled in client-side,
+ * never persisted back onto this object's source message. Field names
+ * match the backend's dict verbatim (snake_case) — ArtifactLink params
+ * are never passed through toWireModeParams's camelCase mapping, unlike
+ * ModeParams. */
 export interface StoryArtifactParams {
   title: string
   themes: string[]
   age_range: string
-  text: string
   word_count: number
+  characters: string
+  cover: StoryCover
+  pages: StoryPage[]
 }
 
 /** One clickable option in a "choice" prompt — e.g. Chronological vs
