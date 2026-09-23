@@ -279,6 +279,24 @@ empty — but every "Listen" request will then fail with a 502 until the
 credential is actually wired up. Nothing else surfaces this gap, so it's
 worth checking explicitly after a fresh deploy.
 
+### Tell a Story illustrations
+
+Each page's illustration is generated via the Gemini API's image model
+(`chatbot/story_illustrations.py`) and cached on the `story-image-cache`
+named volume, mounted into `chatbot` at `/app/STORY_IMAGE_CACHE` (env
+`STORY_IMAGE_CACHE_DIR`), keyed by a content hash of the full image
+prompt (style prefix + scene + character description). There is no
+eviction — files accumulate indefinitely, same as `audio-cache`; an
+operator can clear the volume directly if it grows too large.
+
+**Manual step — Gemini API key (not automated by `docker compose up`):**
+Unlike the TTS credential above, this is a plain Google AI Studio API key
+(from ai.google.dev), not a GCP service-account file. Set `GEMINI_API_KEY`
+in `.env` — it's picked up automatically via the existing `env_file: [.env]`
+wiring, no docker-compose changes needed. A missing or invalid key
+degrades every illustration to text-only (see `chatbot/story_illustrations.py`'s
+fail-open behavior) rather than breaking Tell a Story.
+
 ---
 
 ## 4. Open the firewall — in TWO places

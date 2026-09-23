@@ -31,6 +31,12 @@ volumes:
   # see the design doc.
   audio-cache:
 
+  # Persistent store for generated story illustrations (see
+  # chatbot/story_illustrations.py), content-hash keyed the same way as
+  # audio-cache above. Mounted into `chatbot` at /app/STORY_IMAGE_CACHE.
+  # No active eviction.
+  story-image-cache:
+
   # Persistent store for the devotional-of-the-day cache
   # (devotional-of-day.db), mounted into `chatbot` at
   # /app/devotional-of-day-db. Survives container recreation.
@@ -52,6 +58,9 @@ services:
       # Filesystem cache dir for generated devotional audio (see the
       # `audio-cache` volume below).
       AUDIO_CACHE_DIR: /app/AUDIO_CACHE
+      # Filesystem cache dir for generated story illustrations (see the
+      # `story-image-cache` volume below).
+      STORY_IMAGE_CACHE_DIR: /app/STORY_IMAGE_CACHE
       # Directory-scoped named volume, same pattern as flask-api's
       # FEEDBACK_DB_URL / SHARE_DB_URL.
       DEVOTIONAL_OF_DAY_DB_URL: sqlite:////app/devotional-of-day-db/devotional-of-day.db
@@ -76,6 +85,7 @@ services:
       # See DEPLOYMENT.md §3a.
       - ./Complete.db:/app/Complete.db
       - audio-cache:/app/AUDIO_CACHE
+      - story-image-cache:/app/STORY_IMAGE_CACHE
       - devotional-of-day-db:/app/devotional-of-day-db
       - ${GOOGLE_APPLICATION_CREDENTIALS_HOST_PATH:-/dev/null}:/run/secrets/gcp-tts.json:ro
 

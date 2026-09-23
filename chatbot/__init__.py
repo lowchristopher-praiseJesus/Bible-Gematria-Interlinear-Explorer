@@ -46,4 +46,7 @@ def create_chatbot_app() -> FastAPI:
     from chatbot.devotional_audio import AUDIO_CACHE_DIR
     app.mount("/devotional-audio", StaticFiles(directory=str(AUDIO_CACHE_DIR)), name="devotional-audio")
 
+    from chatbot.story_illustrations import STORY_IMAGE_CACHE_DIR
+    app.mount("/story-images", StaticFiles(directory=str(STORY_IMAGE_CACHE_DIR)), name="story-images")
+
     return app
