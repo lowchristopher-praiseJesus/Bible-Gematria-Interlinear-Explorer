@@ -6,6 +6,7 @@ import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtif
 import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
 import { HermeneuticsArtifact } from '@/components/artifacts/HermeneuticsArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
+import { StoryArtifact } from '@/components/artifacts/StoryArtifact'
 import { StrongsArtifact } from '@/components/artifacts/StrongsArtifact'
 import { NoteEditor } from '@/components/shell/NoteEditor'
 import type {
@@ -15,7 +16,7 @@ import type {
   GematriaResponse,
   StrongsResponse,
 } from '@/types/api'
-import type { DevotionalArtifactParams, HermeneuticsArtifactParams } from '@/types/session'
+import type { DevotionalArtifactParams, HermeneuticsArtifactParams, StoryArtifactParams } from '@/types/session'
 
 interface Props {
   onClose?: () => void
@@ -82,6 +83,9 @@ export function ArtifactPane({ onClose }: Props) {
                 )}
                 {activeArtifact.type === 'hermeneutics_report' && (
                   <HermeneuticsArtifact {...(data as HermeneuticsArtifactParams)} />
+                )}
+                {activeArtifact.type === 'story' && (
+                  <StoryArtifact {...(data as StoryArtifactParams)} />
                 )}
               </>
             )}
