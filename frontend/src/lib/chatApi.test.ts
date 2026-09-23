@@ -334,9 +334,24 @@ describe('streamStoryIllustrations', () => {
       items.push(item)
     }
     expect(items).toEqual([
-      { index: -1, image_url: '/story-images/a.png' },
-      { index: 0, image_url: '/story-images/b.png' },
+      { index: -1, image_url: '/api/bible-chat/story-images/a.png' },
+      { index: 0, image_url: '/api/bible-chat/story-images/b.png' },
     ])
+  })
+
+  it('prefixes every image_url with the chatbot proxy path, leaving null ones null', async () => {
+    // '/story-images/...' only exists on the chatbot service, reachable
+    // through the /api/bible-chat proxy — same as postDevotionalAudio's
+    // audio_url. A bare backend path would 404 against the Flask app.
+    mockStreamFetch([
+      '{"index":-1,"image_url":"/story-images/cover.png"}\n{"index":0,"image_url":null,"error":"x"}\n',
+    ])
+    const items = []
+    for await (const item of streamStoryIllustrations({ characters: '', cover_scene: 'cover', page_scenes: ['p1'] })) {
+      items.push(item)
+    }
+    expect(items[0].image_url).toBe('/api/bible-chat/story-images/cover.png')
+    expect(items[1].image_url).toBeNull()
   })
 
   it('reassembles a line split across multiple read() chunks', async () => {
@@ -345,7 +360,7 @@ describe('streamStoryIllustrations', () => {
     for await (const item of streamStoryIllustrations({ characters: '', cover_scene: 'cover', page_scenes: [] })) {
       items.push(item)
     }
-    expect(items).toEqual([{ index: -1, image_url: '/story-images/a.png' }])
+    expect(items).toEqual([{ index: -1, image_url: '/api/bible-chat/story-images/a.png' }])
   })
 
   it('yields a trailing line with no terminating newline', async () => {
@@ -360,9 +375,9 @@ describe('streamStoryIllustrations', () => {
   it('posts to /api/bible-chat/story/illustrations with the given payload', async () => {
     mockStreamFetch(['{"index":-1,"image_url":"/story-images/a.png"}\n'])
     const payload = { characters: 'Zara: red hair.', cover_scene: 'A cover.', page_scenes: ['Page one.'] }
-    for await (const _item of streamStoryIllustrations(payload)) {
-      // drain the generator
-    }
+    const drained = []
+    for await (const item of streamStoryIllustrations(payload)) drained.push(item)
+    expect(drained).toHaveLength(1)
     expect(fetch).toHaveBeenCalledWith(
       '/api/bible-chat/story/illustrations',
       expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) })

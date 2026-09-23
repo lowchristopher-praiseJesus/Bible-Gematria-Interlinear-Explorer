@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StoryArtifact } from './StoryArtifact'
@@ -6,6 +6,10 @@ import type { StoryArtifactParams } from '@/types/session'
 
 const { streamStoryIllustrations } = vi.hoisted(() => ({ streamStoryIllustrations: vi.fn() }))
 vi.mock('@/lib/chatApi', () => ({ streamStoryIllustrations }))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 async function* emptyStream() {}
 
@@ -51,5 +55,34 @@ describe('StoryArtifact', () => {
     expect(screen.queryByText('Cover')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /read full screen/i }))
     expect(screen.getByText('Cover')).toBeInTheDocument()
+  })
+
+  it('renders a legacy (pre-illustration) story artifact and opens it in the reader', async () => {
+    // Story artifacts from before illustrated pages had a single `text`
+    // field and no pages/cover/characters; they still live in persisted
+    // session history and old share snapshots.
+    const legacy = {
+      title: 'An Old Story',
+      themes: ['Trusting God'],
+      age_range: '3-6',
+      text: 'Once upon a time, long ago.',
+      word_count: 6,
+    } as unknown as StoryArtifactParams
+    render(<StoryArtifact {...legacy} />)
+    expect(screen.getByText('An Old Story')).toBeInTheDocument()
+    expect(screen.getByText('Once upon a time, long ago.')).toBeInTheDocument()
+    expect(screen.getByText('6 words')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /read full screen/i }))
+    expect(screen.getByText('Cover')).toBeInTheDocument()
+    expect(streamStoryIllustrations).not.toHaveBeenCalled()
+  })
+
+  it('hides the reader button for an artifact with nothing to read', () => {
+    const empty = {
+      title: 'Empty', themes: [], age_range: '3-6', word_count: 0,
+    } as unknown as StoryArtifactParams
+    render(<StoryArtifact {...empty} />)
+    expect(screen.getByText('Empty')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /read full screen/i })).not.toBeInTheDocument()
   })
 })

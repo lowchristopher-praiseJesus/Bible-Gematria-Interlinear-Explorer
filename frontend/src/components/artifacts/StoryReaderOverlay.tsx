@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ArrowLeft, ArrowRight, ImageOff } from 'lucide-react'
 import { streamStoryIllustrations } from '@/lib/chatApi'
+import { canIllustrate, normalizeStory, storySignature } from '@/lib/storyArtifact'
 import type { StoryArtifactParams, StoryCover, StoryPage } from '@/types/session'
 
 export interface StoryReaderOverlayProps {
@@ -17,62 +18,108 @@ const AGE_RANGE_LABELS: Record<string, string> = {
 }
 
 export function StoryReaderOverlay({ artifact, open, onClose }: StoryReaderOverlayProps) {
-  const [cover, setCover] = useState<StoryCover>(artifact.cover)
-  const [pages, setPages] = useState<StoryPage[]>(artifact.pages)
+  // `artifact` is a fresh object on every ArtifactPane re-render (it
+  // spreads StoryArtifact's props), so everything below keys on the
+  // story's *content* signature, never the object reference — otherwise
+  // any unrelated parent re-render would reset the reader to the cover
+  // and cancel/restart the illustration fetch.
+  const signature = storySignature(artifact.title, normalizeStory(artifact))
+  // Stable for as long as the content is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const story = useMemo(() => normalizeStory(artifact), [signature])
+  const illustratable = canIllustrate(story)
+
+  const [cover, setCover] = useState<StoryCover>(story.cover)
+  const [pages, setPages] = useState<StoryPage[]>(story.pages)
   const [pageIndex, setPageIndex] = useState(0)
   const [failedIndexes, setFailedIndexes] = useState<Set<number>>(new Set())
 
-  useEffect(() => {
-    if (!open) return
-    setCover(artifact.cover)
-    setPages(artifact.pages)
-    setPageIndex(0)
-    setFailedIndexes(new Set())
-  }, [open, artifact])
+  // Reset to the cover each time the reader opens, or when it is showing a
+  // genuinely different story — adjusted during render (React's
+  // recommended "reset state when a prop changes" pattern) rather than in
+  // an effect, so there's no extra render showing stale state.
+  const resetKey = open ? signature : null
+  const [lastResetKey, setLastResetKey] = useState<string | null>(null)
+  if (resetKey !== lastResetKey) {
+    setLastResetKey(resetKey)
+    if (resetKey !== null) {
+      setCover(story.cover)
+      setPages(story.pages)
+      setPageIndex(0)
+      setFailedIndexes(new Set())
+    }
+  }
 
   useEffect(() => {
-    if (!open) return
-    const needsImages = !artifact.cover.image_url || artifact.pages.some((p) => !p.image_url)
+    if (!open || !illustratable) return
+    const needsImages = !story.cover.image_url || story.pages.some((p) => !p.image_url)
     if (!needsImages) return
 
     let cancelled = false
+    const resolved = new Set<number>()
 
     async function run() {
-      for await (const item of streamStoryIllustrations({
-        characters: artifact.characters,
-        cover_scene: artifact.cover.scene,
-        page_scenes: artifact.pages.map((p) => p.scene),
-      })) {
-        if (cancelled) break
-        if (item.index === -1) {
+      try {
+        for await (const item of streamStoryIllustrations({
+          characters: story.characters,
+          cover_scene: story.cover.scene,
+          page_scenes: story.pages.map((p) => p.scene),
+        })) {
+          if (cancelled) return
+          if (item.index === -1) {
+            if (item.image_url) {
+              const url = item.image_url
+              resolved.add(-1)
+              setCover((c) => ({ ...c, image_url: url }))
+            } else {
+              setFailedIndexes((prev) => new Set(prev).add(-1))
+            }
+            continue
+          }
           if (item.image_url) {
             const url = item.image_url
-            setCover((c) => ({ ...c, image_url: url }))
+            resolved.add(item.index)
+            setPages((prev) => prev.map((p, i) => (i === item.index ? { ...p, image_url: url } : p)))
           } else {
-            setFailedIndexes((prev) => new Set(prev).add(-1))
+            setFailedIndexes((prev) => new Set(prev).add(item.index))
           }
-          continue
         }
-        if (item.image_url) {
-          const url = item.image_url
-          setPages((prev) => prev.map((p, i) => (i === item.index ? { ...p, image_url: url } : p)))
-        } else {
-          setFailedIndexes((prev) => new Set(prev).add(item.index))
-        }
+      } catch {
+        // A whole-request network failure or a malformed line mid-stream —
+        // handled below exactly like a stream that ended early.
+      }
+      // A cancelled run (closed, or superseded by a different story) must
+      // not touch state at all.
+      if (cancelled) return
+      // Anything the stream never delivered will never arrive: show it as
+      // unavailable rather than leaving its spinner up forever.
+      const missing: number[] = []
+      if (!story.cover.image_url && !resolved.has(-1)) missing.push(-1)
+      story.pages.forEach((p, i) => {
+        if (!p.image_url && !resolved.has(i)) missing.push(i)
+      })
+      if (missing.length) {
+        setFailedIndexes((prev) => {
+          const next = new Set(prev)
+          for (const i of missing) next.add(i)
+          return next
+        })
       }
     }
 
-    run()
+    void run()
     return () => {
       cancelled = true
     }
-  }, [open, artifact])
+  }, [open, story, illustratable])
 
   const totalPages = pages.length
   const onCover = pageIndex === 0
   const currentPage = onCover ? null : pages[pageIndex - 1]
   const currentImageUrl = onCover ? cover.image_url : (currentPage?.image_url ?? null)
-  const currentFailed = failedIndexes.has(onCover ? -1 : pageIndex - 1)
+  // A story with nothing to illustrate (a legacy, pre-illustration one) is
+  // never fetched for, so its pages go straight to text-only.
+  const currentFailed = !illustratable || failedIndexes.has(onCover ? -1 : pageIndex - 1)
 
   function goPrev() {
     setPageIndex((i) => Math.max(0, i - 1))
@@ -126,7 +173,7 @@ export function StoryReaderOverlay({ artifact, open, onClose }: StoryReaderOverl
                 <span className="px-2 py-0.5 rounded-full border border-white/30">
                   {AGE_RANGE_LABELS[artifact.age_range] ?? artifact.age_range}
                 </span>
-                {artifact.themes.map((theme) => (
+                {(artifact.themes ?? []).map((theme) => (
                   <span key={theme} className="px-2 py-0.5 rounded-full border border-white/30">
                     {theme}
                   </span>

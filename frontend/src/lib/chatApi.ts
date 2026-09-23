@@ -313,6 +313,15 @@ interface StoryIllustrationsPayload {
   page_scenes: string[]
 }
 
+/**
+ * Read `/story/illustrations`' newline-delimited JSON body, yielding one
+ * item per illustration as it finishes. Like postDevotionalAudio, the
+ * backend's `image_url` is relative to the chatbot service root (e.g.
+ * '/story-images/<hash>.png'); every non-null one is resolved against
+ * CHAT_API here so it's directly usable as an <img src>. A request that
+ * fails outright yields nothing — callers must treat any illustration the
+ * stream never reported as unavailable.
+ */
 export async function* streamStoryIllustrations(
   payload: StoryIllustrationsPayload,
 ): AsyncGenerator<StoryIllustrationItem> {
@@ -322,6 +331,11 @@ export async function* streamStoryIllustrations(
     body: JSON.stringify(payload),
   })
   if (!res.ok || !res.body) return
+
+  function toItem(line: string): StoryIllustrationItem {
+    const item = JSON.parse(line) as StoryIllustrationItem
+    return item.image_url ? { ...item, image_url: `${CHAT_API}${item.image_url}` } : item
+  }
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -334,12 +348,12 @@ export async function* streamStoryIllustrations(
     while (newlineIndex >= 0) {
       const line = buffer.slice(0, newlineIndex).trim()
       buffer = buffer.slice(newlineIndex + 1)
-      if (line) yield JSON.parse(line) as StoryIllustrationItem
+      if (line) yield toItem(line)
       newlineIndex = buffer.indexOf('\n')
     }
   }
   const trailing = buffer.trim()
-  if (trailing) yield JSON.parse(trailing) as StoryIllustrationItem
+  if (trailing) yield toItem(trailing)
 }
 
 export async function fetchGematria(value: number): Promise<GematriaResponse> {
