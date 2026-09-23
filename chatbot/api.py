@@ -18,6 +18,8 @@ from chatbot.schemas import (
     PassageResponse,
     PassageVerse,
     ParablesResponse,
+    StoryIllustrationItem,
+    StoryIllustrationsRequest,
     StrongsResponse,
     StudyResponse,
     StudyWikisResponse,
@@ -35,8 +37,15 @@ from chatbot.book_context import get_book_context
 from chatbot.devotional_audio import (
     AUDIO_CACHE_DIR,
     DevotionalAudioError,
-    cache_key,
+    cache_key as audio_cache_key,
     synthesize_devotional_audio,
+)
+from chatbot.story_illustrations import (
+    STORY_IMAGE_CACHE_DIR,
+    StoryIllustrationError,
+    build_prompt,
+    cache_key,
+    synthesize_illustration,
 )
 from chatbot.data.parables import PARABLES
 from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader
@@ -232,7 +241,7 @@ async def post_devotional_audio(request: DevotionalAudioRequest):
     if not request.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
 
-    key = cache_key(request.text)
+    key = audio_cache_key(request.text)
     cache_path = AUDIO_CACHE_DIR / f"{key}.mp3"
     if not cache_path.exists():
         try:
@@ -242,6 +251,55 @@ async def post_devotional_audio(request: DevotionalAudioRequest):
         cache_path.write_bytes(audio_bytes)
 
     return DevotionalAudioResponse(audio_url=f"/devotional-audio/{key}.mp3")
+
+
+STORY_ILLUSTRATION_CONCURRENCY = 4
+
+
+async def _generate_one_illustration(
+    index: int, scene: str, characters: str, semaphore: asyncio.Semaphore,
+) -> StoryIllustrationItem:
+    prompt = build_prompt(scene, characters)
+    key = cache_key(prompt)
+    cache_path = STORY_IMAGE_CACHE_DIR / f"{key}.png"
+    if cache_path.exists():
+        return StoryIllustrationItem(index=index, image_url=f"/story-images/{key}.png")
+    async with semaphore:
+        try:
+            image_bytes = await asyncio.to_thread(synthesize_illustration, prompt)
+        except StoryIllustrationError as exc:
+            return StoryIllustrationItem(index=index, error=str(exc))
+        except Exception as exc:
+            return StoryIllustrationItem(index=index, error=f"{type(exc).__name__}: {exc}")
+        cache_path.write_bytes(image_bytes)
+        return StoryIllustrationItem(index=index, image_url=f"/story-images/{key}.png")
+
+
+@router.post("/story/illustrations")
+async def post_story_illustrations(request: StoryIllustrationsRequest) -> StreamingResponse:
+    """Newline-delimited JSON, one StoryIllustrationItem per line, streamed
+    as each illustration finishes (cover plus every page, generated
+    concurrently — lines may arrive out of reading order). A single
+    illustration's failure never raises; it's reported as that line's
+    `error` field so every other illustration still streams through."""
+    if not request.cover_scene.strip() or not request.page_scenes:
+        raise HTTPException(status_code=422, detail="cover_scene and page_scenes must not be empty")
+
+    semaphore = asyncio.Semaphore(STORY_ILLUSTRATION_CONCURRENCY)
+    tasks = [
+        asyncio.create_task(_generate_one_illustration(-1, request.cover_scene, request.characters, semaphore))
+    ]
+    tasks += [
+        asyncio.create_task(_generate_one_illustration(i, scene, request.characters, semaphore))
+        for i, scene in enumerate(request.page_scenes)
+    ]
+
+    async def stream():
+        for coro in asyncio.as_completed(tasks):
+            item = await coro
+            yield item.model_dump_json() + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
 # ---------------------------------------------------------------------------

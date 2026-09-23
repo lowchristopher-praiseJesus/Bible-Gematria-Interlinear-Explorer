@@ -157,3 +157,15 @@ class DevotionalAudioRequest(BaseModel):
 
 class DevotionalAudioResponse(BaseModel):
     audio_url: str = Field(..., description="Path to the generated/cached MP3, relative to the chatbot service root (e.g. '/devotional-audio/<hash>.mp3')")
+
+
+class StoryIllustrationsRequest(BaseModel):
+    characters: str = Field("", description="One-line character appearance description, appended to every page's image prompt for visual consistency")
+    cover_scene: str = Field(..., description="One-sentence description of the cover illustration")
+    page_scenes: List[str] = Field(..., description="One-sentence scene description per story page, in reading order")
+
+
+class StoryIllustrationItem(BaseModel):
+    index: int = Field(..., description="-1 for the cover illustration, 0-based page index otherwise")
+    image_url: Optional[str] = Field(None, description="Path to the generated/cached PNG, relative to the chatbot service root (e.g. '/story-images/<hash>.png') — present only on success")
+    error: Optional[str] = Field(None, description="Present only when this one illustration failed — the page's own text is still usable without it")
