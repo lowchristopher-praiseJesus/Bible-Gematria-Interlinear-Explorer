@@ -3,6 +3,7 @@ import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Ref
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
+import { toHistory } from '@/lib/history'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
@@ -36,12 +37,6 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-// A delivered devotional's chat bubble is only its pointer sentence
-// ("Here's a devotional on X") — the actual body lives solely in the
-// message's `devotional` artifact, so it never floods the transcript.
-// History sent to the backend needs the real text swapped back in, or a
-// follow-up turn (e.g. voice mode's "read out the devotion") reaches the
-// LLM with no devotional content to answer from.
 // Socratic mode's passage reference is essential session state established
 // once (by the primer's random pick, or a message naming a new passage) —
 // unlike other modes, later turns' own text rarely repeats it, so once the
@@ -76,16 +71,6 @@ function hermeneuticsParams(data: unknown, opts: { fromPrimer?: boolean } = {}):
   // must not clear the one the session already holds.
   if (d?.runDigest) patch.runDigest = d.runDigest
   return patch
-}
-
-function toHistory(messages: SessionMessage[]): { role: 'user' | 'assistant'; text: string }[] {
-  return messages.map((m) => {
-    const devotional = m.artifacts?.find((a) => a.type === 'devotional')
-    const text = devotional
-      ? (devotional.params as unknown as DevotionalArtifactParams).text
-      : m.text
-    return { role: m.role, text }
-  })
 }
 
 const ARTIFACT_PILL =
