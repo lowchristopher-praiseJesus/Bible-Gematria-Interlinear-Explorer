@@ -5,6 +5,7 @@ them. See docs/superpowers/specs/2026-09-23-tell-a-story-mode-design.md.
 """
 
 import json
+import random
 import re
 from typing import Any, Dict, List, Optional
 
@@ -140,6 +141,20 @@ _STORY_SYSTEM_PROMPT = (
     "points)."
 )
 
+# Each generate_story() call is a fresh, stateless completion with no
+# memory of stories written before it, and left to invent its own names
+# the model reliably defaults to "Pip" for a small animal sidekick — a
+# soft "vary your names" instruction gives it nothing to vary against
+# within one call. The server picks the names itself instead, the same
+# way devotional_rotation.py owns the verse pick rather than asking the
+# model to choose one.
+CHARACTER_NAME_POOL = [
+    "Amara", "Beatrix", "Caleb", "Dara", "Elias", "Fatima", "Gus", "Hana",
+    "Ibrahim", "Junie", "Kai", "Lola", "Mateo", "Nadia", "Oliver", "Priya",
+    "Quinn", "Rosa", "Sana", "Theo", "Uma", "Victor", "Wren", "Xiomara",
+    "Yara", "Zeke", "Ana", "Ben", "Chiara", "Dev",
+]
+
 _TITLE_LINE_RE = re.compile(r"^Title:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
@@ -152,13 +167,22 @@ def _split_title(text: str) -> Dict[str, str]:
     return {"title": title or "A Story for You", "body": body}
 
 
-def _story_prompt(digest: str, themes: List[Dict[str, str]], age_range: str, low: int, high: int) -> str:
+def _story_prompt(
+    digest: str, themes: List[Dict[str, str]], age_range: str, low: int, high: int,
+    name1: str, name2: str,
+) -> str:
     theme_lines = "\n".join(f"- {t['label']}: {t['description']}" for t in themes)
     return (
         f"CONVERSATION SUMMARY: {digest}\n\n"
         f"THEME(S) TO WEAVE INTO ONE STORY:\n{theme_lines}\n\n"
         f"TARGET READER: age {age_range}. {AGE_COMPLEXITY[age_range]}\n"
-        f"LENGTH: {low}-{high} words."
+        f"LENGTH: {low}-{high} words.\n"
+        f"CHARACTER NAMES: give your two main characters these names — "
+        f"{name1} and {name2} — assigning each to whichever role fits (a "
+        f"child, an animal, or similar). Do not use any other names for "
+        f"them. If the story truly needs another named character, pick a "
+        f"name other than {name1}, {name2}, or \"Pip\" — vary your choices "
+        f"instead of defaulting to a familiar storybook name."
     )
 
 
@@ -170,8 +194,9 @@ async def generate_story(digest: str, themes: List[Dict[str, str]], age_range: s
     if age_range not in AGE_WORD_BANDS:
         raise ValueError(f"Unknown story age range: {age_range!r}")
     low, high = AGE_WORD_BANDS[age_range]
+    name1, name2 = random.sample(CHARACTER_NAME_POOL, 2)
 
-    prompt = _story_prompt(digest, themes, age_range, low, high)
+    prompt = _story_prompt(digest, themes, age_range, low, high, name1, name2)
     text = await simple_completion(
         _STORY_SYSTEM_PROMPT, prompt, max_tokens=2400, timeout=STORY_LLM_TIMEOUT_SECONDS,
     )

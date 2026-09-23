@@ -122,6 +122,42 @@ async def test_generate_story_uses_the_word_band_for_the_age_range(llm):
     assert len(llm.calls) == 1
 
 
+async def test_generate_story_assigns_two_random_character_names(llm, monkeypatch):
+    # Real usage showed the model reliably defaulting to "Pip" for a small
+    # animal sidekick across many generated stories, since each call is a
+    # fresh, stateless completion with nothing to vary against on its own.
+    # The server must pick the names itself rather than trust the model.
+    monkeypatch.setattr(story_mode.random, "sample", lambda pool, k: ["Zara", "Kofi"])
+    llm.state["replies"] = ["Title: Test\n\n" + ("word " * 650)]
+    await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Sharing", "description": "..."}], "3-6"
+    )
+    prompt = llm.calls[0]["user_prompt"]
+    assert "Zara" in prompt
+    assert "Kofi" in prompt
+    assert "Pip" in prompt  # named as the example to avoid defaulting to
+
+
+async def test_generate_story_draws_names_from_the_character_name_pool(llm, monkeypatch):
+    seen = {}
+
+    def fake_sample(pool, k):
+        seen["pool"] = pool
+        seen["k"] = k
+        return pool[:k]
+
+    monkeypatch.setattr(story_mode.random, "sample", fake_sample)
+    llm.state["replies"] = ["Title: Test\n\n" + ("word " * 650)]
+    await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Sharing", "description": "..."}], "3-6"
+    )
+    assert seen["pool"] is story_mode.CHARACTER_NAME_POOL
+    assert seen["k"] == 2
+    assert len(story_mode.CHARACTER_NAME_POOL) >= 20
+    assert len(set(story_mode.CHARACTER_NAME_POOL)) == len(story_mode.CHARACTER_NAME_POOL)
+    assert "Pip" not in story_mode.CHARACTER_NAME_POOL
+
+
 async def test_generate_story_prompt_for_ages_3_6_forbids_abstract_endings(llm):
     # Real usage (a "Report an Issue" submission) showed the 3-6 band's
     # stories reliably closing on an abstract simile ("like the wind and
