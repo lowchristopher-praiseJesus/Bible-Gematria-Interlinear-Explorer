@@ -1,11 +1,13 @@
-import { postChat } from './chatApi'
+import { postChat, type ChatApiResponse } from './chatApi'
 import { toHistory } from './history'
 import type { ModeParams, Session, SessionMessage } from '@/types/session'
 
 // Mirrors chatbot/story_mode.py's MAX_STORY_SOURCE_MESSAGES — kept in
 // sync by comment rather than shared code, since the two run in
-// different languages/processes.
-const MAX_STORY_SOURCE_MESSAGES = 60
+// different languages/processes. Exported so ChatPane's in-place
+// theme-derivation retry (see retryStoryThemes) caps the same way as the
+// initial call below.
+export const MAX_STORY_SOURCE_MESSAGES = 60
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -14,6 +16,22 @@ function errorMessage(err: unknown): string {
 let idCounter = 0
 function genId(): string {
   return `msg-${Date.now()}-${++idCounter}`
+}
+
+/**
+ * Posts the theme-derivation primer for a (already-capped) source
+ * transcript. Shared by the initial "Tell a Story" trigger below and
+ * ChatPane's `retryStoryThemes`, so a retry re-runs exactly the same call
+ * the primer itself makes rather than drifting from it.
+ */
+export async function deriveStoryThemes(
+  sourceMessages: { role: 'user' | 'assistant'; text: string }[]
+): Promise<ChatApiResponse> {
+  return postChat({
+    message: '',
+    mode: 'story',
+    mode_params: { storySourceMessages: sourceMessages },
+  })
 }
 
 interface StartTellAStoryDeps {
@@ -47,11 +65,7 @@ export async function startTellAStory(
   })
   const sourceMessages = toHistory(sourceSession.messages).slice(-MAX_STORY_SOURCE_MESSAGES)
   try {
-    const response = await postChat({
-      message: '',
-      mode: 'story',
-      mode_params: { storySourceMessages: sourceMessages },
-    })
+    const response = await deriveStoryThemes(sourceMessages)
     appendMessage(session.id, {
       id: genId(),
       role: 'assistant',

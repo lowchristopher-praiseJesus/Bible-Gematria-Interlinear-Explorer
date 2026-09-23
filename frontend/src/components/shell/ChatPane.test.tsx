@@ -1491,5 +1491,69 @@ describe('ChatPane', () => {
       })
       expect(await screen.findByText('Read the story ▸')).toBeInTheDocument()
     })
+
+    it('offers a Retry button when theme derivation failed, and re-derives themes against the live source session', async () => {
+      const source = useSessionsStore.getState().createSession('socratic', {})
+      useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'Tell me about the prodigal son.' })
+      const story = useSessionsStore.getState().createSession('story', {
+        storySourceSessionId: source.id, storySourceLabel: 'Socratic Study',
+      })
+      useSessionsStore.getState().appendMessage(story.id, {
+        id: 'primer', role: 'assistant',
+        text: 'The story engine is having trouble right now — please try again in a moment.',
+        data: { themesRetry: true },
+      })
+      const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+        type: 'chat', message: "Here's what stood out…",
+        data: { themes: [{ id: 't1', label: 'Trust', description: 'desc' }], digest: 'a digest' },
+      })
+
+      render(<ChatPane sessionId={story.id} />)
+      expect(screen.queryByRole('button', { name: /make my story/i })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: /retry/i }))
+
+      expect(postChat).toHaveBeenCalledWith({
+        message: '',
+        mode: 'story',
+        mode_params: {
+          storySourceMessages: [
+            { role: 'user', text: 'Tell me about the prodigal son.' },
+          ],
+        },
+      })
+      expect(await screen.findByText("Here's what stood out…")).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /make my story/i })).toBeInTheDocument()
+      expect(useSessionsStore.getState().sessions[story.id].modeParams.storyThemes).toEqual([
+        { id: 't1', label: 'Trust', description: 'desc' },
+      ])
+    })
+
+    it('ignores a second Retry click while the first retry is still in flight', async () => {
+      const source = useSessionsStore.getState().createSession('socratic', {})
+      useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'hi' })
+      const story = useSessionsStore.getState().createSession('story', {
+        storySourceSessionId: source.id, storySourceLabel: 'Socratic Study',
+      })
+      useSessionsStore.getState().appendMessage(story.id, {
+        id: 'primer', role: 'assistant',
+        text: "Couldn't find a story in this conversation yet — try chatting a bit more first.",
+        data: { themesRetry: true },
+      })
+      let resolvePostChat!: (value: ChatApiResponse) => void
+      const postChat = vi.spyOn(chatApi, 'postChat').mockReturnValue(
+        new Promise((resolve) => {
+          resolvePostChat = resolve
+        })
+      )
+
+      render(<ChatPane sessionId={story.id} />)
+      const retryButton = screen.getByRole('button', { name: /retry/i })
+      await userEvent.click(retryButton)
+      await userEvent.click(retryButton)
+
+      expect(postChat).toHaveBeenCalledTimes(1)
+      resolvePostChat({ type: 'chat', message: 'themes', data: { themes: [], digest: '' } })
+      await waitFor(() => expect(screen.getByText('themes')).toBeInTheDocument())
+    })
   })
 })

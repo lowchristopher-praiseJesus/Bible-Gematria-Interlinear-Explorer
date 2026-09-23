@@ -4,7 +4,7 @@ import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { toHistory } from '@/lib/history'
-import { startTellAStory } from '@/lib/tellAStory'
+import { startTellAStory, deriveStoryThemes, MAX_STORY_SOURCE_MESSAGES } from '@/lib/tellAStory'
 import { ThemePicker, type StoryAgeRange } from './ThemePicker'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
@@ -144,6 +144,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   const [resolvingChoiceId, setResolvingChoiceId] = useState<string | null>(null)
   const [tellingStory, setTellingStory] = useState(false)
   const [storySubmitting, setStorySubmitting] = useState(false)
+  // Which theme-derivation message (by id) is currently being retried —
+  // null when none is. Keyed by message id (not a bare boolean) since a
+  // session can only ever have one live derivation prompt, but this keeps
+  // the retry button's own loading state scoped to that message.
+  const [storyThemesRetrying, setStoryThemesRetrying] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
@@ -631,6 +636,50 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     }
   }, [session, sessionId, storySubmitting, appendMessage])
 
+  // Re-runs theme derivation in place against the *live* source
+  // conversation (`storySourceSessionId`, re-read fresh from the store —
+  // it may have grown since this story session was created) when the
+  // primer's own attempt either failed outright or genuinely found
+  // nothing (`data.themesRetry`, set by story_mode._themes_turn for both
+  // cases). Updates the same prompt message on success/failure rather
+  // than appending a new one, so ThemePicker then mounts under it exactly
+  // as it would have on the first successful attempt.
+  const retryStoryThemes = useCallback(
+    async (promptMessageId: string) => {
+      if (!session || storyThemesRetrying) return
+      const sourceId = session.modeParams.storySourceSessionId
+      const sourceSession = sourceId ? useSessionsStore.getState().sessions[sourceId] : undefined
+      const sourceMessages = sourceSession
+        ? toHistory(sourceSession.messages).slice(-MAX_STORY_SOURCE_MESSAGES)
+        : []
+      setStoryThemesRetrying(promptMessageId)
+      try {
+        const response = await deriveStoryThemes(sourceMessages)
+        updateMessage(sessionId, promptMessageId, {
+          text: response.message,
+          type: response.type,
+          data: response.data ?? undefined,
+        })
+        const data = response.data as { themes?: { id: string; label: string; description: string }[]; digest?: string } | undefined
+        if (data?.themes?.length) {
+          updateModeParams(sessionId, {
+            storyThemes: data.themes,
+            storyDigest: data.digest,
+            storySelectedThemeIds: [],
+            storyAgeRange: '3-6',
+          })
+        }
+      } catch (err) {
+        updateMessage(sessionId, promptMessageId, {
+          text: 'Sorry, something went wrong: ' + errorMessage(err),
+        })
+      } finally {
+        setStoryThemesRetrying(null)
+      }
+    },
+    [session, sessionId, storyThemesRetrying, updateMessage, updateModeParams]
+  )
+
   // Only Parable Study and Topical Study fetch their choices, so only
   // those two know how to reload after a failed fetch.
   const retryChoices = useCallback(
@@ -873,6 +922,24 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
                       })}
                     </div>
                   )}
+                  {(() => {
+                    const needsThemesRetry = (msg.data as { themesRetry?: boolean } | undefined)?.themesRetry
+                    return (
+                      session.mode === 'story' &&
+                      msg.role === 'assistant' &&
+                      needsThemesRetry && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            onClick={() => retryStoryThemes(msg.id)}
+                            disabled={storyThemesRetrying === msg.id}
+                            className="text-xs px-2 py-1 rounded border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)] disabled:opacity-50"
+                          >
+                            {storyThemesRetrying === msg.id ? 'Retrying…' : 'Retry'}
+                          </button>
+                        </div>
+                      )
+                    )
+                  })()}
                   {(() => {
                     const storyThemes = (msg.data as { themes?: { id: string; label: string; description: string }[] } | undefined)?.themes
                     return (
