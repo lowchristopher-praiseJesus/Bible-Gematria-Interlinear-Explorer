@@ -191,14 +191,38 @@ picked a theme, that list read as confusing rather than useful.)
 Either way, `frontend/src/components/shell/ThemePicker.tsx` renders the
 theme(s) as checkboxes alongside a target-age radio group (3–6 / 7–8 /
 9–10, scaling the word-count target 500–800 / 800–1200 / 1200–1800 — see
-`AGE_WORD_BANDS`). Submitting calls `story_mode.generate_story`, which always invents generic
+`AGE_WORD_BANDS` — and the page count 5–6 / 7–8 / 9–10, `PAGE_COUNT_BANDS`).
+Submitting calls `story_mode.generate_story`, which always invents generic
 characters (a child, an animal, etc.) — **never** named biblical
 figures — so the story reads as a parable-style tale, not a dramatized
 retelling; this is prompt-enforced only, with no automated detector like
-character mode's persona-leak rewriter. The finished story is delivered as
-a `'story'`-type artifact (`frontend/src/components/artifacts/StoryArtifact.tsx`),
-and the picker stays mounted afterward so the user can change themes/age and
+character mode's persona-leak rewriter. The LLM replies with structured
+JSON, and the finished story is delivered as a `'story'`-type artifact
+whose params are `title`, `characters` (a one-line appearance description
+reused in every image prompt for visual consistency), `cover`
+(`{scene, image_url}`) and `pages[]` (`{text, scene, image_url}`), every
+`image_url` starting `null`. Unparseable JSON (after one retry) is an
+honest "couldn't write the story" error, never a degraded artifact. The
+picker stays mounted afterward so the user can change themes/age and
 regenerate ("Try again") without losing the session.
+
+`StoryArtifact.tsx` shows a first-page preview plus a "Read full screen"
+button opening `StoryReaderOverlay.tsx`, a full-screen page-flip reader
+(cover, then one page at a time; arrow buttons/keys). On open it calls
+`POST /story/illustrations` — a separate non-chat endpoint, so images never
+add latency to the chat turn — which generates the cover and every page's
+illustration via the Gemini API (`chatbot/story_illustrations.py`,
+`STORY_IMAGE_MODEL`, `GEMINI_API_KEY`) with bounded concurrency (4), a
+content-hash disk cache (`STORY_IMAGE_CACHE_DIR`, served at
+`/story-images/`), and streams NDJSON lines as each finishes, so images fade
+in progressively (`X-Accel-Buffering: no` keeps nginx from batching them).
+Illustrations fail open per image: a failure is that line's generic
+`error` (details logged server-side only) and the page shows text-only.
+Resolved URLs live only in the reader's local state — the disk cache makes
+re-opening cheap. Readers normalize legacy pre-illustration artifacts
+(single `text`, no `pages`) via `frontend/src/lib/storyArtifact.ts`. See
+`docs/superpowers/specs/2026-09-23-story-illustrated-reader-design.md` and
+`DEPLOYMENT.md`'s "Tell a Story illustrations" section.
 
 **Deliberately unlike every other special-cased mode: there is no
 `mode == "story"` branch in `chatbot/api.py`.** Every Tell a Story turn —
