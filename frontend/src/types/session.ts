@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story'
 
 export interface ModeParams {
   plan?: 'chronological' | 'canonical'
@@ -39,10 +39,30 @@ export interface ModeParams {
    * without refetching the list). */
   characterId?: string
   characterName?: string
+  /** Tell a Story mode: the themes/lessons derived from the source
+   * conversation (from the primer's `data.themes`). */
+  storyThemes?: { id: string; label: string; description: string }[]
+  /** Tell a Story mode: the compact digest of the source conversation
+   * (from the primer's `data.digest`), reused for every story generation
+   * so the full transcript is never resent after the first turn. */
+  storyDigest?: string
+  /** Tell a Story mode: which of `storyThemes` the user picked. */
+  storySelectedThemeIds?: string[]
+  /** Tell a Story mode: the chosen target reading age. */
+  storyAgeRange?: '3-6' | '7-8' | '9-10'
+  /** Tell a Story mode: which session (and its title, for the new
+   * session's own title) this story was made from. Frontend bookkeeping
+   * only — never read by the backend. */
+  storySourceSessionId?: string
+  storySourceLabel?: string
+  /** Tell a Story mode: the source conversation's transcript, sent ONLY
+   * on the turn that derives themes — never persisted into a session's
+   * own modeParams and never sent again after that. */
+  storySourceMessages?: { role: 'user' | 'assistant'; text: string }[]
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story'
   label: string
   params: Record<string, unknown>
 }
@@ -83,6 +103,19 @@ export interface HermeneuticsArtifactParams {
   reference: string
   phases: PhaseResult[]
   summary: string
+}
+
+/** Params for a `story`-type ArtifactLink — the finished story travels
+ * inline (no fetch when the pane opens it), as the devotional and
+ * hermeneutics report do. Field names match the backend's dict verbatim
+ * (snake_case) — ArtifactLink params are never passed through
+ * toWireModeParams's camelCase mapping, unlike ModeParams. */
+export interface StoryArtifactParams {
+  title: string
+  themes: string[]
+  age_range: string
+  text: string
+  word_count: number
 }
 
 /** One clickable option in a "choice" prompt — e.g. Chronological vs

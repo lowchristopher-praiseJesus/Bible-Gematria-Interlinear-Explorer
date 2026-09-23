@@ -186,6 +186,27 @@ describe('chatApi', () => {
       rotation_cursor: 2,
     })
   })
+
+  it('maps Tell a Story mode_params keys to their snake_case wire names', () => {
+    const wire = toWireModeParams({
+      storyThemes: [{ id: 't1', label: 'Trust', description: 'desc' }],
+      storyDigest: 'a digest',
+      storySelectedThemeIds: ['t1'],
+      storyAgeRange: '7-8',
+      storySourceMessages: [{ role: 'user', text: 'hi' }],
+      storySourceSessionId: 'sess-1',
+      storySourceLabel: 'Socratic Study',
+    })
+    expect(wire).toEqual({
+      story_themes: [{ id: 't1', label: 'Trust', description: 'desc' }],
+      story_digest: 'a digest',
+      story_selected_theme_ids: ['t1'],
+      story_age_range: '7-8',
+      source_messages: [{ role: 'user', text: 'hi' }],
+      storySourceSessionId: 'sess-1',
+      storySourceLabel: 'Socratic Study',
+    })
+  })
 })
 
 describe('postChatStream', () => {
