@@ -342,6 +342,12 @@ describe('SessionsPane', () => {
     expect(screen.getByRole('button', { name: /Chat with a Character/ })).toBeInTheDocument()
   })
 
+  it('groups a story session under its own "Tell a Story" heading', () => {
+    useSessionsStore.getState().createSession('story', { storySourceLabel: 'Socratic Study' })
+    render(<SessionsPane activeSessionId={null} onSelectSession={() => {}} onNewSession={() => {}} />)
+    expect(screen.getByText('Tell a Story')).toBeInTheDocument()
+  })
+
   describe('default expansion', () => {
     it('starts every category collapsed when there is no active session', () => {
       useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })

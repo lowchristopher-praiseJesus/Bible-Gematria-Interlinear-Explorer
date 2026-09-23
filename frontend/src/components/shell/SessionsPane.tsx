@@ -14,6 +14,7 @@ import {
   Sprout,
   StickyNote,
   UserRound,
+  Wand2,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -34,7 +35,7 @@ interface Props {
 // Fixed order (matching the mode picker) rather than sorting sections by
 // recency — the point is a stable place to find "all my Parable Study
 // chats", not a shuffling list of headers.
-const MODE_ORDER: SessionMode[] = ['reading_plan', 'parable', 'verse', 'topic', 'devotional', 'socratic', 'hermeneutics', 'character', 'freeform']
+const MODE_ORDER: SessionMode[] = ['reading_plan', 'parable', 'verse', 'topic', 'devotional', 'socratic', 'hermeneutics', 'character', 'story', 'freeform']
 
 const MODE_ICONS: Record<SessionMode, LucideIcon> = {
   reading_plan: CalendarDays,
@@ -46,6 +47,7 @@ const MODE_ICONS: Record<SessionMode, LucideIcon> = {
   socratic: HelpCircle,
   hermeneutics: Layers,
   character: UserRound,
+  story: Wand2,
 }
 
 function groupByMode(sessions: Session[]): Partial<Record<SessionMode, Session[]>> {

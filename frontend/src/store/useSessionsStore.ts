@@ -54,6 +54,7 @@ export const MODE_LABELS: Record<SessionMode, string> = {
   socratic: 'Socratic Study',
   hermeneutics: 'Deep Study',
   character: 'Chat with a Character',
+  story: 'Tell a Story',
 }
 
 function deriveTitle(mode: SessionMode, modeParams: ModeParams): string {
@@ -61,6 +62,7 @@ function deriveTitle(mode: SessionMode, modeParams: ModeParams): string {
   if (mode === 'parable' && modeParams.parableId) return `Parable Study — ${modeParams.parableId.replace(/_/g, ' ')}`
   if (mode === 'topic' && modeParams.conceptSlug) return `Topical Study — ${modeParams.conceptSlug.replace(/-/g, ' ')}`
   if (mode === 'character' && modeParams.characterName) return `Chat with ${modeParams.characterName}`
+  if (mode === 'story' && modeParams.storySourceLabel) return `Tell a Story — ${modeParams.storySourceLabel}`
   return MODE_LABELS[mode]
 }
 

@@ -51,6 +51,16 @@ describe('useSessionsStore', () => {
     expect(session.title).toBe('Chat with a Character')
   })
 
+  it('titles a story session from its source label', () => {
+    const session = useSessionsStore.getState().createSession('story', { storySourceLabel: 'Socratic Study' })
+    expect(session.title).toBe('Tell a Story — Socratic Study')
+  })
+
+  it('titles a story session generically with no source label', () => {
+    const session = useSessionsStore.getState().createSession('story', {})
+    expect(session.title).toBe('Tell a Story')
+  })
+
   it('appendMessage adds a message and bumps updatedAt', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     const before = useSessionsStore.getState().sessions[session.id].updatedAt
