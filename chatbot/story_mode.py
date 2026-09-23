@@ -191,17 +191,25 @@ def _parse_story(reply: str) -> Optional[Dict[str, Any]]:
     parsed = _extract_json_object(reply)
     if not parsed:
         return None
-    title = str(parsed.get("title", "")).strip() or "A Story for You"
-    characters = str(parsed.get("characters", "")).strip()
-    cover_scene = str(parsed.get("cover_scene", "")).strip()
+    # `str(x or "")`, not `str(x)`: a JSON `null` must become "", never the
+    # literal string "None" in a title or an image prompt.
+    title = str(parsed.get("title") or "").strip() or "A Story for You"
+    characters = str(parsed.get("characters") or "").strip()
+    cover_scene = str(parsed.get("cover_scene") or "").strip()
+    # `.get("pages", [])` only defaults when the key is absent — a present
+    # `"pages": null` (or any non-list) would otherwise raise TypeError on
+    # iteration instead of flowing into the parse-failure path below.
+    raw_pages = parsed.get("pages")
+    if not isinstance(raw_pages, list):
+        raw_pages = []
     pages: List[Dict[str, str]] = []
-    for raw in parsed.get("pages", []):
+    for raw in raw_pages:
         if not isinstance(raw, dict):
             continue
-        text = str(raw.get("text", ""))
+        text = str(raw.get("text") or "")
         if not text.strip():
             continue
-        pages.append({"text": text, "scene": str(raw.get("scene", "")).strip()})
+        pages.append({"text": text, "scene": str(raw.get("scene") or "").strip()})
     if not pages:
         return None
     return {"title": title, "characters": characters, "cover_scene": cover_scene, "pages": pages}
@@ -331,6 +339,11 @@ async def _story_turn(mode_params: Dict[str, Any], selected_ids: List[str]) -> D
     try:
         story = await generate_story(digest, selected, age_range)
     except ValueError:
+        # An out-of-band story_age_range (not one of AGE_WORD_BANDS' three
+        # values) — generate_story correctly raises for this (its own
+        # tests pin that contract), but the picker never sends anything
+        # else, so this is a defensive fallback, not a user-facing input
+        # error to explain in detail.
         return {
             "type": "error",
             "message": "Something went wrong with that age range — please pick one and try again.",
@@ -338,6 +351,11 @@ async def _story_turn(mode_params: Dict[str, Any], selected_ids: List[str]) -> D
             "route": "Mode primer → story → invalid age range",
         }
     if not story["pages"]:
+        # Both the initial attempt and its one retry came back empty or
+        # unparseable — simple_completion() returns "" on any provider/
+        # network/timeout failure rather than raising, so nothing upstream
+        # would otherwise notice. Deliver an honest error instead of a
+        # confident-looking "Here's your story" message with a blank artifact.
         return {
             "type": "error",
             "message": "I couldn't write the story just now — please try again in a moment.",

@@ -57,7 +57,29 @@ def test_one_page_failure_does_not_block_the_others(client, monkeypatch, isolate
     assert items[-1]["image_url"] is not None
     assert items[0]["image_url"] is not None
     assert items[1]["image_url"] is None
-    assert items[1]["error"] == "rate limited"
+    assert items[1]["error"]
+
+
+def test_failure_is_logged_server_side_and_generic_to_the_client(
+    client, monkeypatch, isolated_image_cache, caplog,
+):
+    # Raw SDK/credential error text belongs in the operator's log, never in
+    # the response body a browser sees.
+    def failing_synthesize(prompt):
+        raise StoryIllustrationError("Gemini client unavailable: Missing key inputs argument!")
+
+    monkeypatch.setattr(api_module, "synthesize_illustration", failing_synthesize)
+
+    with caplog.at_level("WARNING", logger=api_module.logger.name):
+        resp = client.post("/story/illustrations", json={
+            "characters": "", "cover_scene": "Cover.", "page_scenes": ["Page."],
+        })
+
+    assert resp.status_code == 200
+    items = _lines(resp)
+    assert all(item["error"] == "Illustration unavailable" for item in items)
+    assert "Missing key inputs" not in resp.text
+    assert "Missing key inputs" in caplog.text
 
 
 def test_cache_hit_skips_regeneration(client, monkeypatch, isolated_image_cache):
@@ -94,11 +116,39 @@ def test_empty_page_scenes_returns_422(client, isolated_image_cache):
     assert resp.status_code == 422
 
 
-def test_blank_cover_scene_returns_422(client, isolated_image_cache):
+def test_blank_cover_scene_still_generates_a_cover(client, monkeypatch, isolated_image_cache):
+    # story_mode defaults a missing LLM `cover_scene` to "" (see
+    # test_generate_story_defaults_missing_optional_fields), so a blank
+    # cover_scene is a real, expected input — it must not 422 the whole
+    # request (which would fail every page's illustration too).
+    calls = []
+
+    def fake_synthesize(prompt):
+        calls.append(prompt)
+        return b"fake-png-bytes"
+
+    monkeypatch.setattr(api_module, "synthesize_illustration", fake_synthesize)
+
     resp = client.post("/story/illustrations", json={
-        "characters": "", "cover_scene": "   ", "page_scenes": ["A page."],
+        "characters": "Amara: curly black hair.", "cover_scene": "   ", "page_scenes": ["A page."],
     })
-    assert resp.status_code == 422
+
+    assert resp.status_code == 200
+    items = {item["index"]: item for item in _lines(resp)}
+    assert items[-1]["image_url"] and items[-1].get("error") is None
+    assert items[0]["image_url"] and items[0].get("error") is None
+    assert build_prompt("   ", "Amara: curly black hair.") in calls
+
+
+def test_response_disables_proxy_buffering(client, monkeypatch, isolated_image_cache):
+    # nginx's generic /api/ location buffers by default; without this header
+    # every illustration would arrive at once instead of progressively.
+    monkeypatch.setattr(api_module, "synthesize_illustration", lambda prompt: b"fake-png-bytes")
+    resp = client.post("/story/illustrations", json={
+        "characters": "", "cover_scene": "Cover.", "page_scenes": ["Page."],
+    })
+    assert resp.status_code == 200
+    assert resp.headers["x-accel-buffering"] == "no"
 
 
 def test_concurrency_is_bounded(client, monkeypatch, isolated_image_cache):

@@ -268,7 +268,11 @@ async def _generate_one_illustration(
         try:
             image_bytes = await asyncio.to_thread(synthesize_illustration, prompt)
         except StoryIllustrationError as exc:
-            return StoryIllustrationItem(index=index, error=str(exc))
+            # The detailed reason (SDK/credential/rate-limit text) stays in
+            # the server log for operators; the browser only needs to know
+            # this one illustration is unavailable.
+            logger.warning("Story illustration %d failed: %s", index, exc)
+            return StoryIllustrationItem(index=index, error="Illustration unavailable")
         cache_path.write_bytes(image_bytes)
         return StoryIllustrationItem(index=index, image_url=f"/story-images/{key}.png")
 
@@ -280,8 +284,12 @@ async def post_story_illustrations(request: StoryIllustrationsRequest) -> Stream
     concurrently — lines may arrive out of reading order). A single
     illustration's failure never raises; it's reported as that line's
     `error` field so every other illustration still streams through."""
-    if not request.cover_scene.strip() or not request.page_scenes:
-        raise HTTPException(status_code=422, detail="cover_scene and page_scenes must not be empty")
+    # A blank cover_scene is deliberately allowed: story_mode defaults a
+    # missing `cover_scene` from the LLM to "", and build_prompt() simply
+    # omits a blank scene, so the cover is still attempted from the style
+    # prefix + characters rather than failing every page's illustration.
+    if not request.page_scenes:
+        raise HTTPException(status_code=422, detail="page_scenes must not be empty")
 
     semaphore = asyncio.Semaphore(STORY_ILLUSTRATION_CONCURRENCY)
     tasks = [
@@ -297,7 +305,16 @@ async def post_story_illustrations(request: StoryIllustrationsRequest) -> Stream
             item = await coro
             yield item.model_dump_json() + "\n"
 
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+    # X-Accel-Buffering: nginx's generic /api/ location leaves proxy
+    # buffering on, which would hold every small NDJSON line until the whole
+    # response finished — all illustrations appearing at once instead of
+    # progressively. nginx honors this per-response header to disable
+    # buffering for just this response; Flask's /api/bible-chat proxy
+    # forwards it untouched (it only strips content-encoding/
+    # transfer-encoding/connection).
+    return StreamingResponse(
+        stream(), media_type="application/x-ndjson", headers={"X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------

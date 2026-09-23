@@ -195,6 +195,39 @@ async def test_generate_story_treats_a_reply_with_no_pages_as_empty(llm):
     assert len(llm.calls) == 2
 
 
+async def test_build_primer_treats_a_null_pages_reply_as_a_generation_failure(llm):
+    # `"pages": null` is present-but-null, so a bare `.get("pages", [])`
+    # would return None and raise TypeError on iteration — surfacing as a
+    # raw server error instead of the honest retry-then-report path an
+    # unparseable reply takes.
+    llm.state["replies"] = ['{"title": "T", "pages": null}', '{"title": "T2", "pages": null}']
+    themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
+    result = await story_mode.build_primer({
+        "story_themes": themes, "story_digest": "d", "story_selected_theme_ids": ["t1"],
+        "story_age_range": "3-6",
+    })
+    assert len(llm.calls) == 2  # retried once, exactly like an unparseable reply
+    assert result["type"] == "error"
+    assert "couldn't write the story" in result["message"].lower()
+
+
+async def test_generate_story_turns_null_string_fields_into_empty_strings(llm):
+    # str(None) is "None" — a JSON null must never leak that literal into
+    # the title or an illustration prompt.
+    llm.state["replies"] = [json.dumps({
+        "title": None, "characters": None, "cover_scene": None,
+        "pages": [{"text": "word " * 650, "scene": None}],
+    })]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert result["title"] == "A Story for You"
+    assert result["characters"] == ""
+    assert result["cover_scene"] == ""
+    assert result["pages"][0]["scene"] == ""
+    assert "None" not in json.dumps(result)
+
+
 async def test_generate_story_assigns_two_random_character_names(llm, monkeypatch):
     # Real usage showed the model reliably defaulting to "Pip" for a small
     # animal sidekick across many generated stories, since each call is a
@@ -321,6 +354,8 @@ async def test_build_primer_with_no_themes_yet_derives_them(llm):
 
 
 async def test_build_primer_reports_when_no_themes_can_be_found(llm):
+    # A genuine, successfully-parsed "no themes" classification — distinct
+    # from a hard LLM failure (see the next test).
     llm.state["replies"] = ['{"themes": [], "digest": "Small talk, nothing to draw a lesson from."}']
     result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
     assert result["type"] == "chat"
@@ -329,6 +364,9 @@ async def test_build_primer_reports_when_no_themes_can_be_found(llm):
 
 
 async def test_build_primer_reports_a_distinct_message_when_theme_derivation_fails(llm):
+    # simple_completion()'s "" sentinel on a provider error/timeout — must
+    # not be confused with a genuine "no themes" verdict (see the test
+    # above), and must still offer the caller a way to retry in place.
     llm.state["replies"] = [""]
     result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
     assert result["type"] == "chat"
@@ -383,6 +421,11 @@ async def test_build_primer_is_an_error_when_llm_is_unconfigured(monkeypatch):
 
 
 async def test_build_primer_guards_none_mode_params(monkeypatch):
+    # mode_params is Optional on ChatRequest; router.build_mode_primer
+    # already normalizes it before dispatching here, but build_primer must
+    # not itself crash if ever called directly with None — it should fall
+    # through to the empty-transcript "no themes" branch (no messages to
+    # derive from) rather than raising on a bare `.get()`.
     monkeypatch.setattr(story_mode, "llm_unconfigured_error", lambda: None)
     result = await story_mode.build_primer(None)
     assert result["type"] == "chat"
