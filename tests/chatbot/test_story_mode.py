@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from chatbot import story_mode
@@ -112,8 +114,20 @@ async def test_derive_themes_caps_at_three_even_if_the_model_returns_more(llm):
     assert len(result["themes"]) == 3
 
 
+def _story_reply(
+    title="Test", characters="Zara: red hair.", cover_scene="A cover scene.", pages=None,
+):
+    if pages is None:
+        pages = [{"text": "word " * 650, "scene": "A scene."}]
+    return json.dumps({
+        "title": title, "characters": characters, "cover_scene": cover_scene, "pages": pages,
+    })
+
+
 async def test_generate_story_uses_the_word_band_for_the_age_range(llm):
-    llm.state["replies"] = ["Title: The Brave Little Sparrow\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply(
+        title="The Brave Little Sparrow", pages=[{"text": "word " * 650, "scene": "A scene."}],
+    )]
     result = await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
     )
@@ -122,13 +136,72 @@ async def test_generate_story_uses_the_word_band_for_the_age_range(llm):
     assert len(llm.calls) == 1
 
 
+async def test_generate_story_returns_structured_pages_and_cover(llm):
+    llm.state["replies"] = [_story_reply(
+        title="A Story",
+        characters="Zara: red hair, green boots.",
+        cover_scene="Zara stands at the garden gate.",
+        pages=[
+            {"text": "word " * 300, "scene": "Scene one."},
+            {"text": "word " * 300, "scene": "Scene two."},
+        ],
+    )]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert result["characters"] == "Zara: red hair, green boots."
+    assert result["cover_scene"] == "Zara stands at the garden gate."
+    assert result["pages"] == [
+        {"text": "word " * 300, "scene": "Scene one."},
+        {"text": "word " * 300, "scene": "Scene two."},
+    ]
+    assert result["word_count"] == 600
+
+
+async def test_generate_story_defaults_missing_optional_fields(llm):
+    # A reply missing `characters`/`cover_scene`/a page's `scene` must not
+    # crash the parser — those fields degrade to "" (an illustration built
+    # from "" just skips that part of the prompt, see story_illustrations
+    # tests) rather than blocking story delivery.
+    llm.state["replies"] = ['{"title": "T", "pages": [{"text": "word word word"}]}']
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert result["title"] == "T"
+    assert result["characters"] == ""
+    assert result["cover_scene"] == ""
+    assert result["pages"][0]["scene"] == ""
+    assert len(llm.calls) == 2  # 3 words is far outside the band -> retries once
+
+
+async def test_generate_story_treats_unparseable_reply_as_empty(llm):
+    llm.state["replies"] = ["not json at all", "still not json"]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert result["pages"] == []
+    assert len(llm.calls) == 2
+
+
+async def test_generate_story_treats_a_reply_with_no_pages_as_empty(llm):
+    # Well-formed JSON, but genuinely no pages — must be treated the same
+    # as an unparseable reply (a failure to retry/report), not delivered
+    # as a titled artifact with nothing to read.
+    llm.state["replies"] = ['{"title": "T", "pages": []}', '{"title": "T2", "pages": []}']
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert result["pages"] == []
+    assert len(llm.calls) == 2
+
+
 async def test_generate_story_assigns_two_random_character_names(llm, monkeypatch):
     # Real usage showed the model reliably defaulting to "Pip" for a small
     # animal sidekick across many generated stories, since each call is a
     # fresh, stateless completion with nothing to vary against on its own.
     # The server must pick the names itself rather than trust the model.
     monkeypatch.setattr(story_mode.random, "sample", lambda pool, k: ["Zara", "Kofi"])
-    llm.state["replies"] = ["Title: Test\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply()]
     await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Sharing", "description": "..."}], "3-6"
     )
@@ -147,7 +220,7 @@ async def test_generate_story_draws_names_from_the_character_name_pool(llm, monk
         return pool[:k]
 
     monkeypatch.setattr(story_mode.random, "sample", fake_sample)
-    llm.state["replies"] = ["Title: Test\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply()]
     await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Sharing", "description": "..."}], "3-6"
     )
@@ -164,7 +237,7 @@ async def test_generate_story_prompt_for_ages_3_6_forbids_abstract_endings(llm):
     # the leaves") and a tacked-on "The lesson is..." moral — both lose a
     # 3-6-year-old even when the rest of the story lands. The prompt must
     # tell the model not to do that.
-    llm.state["replies"] = ["Title: Test\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply()]
     await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Sharing", "description": "..."}], "3-6"
     )
@@ -174,7 +247,7 @@ async def test_generate_story_prompt_for_ages_3_6_forbids_abstract_endings(llm):
 
 
 async def test_generate_story_weaves_multiple_themes_into_the_prompt(llm):
-    llm.state["replies"] = ["Title: Two Lessons\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply(title="Two Lessons")]
     themes = [
         {"id": "t1", "label": "Trusting God", "description": "..."},
         {"id": "t2", "label": "Coming home", "description": "..."},
@@ -187,8 +260,8 @@ async def test_generate_story_weaves_multiple_themes_into_the_prompt(llm):
 
 async def test_generate_story_retries_once_when_word_count_is_far_outside_the_band(llm):
     llm.state["replies"] = [
-        "Title: Too Short\n\nJust a few words.",
-        "Title: Just Right\n\n" + ("word " * 650),
+        _story_reply(title="Too Short", pages=[{"text": "Just a few words.", "scene": "A scene."}]),
+        _story_reply(title="Just Right", pages=[{"text": "word " * 650, "scene": "A scene."}]),
     ]
     result = await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
@@ -200,8 +273,8 @@ async def test_generate_story_retries_once_when_word_count_is_far_outside_the_ba
 
 async def test_generate_story_delivers_the_retry_result_even_if_still_out_of_band(llm):
     llm.state["replies"] = [
-        "Title: Too Short\n\nJust a few words.",
-        "Title: Still Short\n\nStill just a few words.",
+        _story_reply(title="Too Short", pages=[{"text": "Just a few words.", "scene": "A scene."}]),
+        _story_reply(title="Still Short", pages=[{"text": "Still just a few words.", "scene": "A scene."}]),
     ]
     result = await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
@@ -218,17 +291,24 @@ async def test_generate_story_rejects_an_unknown_age_range(llm):
     assert llm.calls == []
 
 
-@pytest.mark.parametrize("age_range,low,high", [
-    ("3-6", 500, 800), ("7-8", 800, 1200), ("9-10", 1200, 1800),
+def test_page_count_bands_are_smaller_for_younger_ages():
+    assert story_mode.PAGE_COUNT_BANDS["3-6"] < story_mode.PAGE_COUNT_BANDS["7-8"] < story_mode.PAGE_COUNT_BANDS["9-10"]
+
+
+@pytest.mark.parametrize("age_range,low,high,page_low,page_high", [
+    ("3-6", 500, 800, 5, 6), ("7-8", 800, 1200, 7, 8), ("9-10", 1200, 1800, 9, 10),
 ])
-async def test_generate_story_targets_the_right_band_per_age_range(llm, age_range, low, high):
-    llm.state["replies"] = ["Title: A Story\n\n" + ("word " * ((low + high) // 2))]
+async def test_generate_story_targets_the_right_band_per_age_range(llm, age_range, low, high, page_low, page_high):
+    llm.state["replies"] = [_story_reply(
+        title="A Story", pages=[{"text": "word " * ((low + high) // 2), "scene": "A scene."}],
+    )]
     result = await story_mode.generate_story(
         "digest", [{"id": "t1", "label": "Trust", "description": "..."}], age_range
     )
     assert len(llm.calls) == 1  # within band, no retry needed
     prompt = llm.calls[0]["user_prompt"]
     assert f"{low}-{high} words" in prompt
+    assert f"{page_low}-{page_high} pages" in prompt
 
 
 async def test_build_primer_with_no_themes_yet_derives_them(llm):
@@ -241,8 +321,6 @@ async def test_build_primer_with_no_themes_yet_derives_them(llm):
 
 
 async def test_build_primer_reports_when_no_themes_can_be_found(llm):
-    # A genuine, successfully-parsed "no themes" classification — distinct
-    # from a hard LLM failure (see the next test).
     llm.state["replies"] = ['{"themes": [], "digest": "Small talk, nothing to draw a lesson from."}']
     result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
     assert result["type"] == "chat"
@@ -251,9 +329,6 @@ async def test_build_primer_reports_when_no_themes_can_be_found(llm):
 
 
 async def test_build_primer_reports_a_distinct_message_when_theme_derivation_fails(llm):
-    # simple_completion()'s "" sentinel on a provider error/timeout — must
-    # not be confused with a genuine "no themes" verdict (see the test
-    # above), and must still offer the caller a way to retry in place.
     llm.state["replies"] = [""]
     result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
     assert result["type"] == "chat"
@@ -263,7 +338,9 @@ async def test_build_primer_reports_a_distinct_message_when_theme_derivation_fai
 
 
 async def test_build_primer_generates_the_story_once_themes_are_selected(llm):
-    llm.state["replies"] = ["Title: The Brave Sparrow\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply(
+        title="The Brave Sparrow", pages=[{"text": "word " * 650, "scene": "A scene."}],
+    )]
     themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
     result = await story_mode.build_primer({
         "story_themes": themes,
@@ -272,13 +349,16 @@ async def test_build_primer_generates_the_story_once_themes_are_selected(llm):
         "story_age_range": "3-6",
     })
     assert result["artifacts"][0]["type"] == "story"
-    assert result["artifacts"][0]["params"]["title"] == "The Brave Sparrow"
-    assert result["artifacts"][0]["params"]["themes"] == ["Trusting God"]
-    assert result["artifacts"][0]["params"]["age_range"] == "3-6"
+    params = result["artifacts"][0]["params"]
+    assert params["title"] == "The Brave Sparrow"
+    assert params["themes"] == ["Trusting God"]
+    assert params["age_range"] == "3-6"
+    assert params["cover"] == {"scene": "A cover scene.", "image_url": None}
+    assert params["pages"] == [{"text": "word " * 650, "scene": "A scene.", "image_url": None}]
 
 
 async def test_build_primer_defaults_age_range_when_missing(llm):
-    llm.state["replies"] = ["Title: A Story\n\n" + ("word " * 650)]
+    llm.state["replies"] = [_story_reply(title="A Story")]
     themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
     result = await story_mode.build_primer({
         "story_themes": themes, "story_digest": "d", "story_selected_theme_ids": ["t1"],
@@ -303,11 +383,6 @@ async def test_build_primer_is_an_error_when_llm_is_unconfigured(monkeypatch):
 
 
 async def test_build_primer_guards_none_mode_params(monkeypatch):
-    # mode_params is Optional on ChatRequest; router.build_mode_primer
-    # already normalizes it before dispatching here, but build_primer must
-    # not itself crash if ever called directly with None — it should fall
-    # through to the empty-transcript "no themes" branch (no messages to
-    # derive from) rather than raising on a bare `.get()`.
     monkeypatch.setattr(story_mode, "llm_unconfigured_error", lambda: None)
     result = await story_mode.build_primer(None)
     assert result["type"] == "chat"
@@ -315,10 +390,9 @@ async def test_build_primer_guards_none_mode_params(monkeypatch):
 
 async def test_build_primer_returns_an_error_when_the_story_comes_back_empty(llm):
     # generate_story's initial attempt AND its one retry both come back
-    # empty — simple_completion() returns "" on any provider/network/
-    # timeout failure rather than raising, and _split_title("") still
-    # yields a (title, "") pair, so nothing upstream of _story_turn would
-    # otherwise notice this is actually a failure.
+    # empty/unparseable — simple_completion() returns "" on any provider/
+    # network/timeout failure rather than raising, so nothing upstream of
+    # _story_turn would otherwise notice this is actually a failure.
     llm.state["replies"] = ["", ""]
     themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
     result = await story_mode.build_primer({

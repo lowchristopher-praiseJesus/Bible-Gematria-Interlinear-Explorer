@@ -113,6 +113,12 @@ AGE_WORD_BANDS = {
     "9-10": (1200, 1800),
 }
 
+PAGE_COUNT_BANDS = {
+    "3-6": (5, 6),
+    "7-8": (7, 8),
+    "9-10": (9, 10),
+}
+
 AGE_COMPLEXITY = {
     "3-6": (
         "Simple sentences and concrete, sensory imagery all the way "
@@ -136,9 +142,14 @@ _STORY_SYSTEM_PROMPT = (
     "characters instead — a child, an animal, or similar — the way a "
     "parable teaches through an original story rather than a dramatized "
     "retelling.\n\n"
-    "Start your reply with a single line `Title: <story title>`, a blank "
-    "line, then the story itself as plain prose (no headings, no bullet "
-    "points)."
+    "Reply with ONLY a JSON object, no markdown fence, no commentary:\n"
+    '{"title": "story title", "characters": "one line per named '
+    'character: name - brief physical appearance, for a consistent '
+    'illustration style", "cover_scene": "one sentence describing a '
+    'cover illustration for the whole story", "pages": [{"text": "this '
+    'page\'s story prose", "scene": "one sentence describing this '
+    'page\'s illustration"}]}\n'
+    "Split the story into short pages of roughly even length."
 )
 
 # Each generate_story() call is a fresh, stateless completion with no
@@ -155,28 +166,16 @@ CHARACTER_NAME_POOL = [
     "Yara", "Zeke", "Ana", "Ben", "Chiara", "Dev",
 ]
 
-_TITLE_LINE_RE = re.compile(r"^Title:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
-
-
-def _split_title(text: str) -> Dict[str, str]:
-    match = _TITLE_LINE_RE.search(text)
-    if not match:
-        return {"title": "A Story for You", "body": text.strip()}
-    title = match.group(1).strip()
-    body = text[match.end():].strip()
-    return {"title": title or "A Story for You", "body": body}
-
-
 def _story_prompt(
     digest: str, themes: List[Dict[str, str]], age_range: str, low: int, high: int,
-    name1: str, name2: str,
+    page_low: int, page_high: int, name1: str, name2: str,
 ) -> str:
     theme_lines = "\n".join(f"- {t['label']}: {t['description']}" for t in themes)
     return (
         f"CONVERSATION SUMMARY: {digest}\n\n"
         f"THEME(S) TO WEAVE INTO ONE STORY:\n{theme_lines}\n\n"
         f"TARGET READER: age {age_range}. {AGE_COMPLEXITY[age_range]}\n"
-        f"LENGTH: {low}-{high} words.\n"
+        f"LENGTH: {low}-{high} words total, across {page_low}-{page_high} pages.\n"
         f"CHARACTER NAMES: give your two main characters these names — "
         f"{name1} and {name2} — assigning each to whichever role fits (a "
         f"child, an animal, or similar). Do not use any other names for "
@@ -186,39 +185,75 @@ def _story_prompt(
     )
 
 
+def _parse_story(reply: str) -> Optional[Dict[str, Any]]:
+    if not reply:
+        return None
+    parsed = _extract_json_object(reply)
+    if not parsed:
+        return None
+    title = str(parsed.get("title", "")).strip() or "A Story for You"
+    characters = str(parsed.get("characters", "")).strip()
+    cover_scene = str(parsed.get("cover_scene", "")).strip()
+    pages: List[Dict[str, str]] = []
+    for raw in parsed.get("pages", []):
+        if not isinstance(raw, dict):
+            continue
+        text = str(raw.get("text", ""))
+        if not text.strip():
+            continue
+        pages.append({"text": text, "scene": str(raw.get("scene", "")).strip()})
+    if not pages:
+        return None
+    return {"title": title, "characters": characters, "cover_scene": cover_scene, "pages": pages}
+
+
+def _story_word_count(story: Optional[Dict[str, Any]]) -> int:
+    if not story:
+        return 0
+    return sum(len(p["text"].split()) for p in story["pages"])
+
+
 async def generate_story(digest: str, themes: List[Dict[str, str]], age_range: str) -> Dict[str, Any]:
-    """One story, sized to `age_range`'s word band, weaving every theme in
-    `themes` together. Retries once, with a corrective instruction, if the
-    word count lands far outside the target band — delivers the result
-    either way rather than blocking the user."""
+    """A structured story — title, a one-line character-appearance
+    description (for illustration consistency), a cover scene, and a list
+    of short pages ({text, scene}) — sized to age_range's word and page
+    bands and weaving every theme in `themes` together. Retries once, with
+    a corrective instruction, if the summed word count lands far outside
+    the target band — delivers the result either way rather than blocking
+    the user. An empty `pages` list in the return value signals total
+    failure (unparseable/empty reply on both attempts)."""
     if age_range not in AGE_WORD_BANDS:
         raise ValueError(f"Unknown story age range: {age_range!r}")
     low, high = AGE_WORD_BANDS[age_range]
+    page_low, page_high = PAGE_COUNT_BANDS[age_range]
     name1, name2 = random.sample(CHARACTER_NAME_POOL, 2)
 
-    prompt = _story_prompt(digest, themes, age_range, low, high, name1, name2)
-    text = await simple_completion(
+    prompt = _story_prompt(digest, themes, age_range, low, high, page_low, page_high, name1, name2)
+    reply = await simple_completion(
         _STORY_SYSTEM_PROMPT, prompt, max_tokens=2400, timeout=STORY_LLM_TIMEOUT_SECONDS,
     )
-    parts = _split_title(text)
-    word_count = len(parts["body"].split())
+    story = _parse_story(reply)
+    word_count = _story_word_count(story)
 
     # Only retry when far outside the band (30% slack either way) — a
     # story a little short or long is still delivered as-is.
-    if not (low * 0.7 <= word_count <= high * 1.3):
+    if story is None or not (low * 0.7 <= word_count <= high * 1.3):
         corrective = (
             prompt
             + f"\n\nYour previous attempt was {word_count} words. Write again, "
-            f"between {low} and {high} words this time."
+            f"between {low} and {high} words total this time."
         )
-        retry_text = await simple_completion(
+        retry_reply = await simple_completion(
             _STORY_SYSTEM_PROMPT, corrective, max_tokens=2400, timeout=STORY_LLM_TIMEOUT_SECONDS,
         )
-        if retry_text.strip():
-            parts = _split_title(retry_text)
-            word_count = len(parts["body"].split())
+        retry_story = _parse_story(retry_reply)
+        if retry_story is not None:
+            story = retry_story
+            word_count = _story_word_count(story)
 
-    return {"title": parts["title"], "text": parts["body"], "word_count": word_count}
+    if story is None:
+        return {"title": "", "characters": "", "cover_scene": "", "pages": [], "word_count": 0}
+    return {**story, "word_count": word_count}
 
 
 async def build_primer(mode_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -296,23 +331,13 @@ async def _story_turn(mode_params: Dict[str, Any], selected_ids: List[str]) -> D
     try:
         story = await generate_story(digest, selected, age_range)
     except ValueError:
-        # An out-of-band story_age_range (not one of AGE_WORD_BANDS' three
-        # values) — generate_story correctly raises for this (its own
-        # tests pin that contract), but the picker never sends anything
-        # else, so this is a defensive fallback, not a user-facing input
-        # error to explain in detail.
         return {
             "type": "error",
             "message": "Something went wrong with that age range — please pick one and try again.",
             "data": None,
             "route": "Mode primer → story → invalid age range",
         }
-    if not story["text"].strip():
-        # Both the initial attempt and its one retry came back empty —
-        # simple_completion() returns "" on any provider/network/timeout
-        # failure rather than raising, so nothing upstream would otherwise
-        # notice. Deliver an honest error instead of a confident-looking
-        # "Here's your story" message with a blank artifact.
+    if not story["pages"]:
         return {
             "type": "error",
             "message": "I couldn't write the story just now — please try again in a moment.",
@@ -332,8 +357,13 @@ async def _story_turn(mode_params: Dict[str, Any], selected_ids: List[str]) -> D
                 "title": story["title"],
                 "themes": theme_labels,
                 "age_range": age_range,
-                "text": story["text"],
                 "word_count": story["word_count"],
+                "characters": story["characters"],
+                "cover": {"scene": story["cover_scene"], "image_url": None},
+                "pages": [
+                    {"text": p["text"], "scene": p["scene"], "image_url": None}
+                    for p in story["pages"]
+                ],
             },
         }],
     }
