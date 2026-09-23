@@ -86,3 +86,71 @@ async def test_derive_themes_caps_at_three_even_if_the_model_returns_more(llm):
     ]
     result = await story_mode.derive_themes([{"role": "user", "text": "hi"}])
     assert len(result["themes"]) == 3
+
+
+async def test_generate_story_uses_the_word_band_for_the_age_range(llm):
+    llm.state["replies"] = ["Title: The Brave Little Sparrow\n\n" + ("word " * 650)]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert result["title"] == "The Brave Little Sparrow"
+    assert 600 <= result["word_count"] <= 700
+    assert len(llm.calls) == 1
+
+
+async def test_generate_story_weaves_multiple_themes_into_the_prompt(llm):
+    llm.state["replies"] = ["Title: Two Lessons\n\n" + ("word " * 650)]
+    themes = [
+        {"id": "t1", "label": "Trusting God", "description": "..."},
+        {"id": "t2", "label": "Coming home", "description": "..."},
+    ]
+    await story_mode.generate_story("digest", themes, "3-6")
+    prompt = llm.calls[0]["user_prompt"]
+    assert "Trusting God" in prompt
+    assert "Coming home" in prompt
+
+
+async def test_generate_story_retries_once_when_word_count_is_far_outside_the_band(llm):
+    llm.state["replies"] = [
+        "Title: Too Short\n\nJust a few words.",
+        "Title: Just Right\n\n" + ("word " * 650),
+    ]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert len(llm.calls) == 2
+    assert result["title"] == "Just Right"
+    assert result["word_count"] > 600
+
+
+async def test_generate_story_delivers_the_retry_result_even_if_still_out_of_band(llm):
+    llm.state["replies"] = [
+        "Title: Too Short\n\nJust a few words.",
+        "Title: Still Short\n\nStill just a few words.",
+    ]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "3-6"
+    )
+    assert len(llm.calls) == 2
+    assert result["title"] == "Still Short"
+
+
+async def test_generate_story_rejects_an_unknown_age_range(llm):
+    with pytest.raises(ValueError):
+        await story_mode.generate_story(
+            "digest", [{"id": "t1", "label": "Trust", "description": "..."}], "13-18"
+        )
+    assert llm.calls == []
+
+
+@pytest.mark.parametrize("age_range,low,high", [
+    ("3-6", 500, 800), ("7-8", 800, 1200), ("9-10", 1200, 1800),
+])
+async def test_generate_story_targets_the_right_band_per_age_range(llm, age_range, low, high):
+    llm.state["replies"] = ["Title: A Story\n\n" + ("word " * ((low + high) // 2))]
+    result = await story_mode.generate_story(
+        "digest", [{"id": "t1", "label": "Trust", "description": "..."}], age_range
+    )
+    assert len(llm.calls) == 1  # within band, no retry needed
+    prompt = llm.calls[0]["user_prompt"]
+    assert f"{low}-{high} words" in prompt

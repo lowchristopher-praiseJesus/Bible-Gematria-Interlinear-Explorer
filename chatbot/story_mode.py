@@ -93,3 +93,86 @@ async def derive_themes(source_messages: List[Dict[str, str]]) -> Dict[str, Any]
 
     digest = str(parsed.get("digest", "")).strip()
     return {"themes": themes, "digest": digest}
+
+
+AGE_WORD_BANDS = {
+    "3-6": (500, 800),
+    "7-8": (800, 1200),
+    "9-10": (1200, 1800),
+}
+
+AGE_COMPLEXITY = {
+    "3-6": "Simple sentences, concrete imagery, and one clear lesson stated plainly.",
+    "7-8": "Slightly longer sentences, a light subplot, and gentle vocabulary growth.",
+    "9-10": (
+        "A fuller plot with some dialogue, richer vocabulary, and a lesson "
+        "shown through the story rather than stated outright."
+    ),
+}
+
+_STORY_SYSTEM_PROMPT = (
+    "You write short, warm, original children's stories that illustrate a "
+    "lesson from a Bible conversation, without retelling the Bible "
+    "passage itself or naming any real biblical figure. Invent your own "
+    "characters instead — a child, an animal, or similar — the way a "
+    "parable teaches through an original story rather than a dramatized "
+    "retelling.\n\n"
+    "Start your reply with a single line `Title: <story title>`, a blank "
+    "line, then the story itself as plain prose (no headings, no bullet "
+    "points)."
+)
+
+_TITLE_LINE_RE = re.compile(r"^Title:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+
+
+def _split_title(text: str) -> Dict[str, str]:
+    match = _TITLE_LINE_RE.search(text)
+    if not match:
+        return {"title": "A Story for You", "body": text.strip()}
+    title = match.group(1).strip()
+    body = text[match.end():].strip()
+    return {"title": title or "A Story for You", "body": body}
+
+
+def _story_prompt(digest: str, themes: List[Dict[str, str]], age_range: str, low: int, high: int) -> str:
+    theme_lines = "\n".join(f"- {t['label']}: {t['description']}" for t in themes)
+    return (
+        f"CONVERSATION SUMMARY: {digest}\n\n"
+        f"THEME(S) TO WEAVE INTO ONE STORY:\n{theme_lines}\n\n"
+        f"TARGET READER: age {age_range}. {AGE_COMPLEXITY[age_range]}\n"
+        f"LENGTH: {low}-{high} words."
+    )
+
+
+async def generate_story(digest: str, themes: List[Dict[str, str]], age_range: str) -> Dict[str, Any]:
+    """One story, sized to `age_range`'s word band, weaving every theme in
+    `themes` together. Retries once, with a corrective instruction, if the
+    word count lands far outside the target band — delivers the result
+    either way rather than blocking the user."""
+    if age_range not in AGE_WORD_BANDS:
+        raise ValueError(f"Unknown story age range: {age_range!r}")
+    low, high = AGE_WORD_BANDS[age_range]
+
+    prompt = _story_prompt(digest, themes, age_range, low, high)
+    text = await simple_completion(
+        _STORY_SYSTEM_PROMPT, prompt, max_tokens=2400, timeout=STORY_LLM_TIMEOUT_SECONDS,
+    )
+    parts = _split_title(text)
+    word_count = len(parts["body"].split())
+
+    # Only retry when far outside the band (30% slack either way) — a
+    # story a little short or long is still delivered as-is.
+    if not (low * 0.7 <= word_count <= high * 1.3):
+        corrective = (
+            prompt
+            + f"\n\nYour previous attempt was {word_count} words. Write again, "
+            f"between {low} and {high} words this time."
+        )
+        retry_text = await simple_completion(
+            _STORY_SYSTEM_PROMPT, corrective, max_tokens=2400, timeout=STORY_LLM_TIMEOUT_SECONDS,
+        )
+        if retry_text.strip():
+            parts = _split_title(retry_text)
+            word_count = len(parts["body"].split())
+
+    return {"title": parts["title"], "text": parts["body"], "word_count": word_count}
