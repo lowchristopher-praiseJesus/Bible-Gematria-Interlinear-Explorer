@@ -161,18 +161,27 @@ conversation without mutating it.
 No new SSE event types are introduced. `story` reuses `final` (and
 `trace`) exactly as the non-streaming/simple modes do — there is no
 multi-phase progress to report (unlike Deep Study's `phase` events), since
-each turn is exactly one LLM call. The buffered `/chat` and streaming
-`/chat/stream` paths get mirrored `mode == "story"` branches in
-`chatbot/api.py`, matching every other mode's pattern.
+each turn is exactly one LLM call.
 
-Routing within the `story` branch needs no extra marker field:
+**Shipped differently than originally planned here: no `chatbot/api.py`
+changes at all.** Every Tell a Story turn sends an empty `message`
+(the trigger, the theme/age submission, and "Try again"), and both
+`post_chat` and `_stream_chat_response` already route *any* empty-message
+request straight to `router.build_mode_primer()` before reaching any
+mode-specific branch — so a dedicated `mode == "story"` branch in
+`api.py` would be dead code. All routing lives inside
+`story_mode.build_primer()`, reached via `router.py`'s existing
+dispatcher.
+
+Routing within `build_primer()` needs no extra marker field:
 
 ```
-mode == 'story' and message == '' and 'source_messages' in request
-    → primer / derive_themes branch
+mode_params.get('story_selected_theme_ids') is falsy
+    → theme-derivation branch (reads mode_params.source_messages)
 
-mode == 'story' and message == '' and mode_params.storySelectedThemeIds present
-    → generation / generate_story branch
+mode_params.get('story_selected_theme_ids') is truthy
+    → story-generation branch (reads mode_params.story_themes /
+      story_digest / story_age_range)
 ```
 
 ### Why a bespoke theme picker, not `MessageChoice`
@@ -220,33 +229,65 @@ enforcement.
   `hermeneutics.answer`/`hermeneutics.stream`, dispatching between the two
   functions above per the Transport routing rule.
 
-### `chatbot/api.py`
-- Mirrored `mode == "story"` branches added to `post_chat` and
-  `_stream_chat_response`, alongside the existing `socratic`/`character`/
-  `hermeneutics` branches.
+### `chatbot/api.py` — unchanged, no `story` branch
+
+**Shipped differently than originally planned here.** Both `post_chat` and
+`_stream_chat_response` already route *any* empty-message request straight
+to `router.build_mode_primer(request.mode, request.mode_params)` before
+reaching any mode-specific branch. Since every Tell a Story turn (the
+trigger, the theme/age submission, and "Try again") sends an empty
+`message`, 100% of its traffic is already dispatched there — a dedicated
+`mode == "story"` branch in `api.py` would be dead code. See
+`tests/chatbot/test_chat_endpoint_story.py`, which locks this routing
+behavior on both `/chat` and `/chat/stream`.
 
 ### `chatbot/router.py`
 - `build_mode_primer` gains a `mode == "story"` branch calling
-  `story_mode.derive_themes`.
+  `story_mode.build_primer(mode_params)`, which internally dispatches
+  between theme derivation and story generation (see Architecture).
 
-### `chatbot/schemas.py`
-- `ChatRequest.source_messages: Optional[List[HistoryMessage]]` — new,
-  separate from `history` (which stays capped at the last 6 turns by
-  convention elsewhere and is not reused here).
-- `ChatResponse.story_themes: Optional[List[StoryTheme]]` where
-  `StoryTheme = {id: str, label: str, description: str}`.
-- `ArtifactLink` gains `'story'` to its `type` union;
-  `StoryArtifactParams = {title: str, themes: List[str], ageRange: str,
-  text: str, wordCount: int}`.
+### `chatbot/schemas.py` — no changes
+
+**Shipped differently than originally planned here.** `mode_params:
+Dict[str, Any]` and `data: Optional[Dict[str, Any]]` are already
+free-form on both `ChatRequest` and `ChatResponse` (the same pattern
+`run_digest`/`scope_chapter` and `data.reference`/`data.runDigest` already
+use for Deep Study) — the transcript, themes and digest all travel
+through those existing fields instead of new typed schema fields:
+- The one-time transcript travels as `mode_params.source_messages`
+  (`List[{"role": str, "text": str}]`), sent only on the primer call.
+- The derived themes travel as `data.themes` (`List[{id, label,
+  description}]`) and the digest as `data.digest`, both inside the
+  primer response's existing `data` field.
+- `ArtifactLink.type` needed no schema change at all — it's a plain
+  `str` field with no enum/Literal constraint, so `'story'` is already a
+  valid value; only its description string was updated for
+  documentation.
+- The `story`-type artifact's `params` dict uses `{title: str, themes:
+  List[str], age_range: str, text: str, word_count: int}` —
+  **snake_case**, matching the Python dict verbatim, since `ArtifactLink`
+  params are never passed through the frontend's camelCase wire mapping
+  (see below).
 
 ### `frontend/src/types/session.ts`
-- `ModeParams` gains `storyDigest?`, `storyThemes?: StoryTheme[]`,
-  `storySelectedThemeIds?: string[]`,
+- `ModeParams` gains `storyThemes?: {id, label, description}[]`,
+  `storyDigest?`, `storySelectedThemeIds?: string[]`,
   `storyAgeRange?: '3-6' | '7-8' | '9-10'`, `storySourceSessionId?`,
-  `storySourceLabel?`.
+  `storySourceLabel?`, and `storySourceMessages?` (the ephemeral,
+  never-persisted transcript field sent only on the primer call).
 - `ArtifactLink` union gains `'story'`; `StoryArtifactParams` interface
-  added (including `ageRange`, so a delivered story's artifact records
-  which band it was written for).
+  added with **snake_case** fields (`title`, `themes`, `age_range`,
+  `text`, `word_count`) matching the backend dict verbatim — deliberately
+  not camelCase, since `ArtifactLink.params` bypasses `toWireModeParams`
+  (that mapper only applies to outgoing `mode_params`, never to artifact
+  params already received from a response).
+- `frontend/src/lib/chatApi.ts`'s `toWireModeParams` gains explicit
+  camelCase→snake_case mappings for `storyThemes`, `storyDigest`,
+  `storySelectedThemeIds`, `storyAgeRange`, and `storySourceMessages`
+  (→ `source_messages`, not `story_source_messages`) — the two
+  frontend-only bookkeeping fields (`storySourceSessionId`,
+  `storySourceLabel`, never read by the backend) pass through the
+  mapper's `default` case unchanged.
 
 ### `frontend/src/components/shell/SessionPickerScreen.tsx` (new)
 Sibling of `CharacterPickerScreen`: lists past sessions with at least one
@@ -259,22 +300,45 @@ Adds a "Tell a Story" tile that opens `SessionPickerScreen` instead of
 calling `startSession` directly (since this mode always needs a source
 conversation, never a bare primer).
 
-### `frontend/src/components/chat/ChatPane.tsx`
-Adds a "Tell a Story from this conversation" icon-button to the
-per-message toolbar (next to the existing Copy/Regenerate buttons on the
-last assistant message), hidden when `session.messages.length === 0`.
-Clicking it runs the same `createSession('story', ...)` flow, using the
-*current* session as the source, then navigates to the new session.
+### `frontend/src/components/shell/ChatPane.tsx`
+Adds a "Tell a Story" button to the header toolbar (next to the existing
+Share/Report buttons), hidden entirely when `session.mode === 'story'`
+and disabled when `session.messages.length === 0`. Clicking it runs the
+shared `startTellAStory()` helper (`frontend/src/lib/tellAStory.ts`, new)
+using the *current* session as the source, then navigates to the new
+session via a new optional `onNavigateToSession` prop threaded from
+`App.tsx`.
 
-### `frontend/src/components/chat/ThemePicker.tsx` (new)
+### `frontend/src/lib/tellAStory.ts` (new)
+`startTellAStory(deps, sourceSession): Promise<string>` — shared by both
+entry points (the `ChatPane` trigger and `SessionPickerScreen`, below).
+Creates the new `story` session, snapshots the source session's
+transcript via the shared `frontend/src/lib/history.ts::toHistory()`
+helper (extracted from `ChatPane.tsx`, which used to define it locally,
+so both consumers get the same devotional-placeholder-swap logic), fires
+the primer call, and stores the derived themes/digest into the new
+session's `modeParams`.
+
+### `frontend/src/components/shell/ThemePicker.tsx` (new)
 Renders `modeParams.storyThemes` as checkboxes (not radio buttons)
 alongside a three-way age-range radio group (3–6 / 7–8 / 9–10, defaulting
 to 3–6), and a "Make my story" / "Try again" submit button (label depends
 on whether a story has already been generated for the current
 selection). Stays mounted and interactive after a story is delivered so
-the user can change their theme and/or age selection. Loading/error
-states mirror `choicesStatus`'s `'loading'`/`'error'` treatment (spinner
-text; Retry button that re-fires the primer call).
+the user can change their theme and/or age selection.
+
+**Theme-derivation failure/retry is handled separately from `ThemePicker`
+itself** (added in the post-implementation fix wave, see Error handling):
+a failed primer turn is *not* rendered onto the `MessageChoice`/
+`choicesStatus` machinery (that would touch Parable/Topical Study's
+existing single-pick-and-lock contract). Instead the primer response
+carries `data.themesRetry: true`, `ChatPane.tsx` renders a plain Retry
+button under that message, and clicking it re-derives themes against the
+*live* source session's current transcript (via `tellAStory.ts`'s
+exported `deriveStoryThemes()`) and updates the same message in place —
+so `ThemePicker` mounts under it exactly as it would on a first
+successful attempt. `data.themesRetry` and `data.themes` are mutually
+exclusive across every response shape, so the two never render at once.
 
 ### `frontend/src/components/artifacts/StoryArtifact.tsx` (new)
 Mirrors `DevotionalArtifact.tsx`: header with title, theme chips, and an
@@ -298,17 +362,18 @@ User in a Socratic session about the Prodigal Son clicks
 "Tell a Story from this conversation"
   │
   ▼
-createSession('story', {storySourceSessionId, storySourceLabel})
-  + POST /chat  { message:'', mode:'story', mode_params:{},
-                  source_messages: <capped session.messages> }
+startTellAStory(deps, sourceSession)
+  → createSession('story', {storySourceSessionId, storySourceLabel})
+  + POST /chat  { message:'', mode:'story',
+                  mode_params:{storySourceMessages: <capped transcript>} }
   │
   ▼
-router.build_mode_primer('story', ...)
-  → story_mode.derive_themes(source_messages)
-  → 1 LLM call → {themes:[3], digest:"..."}
+router.build_mode_primer('story', mode_params)
+  → story_mode.build_primer(mode_params)
+  → derive_themes(source_messages)  [1 LLM call] → {themes:[…], digest:"…"}
   │
   ▼
-ChatResponse{ story_themes:[...] }
+ChatResponse{ data: {themes:[…], digest:"…"} }
   → frontend stores storyThemes+storyDigest into session.modeParams
   → renders ThemePicker
   │
@@ -317,17 +382,16 @@ User checks "God's patience" + "coming home is always possible",
 picks age range "7-8"
   → "Make my story"
   → POST /chat { message:'', mode:'story',
-                 mode_params:{storyDigest, storyThemes,
+                 mode_params:{storyThemes, storyDigest,
                               storySelectedThemeIds, storyAgeRange:'7-8'} }
   │
   ▼
-api.py: mode=='story', message=='', storySelectedThemeIds present,
-        no source_messages in this request
-  → story_mode.generate_story(digest, selected themes, '7-8')
-  → 1 LLM call, word count checked against AGE_WORD_BANDS['7-8']
-    (retry once if far off)
+build_primer: story_selected_theme_ids present, no source_messages
+  → generate_story(digest, selected themes, '7-8')  [1 LLM call]
+  → word count checked against AGE_WORD_BANDS['7-8'] (retry once if far off)
   → ChatResponse{ message: short intro,
-                   artifacts:[{type:'story', params:{..., ageRange:'7-8'}}] }
+                   artifacts:[{type:'story',
+                               params:{…, age_range:'7-8', word_count:…}}] }
   │
   ▼
 Frontend appends assistant message + "Read the story ▸" pill
@@ -351,33 +415,58 @@ resend identical mode_params      updateModeParams(storySelectedThemeIds,
 ```
 
 Past-conversation entry point is identical from `createSession` onward;
-the only difference is that `storySourceSessionId`/`source_messages` come
-from `SessionPickerScreen`'s selection rather than the currently open
-session.
+the only difference is that `startTellAStory`'s `sourceSession` argument
+comes from `SessionPickerScreen`'s selection rather than the currently
+open session.
 
 ## Error handling
 
 - **Empty source conversation** — the trigger button is hidden/disabled
   when `session.messages.length === 0`, and `SessionPickerScreen` filters
   such sessions out of its list, so the backend never receives this case.
-- **`derive_themes` fails or returns unparseable output** — the primer
-  response carries `story_themes: null` and a message such as "Couldn't
-  find a story in this conversation yet — try chatting a bit more first."
-  The frontend shows the existing `choicesStatus:'error'` + Retry
-  treatment (re-fires the primer call).
+- **`derive_themes` gets no usable LLM reply** (empty string — every
+  provider/network/timeout failure `simple_completion` can hit — or
+  unparseable JSON) — returns `themes: None` (distinct from `[]`, added
+  in the post-implementation fix wave), and `_themes_turn` replies "The
+  story engine is having trouble right now — please try again in a
+  moment." with `data: {themesRetry: true}`.
+- **`derive_themes` succeeds but genuinely finds no themes** — a
+  well-formed reply with an empty themes list — returns `themes: []`,
+  and `_themes_turn` replies "Couldn't find a story in this conversation
+  yet — try chatting a bit more first.", also carrying
+  `data: {themesRetry: true}` so the same Retry affordance is offered
+  either way (the user can't tell these apart, and doesn't need to — see
+  the `ThemePicker` component note above for what Retry does).
 - **Fewer than 3 themes found** — returns however many are genuine
   (minimum 1); never padded with filler themes.
-- **Story far outside the 500–800 word band** — one automatic retry with
-  a corrective instruction appended to the prompt; delivered regardless of
-  outcome after the retry (word count is a soft target, not a hard gate,
-  so a user is never blocked from getting a story).
+- **`generate_story` returns an empty story after its retry** (the
+  underlying LLM call failed both times — `simple_completion` never
+  raises, only returns `""` on any failure) — added in the fix wave:
+  `_story_turn` checks the final text is non-empty before building a
+  `story` artifact, and returns a plain chat-type error ("I couldn't
+  write the story just now — please try again in a moment.") instead of
+  delivering a confident-looking empty story.
+- **Story far outside the target word band, but non-empty** — one
+  automatic retry with a corrective instruction appended to the prompt;
+  delivered regardless of outcome after the retry (word count is a soft
+  target, not a hard gate, so a user is never blocked from getting a
+  story it did manage to write).
 - **Story names a real biblical figure despite the prompt's instruction
   not to** — no automated detection or rewrite is built for this (unlike
   `character_chat.py`'s persona-leak rewriter); this is a known limitation
   of prompt-only enforcement, accepted for v1.
-- **Ollama/network failure on either call** — falls through to the
-  generic error handling `api.py` already applies to every other mode's
-  LLM calls; no new handling needed.
+- **An unrecognized `story_age_range`** (a malformed or stale client
+  value not in `AGE_WORD_BANDS`) — `generate_story` still raises
+  `ValueError` (its own tested contract is unchanged), but `_story_turn`
+  now catches it and returns a graceful chat-type error instead of
+  letting it surface as a 500 — added in the fix wave.
+- **`mode_params` missing entirely** (a `POST /chat` with `mode: "story"`
+  and no `mode_params` key at all) — `build_primer` normalizes to `{}`
+  before reading any key, matching `router.build_mode_primer`'s own
+  pattern — added in the fix wave.
+- **Ollama/network failure on either call** — folds into the two cases
+  above (an LLM failure during theme derivation or story generation is
+  handled explicitly, not left to a generic fallback).
 
 ## Testing
 
