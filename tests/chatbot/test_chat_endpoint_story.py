@@ -65,6 +65,15 @@ def test_chat_stream_with_empty_message_dispatches_to_story_build_primer(client,
     assert final["result"]["artifacts"][0]["type"] == "story"
 
 
+def test_empty_message_story_mode_with_no_mode_params_key_does_not_500(client):
+    # ChatRequest.mode_params is Optional and defaults to None — a request
+    # that omits the key entirely must not 500 (see story_mode.build_primer's
+    # own mode_params=None guard).
+    res = client.post("/chat", json={"message": "", "mode": "story"})
+    assert res.status_code == 200
+    assert res.json()["type"] == "chat"
+
+
 def test_a_non_empty_message_in_story_mode_still_reaches_build_mode_primer(client, monkeypatch):
     # Tell a Story never sends a non-empty message in this plan, but the
     # mode should not silently fall through to the generic AI-fallback

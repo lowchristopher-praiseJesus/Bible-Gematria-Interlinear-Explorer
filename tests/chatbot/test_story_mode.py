@@ -63,10 +63,34 @@ async def test_derive_themes_caps_long_transcripts(llm):
     assert "message 0" not in sent
 
 
-async def test_derive_themes_returns_empty_on_unparseable_reply(llm):
+async def test_derive_themes_returns_none_on_unparseable_reply(llm):
+    # An unparseable reply means the LLM call didn't do its job — this is
+    # a "the call failed" case, not "the model looked and found nothing",
+    # so it must be distinguishable from a genuine empty classification
+    # (see test_derive_themes_returns_empty_on_a_genuine_no_themes_reply).
     llm.state["replies"] = ["not json at all"]
     result = await story_mode.derive_themes([{"role": "user", "text": "hi"}])
+    assert result["themes"] is None
+
+
+async def test_derive_themes_returns_none_on_empty_llm_reply(llm):
+    # simple_completion() returns "" on ANY provider error, HTTP failure,
+    # or timeout — never raises — so this is the shape a hard failure
+    # actually takes on the wire.
+    llm.state["replies"] = [""]
+    result = await story_mode.derive_themes([{"role": "user", "text": "hi"}])
+    assert result["themes"] is None
+
+
+async def test_derive_themes_returns_empty_on_a_genuine_no_themes_reply(llm):
+    # A well-formed, successfully-parsed reply that genuinely lists no
+    # themes is a real verdict, not a failure — must stay [] so callers
+    # don't offer a pointless "try again" for the identical (correct)
+    # answer.
+    llm.state["replies"] = ['{"themes": [], "digest": "Small talk, nothing to draw a lesson from."}']
+    result = await story_mode.derive_themes([{"role": "user", "text": "hi"}])
     assert result["themes"] == []
+    assert result["digest"]
 
 
 async def test_derive_themes_returns_empty_for_no_messages(llm):
@@ -166,11 +190,25 @@ async def test_build_primer_with_no_themes_yet_derives_them(llm):
 
 
 async def test_build_primer_reports_when_no_themes_can_be_found(llm):
-    llm.state["replies"] = [""]
+    # A genuine, successfully-parsed "no themes" classification — distinct
+    # from a hard LLM failure (see the next test).
+    llm.state["replies"] = ['{"themes": [], "digest": "Small talk, nothing to draw a lesson from."}']
     result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
     assert result["type"] == "chat"
     assert "couldn't find a story" in result["message"].lower()
-    assert result["data"] is None
+    assert result["data"] == {"themesRetry": True}
+
+
+async def test_build_primer_reports_a_distinct_message_when_theme_derivation_fails(llm):
+    # simple_completion()'s "" sentinel on a provider error/timeout — must
+    # not be confused with a genuine "no themes" verdict (see the test
+    # above), and must still offer the caller a way to retry in place.
+    llm.state["replies"] = [""]
+    result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
+    assert result["type"] == "chat"
+    assert "trouble right now" in result["message"].lower()
+    assert "couldn't find a story" not in result["message"].lower()
+    assert result["data"] == {"themesRetry": True}
 
 
 async def test_build_primer_generates_the_story_once_themes_are_selected(llm):
@@ -211,3 +249,41 @@ async def test_build_primer_is_an_error_when_llm_is_unconfigured(monkeypatch):
     monkeypatch.setattr(story_mode, "llm_unconfigured_error", lambda: "LLM not configured.")
     result = await story_mode.build_primer({"source_messages": [{"role": "user", "text": "hi"}]})
     assert result["type"] == "error"
+
+
+async def test_build_primer_guards_none_mode_params(monkeypatch):
+    # mode_params is Optional on ChatRequest; router.build_mode_primer
+    # already normalizes it before dispatching here, but build_primer must
+    # not itself crash if ever called directly with None — it should fall
+    # through to the empty-transcript "no themes" branch (no messages to
+    # derive from) rather than raising on a bare `.get()`.
+    monkeypatch.setattr(story_mode, "llm_unconfigured_error", lambda: None)
+    result = await story_mode.build_primer(None)
+    assert result["type"] == "chat"
+
+
+async def test_build_primer_returns_an_error_when_the_story_comes_back_empty(llm):
+    # generate_story's initial attempt AND its one retry both come back
+    # empty — simple_completion() returns "" on any provider/network/
+    # timeout failure rather than raising, and _split_title("") still
+    # yields a (title, "") pair, so nothing upstream of _story_turn would
+    # otherwise notice this is actually a failure.
+    llm.state["replies"] = ["", ""]
+    themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
+    result = await story_mode.build_primer({
+        "story_themes": themes, "story_digest": "d", "story_selected_theme_ids": ["t1"],
+        "story_age_range": "3-6",
+    })
+    assert result["type"] == "error"
+    assert "couldn't write the story" in result["message"].lower()
+    assert "artifacts" not in result or not result.get("artifacts")
+
+
+async def test_build_primer_returns_an_error_for_an_unrecognized_age_range_instead_of_raising(llm):
+    themes = [{"id": "t1", "label": "Trusting God", "description": "..."}]
+    result = await story_mode.build_primer({
+        "story_themes": themes, "story_digest": "d", "story_selected_theme_ids": ["t1"],
+        "story_age_range": "not-a-real-range",
+    })
+    assert result["type"] == "error"
+    assert llm.calls == []

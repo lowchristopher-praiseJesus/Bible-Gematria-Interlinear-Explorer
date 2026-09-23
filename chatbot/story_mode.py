@@ -58,7 +58,16 @@ def _transcript_for(source_messages: List[Dict[str, str]]) -> str:
 async def derive_themes(source_messages: List[Dict[str, str]]) -> Dict[str, Any]:
     """Up to 3 {id, label, description} themes plus a compact digest of the
     conversation, from one LLM call. Never pads to 3 with filler — a thin
-    conversation returns however many themes are genuinely there."""
+    conversation returns however many themes are genuinely there.
+
+    `themes` is tri-state, so callers can tell "the call itself failed" from
+    "the model looked and genuinely found nothing":
+      - `[]` — a genuine, successfully-parsed classification with no themes
+        (or no source conversation to look at at all).
+      - `None` — the LLM call errored/timed out (simple_completion's `""`
+        sentinel) or its reply couldn't be parsed as the expected JSON —
+        both are "the call didn't do its job", not "no themes exist".
+    """
     transcript = _transcript_for(source_messages)
     if not transcript.strip():
         return {"themes": [], "digest": ""}
@@ -69,9 +78,11 @@ async def derive_themes(source_messages: List[Dict[str, str]]) -> Dict[str, Any]
         max_tokens=800,
         timeout=STORY_LLM_TIMEOUT_SECONDS,
     )
-    parsed = _extract_json_object(reply) if reply else None
+    if not reply:
+        return {"themes": None, "digest": ""}
+    parsed = _extract_json_object(reply)
     if not parsed:
-        return {"themes": [], "digest": ""}
+        return {"themes": None, "digest": ""}
 
     themes: List[Dict[str, str]] = []
     seen_ids = set()
@@ -178,12 +189,18 @@ async def generate_story(digest: str, themes: List[Dict[str, str]], age_range: s
     return {"title": parts["title"], "text": parts["body"], "word_count": word_count}
 
 
-async def build_primer(mode_params: Dict[str, Any]) -> Dict[str, Any]:
+async def build_primer(mode_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """The mode's whole turn structure: every Tell a Story request is an
     empty-message call (theme derivation, then "Make my story"/"Try
     again"), so this single entry point — reached from
     router.build_mode_primer on every turn — decides which by whether the
     user has already picked themes."""
+    # router.build_mode_primer already normalizes mode_params before
+    # dispatching here, but this function is also exercised directly (by
+    # its own tests, and potentially future callers), so it guards
+    # `mode_params=None` itself too — matching the same pattern
+    # build_mode_primer uses at its own top.
+    mode_params = mode_params or {}
     llm_error = llm_unconfigured_error()
     if llm_error:
         return {
@@ -200,11 +217,24 @@ async def build_primer(mode_params: Dict[str, Any]) -> Dict[str, Any]:
 async def _themes_turn(mode_params: Dict[str, Any]) -> Dict[str, Any]:
     source_messages = mode_params.get("source_messages") or []
     result = await derive_themes(source_messages)
+    if result["themes"] is None:
+        # The LLM call itself failed or returned something unusable — a
+        # transient/infra problem, not a verdict on the conversation. Say
+        # so distinctly from the "genuinely no themes" case below, and
+        # flag `themesRetry` so the frontend can offer a Retry affordance
+        # in place rather than forcing the user to abandon this story
+        # session and start a new one from scratch.
+        return {
+            "type": "chat",
+            "message": "The story engine is having trouble right now — please try again in a moment.",
+            "data": {"themesRetry": True},
+            "route": "Mode primer → story → theme derivation failed",
+        }
     if not result["themes"]:
         return {
             "type": "chat",
             "message": "Couldn't find a story in this conversation yet — try chatting a bit more first.",
-            "data": None,
+            "data": {"themesRetry": True},
             "route": "Mode primer → story → no themes",
         }
     return {
@@ -231,7 +261,32 @@ async def _story_turn(mode_params: Dict[str, Any], selected_ids: List[str]) -> D
         }
     age_range = mode_params.get("story_age_range") or "3-6"
     digest = mode_params.get("story_digest") or ""
-    story = await generate_story(digest, selected, age_range)
+    try:
+        story = await generate_story(digest, selected, age_range)
+    except ValueError:
+        # An out-of-band story_age_range (not one of AGE_WORD_BANDS' three
+        # values) — generate_story correctly raises for this (its own
+        # tests pin that contract), but the picker never sends anything
+        # else, so this is a defensive fallback, not a user-facing input
+        # error to explain in detail.
+        return {
+            "type": "error",
+            "message": "Something went wrong with that age range — please pick one and try again.",
+            "data": None,
+            "route": "Mode primer → story → invalid age range",
+        }
+    if not story["text"].strip():
+        # Both the initial attempt and its one retry came back empty —
+        # simple_completion() returns "" on any provider/network/timeout
+        # failure rather than raising, so nothing upstream would otherwise
+        # notice. Deliver an honest error instead of a confident-looking
+        # "Here's your story" message with a blank artifact.
+        return {
+            "type": "error",
+            "message": "I couldn't write the story just now — please try again in a moment.",
+            "data": None,
+            "route": "Mode primer → story → generation failed",
+        }
     theme_labels = [t["label"] for t in selected]
     return {
         "type": "chat",
