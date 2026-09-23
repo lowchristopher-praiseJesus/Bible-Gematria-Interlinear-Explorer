@@ -190,4 +190,15 @@ describe('useArtifactStore', () => {
     expect(state.status).toBe('ready')
     expect((state.data as { reference: string }).reference).toBe('ROM 8:1')
   })
+
+  it('resolves a story artifact synchronously from its params (no fetch)', async () => {
+    const link = {
+      type: 'story' as const,
+      label: 'Read the story ▸',
+      params: { title: 'T', themes: ['Trust'], age_range: '3-6', text: '...', word_count: 650 },
+    }
+    await useArtifactStore.getState().openArtifact(link)
+    expect(useArtifactStore.getState().status).toBe('ready')
+    expect(useArtifactStore.getState().data).toEqual(link.params)
+  })
 })
