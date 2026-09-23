@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ChatPane } from './ChatPane'
 import { useSessionsStore } from '@/store/useSessionsStore'
@@ -1416,5 +1416,80 @@ describe('ChatPane', () => {
 
     await screen.findByText('Sure, go ahead.')
     expect(speak).not.toHaveBeenCalled()
+  })
+
+  describe('Tell a Story', () => {
+    it('shows the "Tell a Story" button only when the session has messages, and hides it inside a story session', () => {
+      const empty = useSessionsStore.getState().createSession('freeform', {})
+      const { rerender } = render(<ChatPane sessionId={empty.id} />)
+      expect(screen.queryByRole('button', { name: /tell a story/i })).toBeDisabled()
+
+      useSessionsStore.getState().appendMessage(empty.id, { id: 'm1', role: 'assistant', text: 'Hi.' })
+      rerender(<ChatPane sessionId={empty.id} />)
+      expect(screen.getByRole('button', { name: /tell a story/i })).toBeEnabled()
+
+      const story = useSessionsStore.getState().createSession('story', {})
+      useSessionsStore.getState().appendMessage(story.id, { id: 'm1', role: 'assistant', text: 'Hi.' })
+      rerender(<ChatPane sessionId={story.id} />)
+      expect(screen.queryByRole('button', { name: /tell a story/i })).not.toBeInTheDocument()
+    })
+
+    it('clicking "Tell a Story" creates a new story session and navigates to it', async () => {
+      const source = useSessionsStore.getState().createSession('socratic', {})
+      useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'Tell me about the prodigal son.' })
+      vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+        type: 'chat', message: "Here's what stood out…",
+        data: { themes: [{ id: 't1', label: 'Trust', description: 'desc' }], digest: 'a digest' },
+      })
+      const onNavigateToSession = vi.fn()
+
+      render(<ChatPane sessionId={source.id} onNavigateToSession={onNavigateToSession} />)
+      await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
+
+      // The new session is created and populated even though this ChatPane
+      // instance is still showing `source` (App.tsx is what actually swaps
+      // the `sessionId` prop once onNavigateToSession fires) — assert on
+      // the store directly rather than on this instance's rendered DOM.
+      // `waitFor` here is `@testing-library/react`'s — add it to this
+      // file's existing `@testing-library/react` import if not already
+      // imported.
+      await waitFor(() => expect(onNavigateToSession).toHaveBeenCalled())
+      const newSessionId = onNavigateToSession.mock.calls[0][0]
+      const newSession = useSessionsStore.getState().sessions[newSessionId]
+      expect(newSession.mode).toBe('story')
+      expect(newSession.modeParams.storyThemes).toEqual([{ id: 't1', label: 'Trust', description: 'desc' }])
+      expect(newSession.messages[1]).toMatchObject({ role: 'assistant', text: "Here's what stood out…" })
+    })
+
+    it('submitting the ThemePicker generates a story and appends it as a new message', async () => {
+      const story = useSessionsStore.getState().createSession('story', {
+        storyThemes: [{ id: 't1', label: 'Trust', description: 'desc' }],
+        storyDigest: 'a digest', storySelectedThemeIds: [], storyAgeRange: '3-6',
+      })
+      useSessionsStore.getState().appendMessage(story.id, {
+        id: 'primer', role: 'assistant', text: "Here's what stood out…",
+        data: { themes: [{ id: 't1', label: 'Trust', description: 'desc' }], digest: 'a digest' },
+      })
+      const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+        type: 'chat', message: 'Here is your story — **The Brave Sparrow**.',
+        artifacts: [{ type: 'story', label: 'Read the story ▸', params: { title: 'The Brave Sparrow', themes: ['Trust'], age_range: '3-6', text: '...', word_count: 650 } }],
+      })
+
+      render(<ChatPane sessionId={story.id} />)
+      await userEvent.click(screen.getByText('Trust')) // check the theme
+      await userEvent.click(screen.getByRole('button', { name: 'Make my story' }))
+
+      expect(postChat).toHaveBeenCalledWith({
+        message: '',
+        mode: 'story',
+        mode_params: {
+          storyThemes: [{ id: 't1', label: 'Trust', description: 'desc' }],
+          storyDigest: 'a digest',
+          storySelectedThemeIds: ['t1'],
+          storyAgeRange: '3-6',
+        },
+      })
+      expect(await screen.findByText('Read the story ▸')).toBeInTheDocument()
+    })
   })
 })

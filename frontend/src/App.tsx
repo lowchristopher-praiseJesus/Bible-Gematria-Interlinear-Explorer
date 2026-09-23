@@ -312,7 +312,7 @@ export default function App() {
         <div className="min-w-0 flex-1 border-r border-[var(--color-theme-border)]">
           <ErrorBoundary>
             {activeSession ? (
-              <ChatPane sessionId={activeSession.id} />
+              <ChatPane sessionId={activeSession.id} onNavigateToSession={setSessionId} />
             ) : (
               <ModePickerScreen onSessionStarted={setSessionId} />
             )}

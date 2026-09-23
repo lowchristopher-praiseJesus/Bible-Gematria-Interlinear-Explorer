@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, RefreshCw, Share2 } from 'lucide-react'
+import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, RefreshCw, Share2, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { toHistory } from '@/lib/history'
+import { startTellAStory } from '@/lib/tellAStory'
+import { ThemePicker, type StoryAgeRange } from './ThemePicker'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
@@ -26,6 +28,7 @@ import type { ArtifactLink, DevotionalArtifactParams, MessageChoice, SessionMess
 
 interface Props {
   sessionId: string
+  onNavigateToSession?: (id: string) => void
 }
 
 let idCounter = 0
@@ -125,8 +128,9 @@ function groupArtifacts(artifacts: ArtifactLink[]): ArtifactGroup[] {
   return groups
 }
 
-export function ChatPane({ sessionId }: Props) {
+export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   const session = useSessionsStore((s) => s.sessions[sessionId])
+  const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
   const updateModeParams = useSessionsStore((s) => s.updateModeParams)
@@ -138,6 +142,8 @@ export function ChatPane({ sessionId }: Props) {
   const [markingComplete, setMarkingComplete] = useState(false)
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
   const [resolvingChoiceId, setResolvingChoiceId] = useState<string | null>(null)
+  const [tellingStory, setTellingStory] = useState(false)
+  const [storySubmitting, setStorySubmitting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
@@ -558,6 +564,63 @@ export function ChatPane({ sessionId }: Props) {
     [session, sessionId, resolvingChoiceId, updateMessage, updateModeParams, appendMessage, setReadingPlanProgress]
   )
 
+  const handleTellAStory = useCallback(async () => {
+    if (!session || tellingStory) return
+    setTellingStory(true)
+    try {
+      const newId = await startTellAStory({ createSession, appendMessage, updateModeParams }, session)
+      onNavigateToSession?.(newId)
+    } finally {
+      setTellingStory(false)
+    }
+  }, [session, tellingStory, createSession, appendMessage, updateModeParams, onNavigateToSession])
+
+  const toggleStoryTheme = useCallback(
+    (themeId: string) => {
+      if (!session) return
+      const current = session.modeParams.storySelectedThemeIds ?? []
+      const next = current.includes(themeId)
+        ? current.filter((id) => id !== themeId)
+        : [...current, themeId]
+      updateModeParams(sessionId, { storySelectedThemeIds: next })
+    },
+    [session, sessionId, updateModeParams]
+  )
+
+  const setStoryAgeRange = useCallback(
+    (age: StoryAgeRange) => updateModeParams(sessionId, { storyAgeRange: age }),
+    [sessionId, updateModeParams]
+  )
+
+  const submitStory = useCallback(async () => {
+    if (!session || storySubmitting) return
+    const { storyThemes, storyDigest, storySelectedThemeIds, storyAgeRange } = session.modeParams
+    if (!storySelectedThemeIds?.length) return
+    setStorySubmitting(true)
+    try {
+      const response = await postChat({
+        message: '',
+        mode: 'story',
+        mode_params: { storyThemes, storyDigest, storySelectedThemeIds, storyAgeRange: storyAgeRange ?? '3-6' },
+      })
+      appendMessage(sessionId, {
+        id: genId(),
+        role: 'assistant',
+        text: response.message,
+        type: response.type,
+        artifacts: response.artifacts,
+      })
+    } catch (err) {
+      appendMessage(sessionId, {
+        id: genId(),
+        role: 'assistant',
+        text: 'Sorry, something went wrong: ' + errorMessage(err),
+      })
+    } finally {
+      setStorySubmitting(false)
+    }
+  }, [session, sessionId, storySubmitting, appendMessage])
+
   // Only Parable Study and Topical Study fetch their choices, so only
   // those two know how to reload after a failed fetch.
   const retryChoices = useCallback(
@@ -681,6 +744,17 @@ export function ChatPane({ sessionId }: Props) {
             <Share2 className="w-3 h-3" aria-hidden="true" />
             Share
           </button>
+          {session.mode !== 'story' && (
+            <button
+              onClick={handleTellAStory}
+              disabled={session.messages.length === 0 || tellingStory}
+              title={session.messages.length === 0 ? 'Nothing to turn into a story yet' : undefined}
+              className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <Wand2 className="w-3 h-3" aria-hidden="true" />
+              Tell a Story
+            </button>
+          )}
           <button
             onClick={() => setReportOpen(true)}
             className="shrink-0 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--color-theme-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] transition-colors"
@@ -788,6 +862,18 @@ export function ChatPane({ sessionId }: Props) {
                         )
                       })}
                     </div>
+                  )}
+                  {session.mode === 'story' && Array.isArray((msg.data as { themes?: unknown } | undefined)?.themes) && (
+                    <ThemePicker
+                      themes={(msg.data as { themes: { id: string; label: string; description: string }[] }).themes}
+                      selectedIds={session.modeParams.storySelectedThemeIds ?? []}
+                      ageRange={session.modeParams.storyAgeRange ?? '3-6'}
+                      onToggleTheme={toggleStoryTheme}
+                      onChangeAgeRange={setStoryAgeRange}
+                      onSubmit={submitStory}
+                      submitting={storySubmitting}
+                      hasStory={session.messages.some((m) => m.artifacts?.some((a) => a.type === 'story'))}
+                    />
                   )}
                 </div>
                 {!!msg.passageReference && <PassageVerseBox reference={msg.passageReference} />}
