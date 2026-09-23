@@ -46,4 +46,18 @@ describe('SessionPickerScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /back/i }))
     expect(onBack).toHaveBeenCalled()
   })
+
+  it('disables the session cards and ignores clicks while submitting', async () => {
+    const session = useSessionsStore.getState().createSession('socratic', {})
+    useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'user', text: 'hi' })
+    const onPick = vi.fn()
+
+    render(<SessionPickerScreen onPick={onPick} onBack={() => {}} submitting />)
+    const card = screen.getByText('Socratic Study').closest('button')!
+    expect(card).toBeDisabled()
+
+    await userEvent.click(card)
+
+    expect(onPick).not.toHaveBeenCalled()
+  })
 })

@@ -30,6 +30,12 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   const [asking, setAsking] = useState(false)
   const [pickingCharacter, setPickingCharacter] = useState(false)
   const [pickingStorySource, setPickingStorySource] = useState(false)
+  // True while startTellAStoryFrom's primer call is in flight — that call
+  // can take up to ~120s (a full theme-derivation LLM call), and
+  // SessionPickerScreen sits visually frozen the whole time. Guards
+  // startTellAStoryFrom against re-entry (a second click on a session
+  // card before the first resolves) and disables the picker's cards.
+  const [startingStory, setStartingStory] = useState(false)
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
@@ -132,8 +138,14 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   }
 
   async function startTellAStoryFrom(source: Session) {
-    const newId = await startTellAStory({ createSession, appendMessage, updateModeParams }, source)
-    onSessionStarted(newId)
+    if (startingStory) return
+    setStartingStory(true)
+    try {
+      const newId = await startTellAStory({ createSession, appendMessage, updateModeParams }, source)
+      onSessionStarted(newId)
+    } finally {
+      setStartingStory(false)
+    }
   }
 
   if (pickingCharacter) {
@@ -152,6 +164,7 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
       <SessionPickerScreen
         onBack={() => setPickingStorySource(false)}
         onPick={(picked) => void startTellAStoryFrom(picked)}
+        submitting={startingStory}
       />
     )
   }

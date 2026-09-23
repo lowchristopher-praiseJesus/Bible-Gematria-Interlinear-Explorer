@@ -5,6 +5,11 @@ import type { Session } from '@/types/session'
 interface Props {
   onPick: (session: Session) => void
   onBack: () => void
+  /** True while a picked session's Tell a Story primer call is in flight
+   * (that call can take up to ~120s — a full theme-derivation LLM call).
+   * Disables the session cards so a second click can't fire a second
+   * session/LLM call while the first is still resolving. */
+  submitting?: boolean
 }
 
 /**
@@ -12,7 +17,7 @@ interface Props {
  * one message, and not itself a Tell a Story session (a story session has
  * nothing further to derive themes from).
  */
-export function SessionPickerScreen({ onPick, onBack }: Props) {
+export function SessionPickerScreen({ onPick, onBack, submitting = false }: Props) {
   const listSessions = useSessionsStore((s) => s.listSessions)
   const sessions = listSessions().filter((s) => s.mode !== 'story' && s.messages.length > 0)
 
@@ -36,13 +41,21 @@ export function SessionPickerScreen({ onPick, onBack }: Props) {
           </p>
         )}
 
+        {submitting && (
+          <p className="text-sm text-[var(--color-text-secondary)]" role="status" aria-live="polite">
+            Starting your story…
+          </p>
+        )}
+
         <div className="flex flex-col gap-2">
           {sessions.map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => onPick(s)}
-              className="text-left rounded-xl border border-[var(--color-theme-border)] bg-[var(--color-surface)] px-4 py-2.5 hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-theme-accent)] transition-colors"
+              disabled={submitting}
+              aria-disabled={submitting}
+              className="text-left rounded-xl border border-[var(--color-theme-border)] bg-[var(--color-surface)] px-4 py-2.5 hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-theme-accent)] transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
               <span className="block text-sm font-medium">{s.title}</span>
               <span className="block text-xs text-[var(--color-text-secondary)]">

@@ -279,4 +279,31 @@ describe('ModePickerScreen', () => {
     expect(storySession?.messages[1]).toMatchObject({ role: 'assistant', text: "Here's what stood out…" })
     expect(storySession?.modeParams.storyThemes).toEqual([{ id: 't1', label: 'Trust', description: 'desc' }])
   })
+
+  it('ignores a second click on a session card while the first Tell a Story primer call is still in flight', async () => {
+    const source = useSessionsStore.getState().createSession('socratic', {})
+    useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'Tell me about the prodigal son.' })
+    let resolvePostChat!: (value: chatApi.ChatApiResponse) => void
+    const postChat = vi.spyOn(chatApi, 'postChat').mockReturnValue(
+      new Promise((resolve) => {
+        resolvePostChat = resolve
+      })
+    )
+    const onSessionStarted = vi.fn()
+
+    render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
+    await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
+    const sessionCard = await screen.findByText('Socratic Study')
+    await userEvent.click(sessionCard)
+    // Session cards are disabled while a pick is in flight, so a second
+    // click on the same (now-disabled) card is a no-op — this simulates a
+    // rapid double-click reaching the handler before React re-renders.
+    await userEvent.click(sessionCard)
+
+    expect(postChat).toHaveBeenCalledTimes(1)
+    expect(Object.values(useSessionsStore.getState().sessions).filter((s) => s.mode === 'story')).toHaveLength(1)
+
+    resolvePostChat({ type: 'chat', message: 'themes', data: { themes: [], digest: '' } })
+    await waitFor(() => expect(onSessionStarted).toHaveBeenCalled())
+  })
 })
