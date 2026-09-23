@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, UserRound } from 'lucide-react'
+import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, UserRound, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import { CharacterPickerScreen } from './CharacterPickerScreen'
-import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
+import { SessionPickerScreen } from './SessionPickerScreen'
+import { startTellAStory } from '@/lib/tellAStory'
+import type { MessageChoice, ModeParams, Session, SessionMessage, SessionMode } from '@/types/session'
 
 interface Props {
   onSessionStarted: (sessionId: string) => void
@@ -27,9 +29,11 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   const [askInput, setAskInput] = useState('')
   const [asking, setAsking] = useState(false)
   const [pickingCharacter, setPickingCharacter] = useState(false)
+  const [pickingStorySource, setPickingStorySource] = useState(false)
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
+  const updateModeParams = useSessionsStore((s) => s.updateModeParams)
   const readingPlanProgress = useReadingPlanStore((s) => s.progress)
 
   // A starter that already knows what it needs (no sub-choice) starts the
@@ -127,6 +131,11 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     onSessionStarted(session.id)
   }
 
+  async function startTellAStoryFrom(source: Session) {
+    const newId = await startTellAStory({ createSession, appendMessage, updateModeParams }, source)
+    onSessionStarted(newId)
+  }
+
   if (pickingCharacter) {
     return (
       <CharacterPickerScreen
@@ -134,6 +143,15 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
         onPick={(c: CharacterEntry) =>
           startSession('character', `💬 Chat with ${c.name}`, { characterId: c.id, characterName: c.name })
         }
+      />
+    )
+  }
+
+  if (pickingStorySource) {
+    return (
+      <SessionPickerScreen
+        onBack={() => setPickingStorySource(false)}
+        onPick={(picked) => void startTellAStoryFrom(picked)}
       />
     )
   }
@@ -296,6 +314,9 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
           </button>
           <button className={STARTER_BUBBLE} onClick={() => setPickingCharacter(true)}>
             <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" /> Chat with a Character
+          </button>
+          <button className={STARTER_BUBBLE} onClick={() => setPickingStorySource(true)}>
+            <Wand2 className="h-4 w-4 shrink-0" aria-hidden="true" /> Tell a Story
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
             <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything

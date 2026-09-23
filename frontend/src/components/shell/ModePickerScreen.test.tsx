@@ -256,4 +256,27 @@ describe('ModePickerScreen', () => {
       expect(screen.getByRole('button', { name: /bible in a year/i })).toBeInTheDocument()
     })
   })
+
+  it('opens the session picker and starts a Tell a Story session from the chosen conversation', async () => {
+    const source = useSessionsStore.getState().createSession('socratic', {})
+    useSessionsStore.getState().appendMessage(source.id, { id: 'm1', role: 'user', text: 'Tell me about the prodigal son.' })
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+      type: 'chat', message: "Here's what stood out…",
+      data: { themes: [{ id: 't1', label: 'Trust', description: 'desc' }], digest: 'a digest' },
+    })
+    const onSessionStarted = vi.fn()
+
+    render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
+    await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
+    await userEvent.click(screen.getByText('Socratic Study'))
+
+    // ModePickerScreen and ChatPane are rendered XOR by App.tsx — no chat
+    // surface exists inside ModePickerScreen itself to show the assistant
+    // reply, so (matching this file's existing async-assertion pattern at
+    // lines 115/131/144) we assert against the store instead of the DOM.
+    await waitFor(() => expect(onSessionStarted).toHaveBeenCalled())
+    const storySession = Object.values(useSessionsStore.getState().sessions).find((s) => s.mode === 'story')
+    expect(storySession?.messages[1]).toMatchObject({ role: 'assistant', text: "Here's what stood out…" })
+    expect(storySession?.modeParams.storyThemes).toEqual([{ id: 't1', label: 'Trust', description: 'desc' }])
+  })
 })
