@@ -24,7 +24,7 @@ import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
 import { useVoiceMode, type UseVoiceModeResult } from './useVoiceMode'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
-import type { ArtifactLink, DevotionalArtifactParams, MessageChoice, SessionMessage, PhaseResult } from '@/types/session'
+import type { ArtifactLink, MessageChoice, SessionMessage, PhaseResult } from '@/types/session'
 
 interface Props {
   sessionId: string
