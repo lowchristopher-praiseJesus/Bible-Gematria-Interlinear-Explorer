@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ArrowLeft, ArrowRight, ImageOff } from 'lucide-react'
 import { streamStoryIllustrations } from '@/lib/chatApi'
@@ -128,6 +128,11 @@ export function StoryReaderOverlay({ artifact, open, onClose }: StoryReaderOverl
     setPageIndex((i) => Math.min(totalPages, i + 1))
   }
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [pageIndex])
+
   useEffect(() => {
     if (!open) return
     function onKeyDown(e: KeyboardEvent) {
@@ -151,7 +156,7 @@ export function StoryReaderOverlay({ artifact, open, onClose }: StoryReaderOverl
             {artifact.title}
           </Dialog.Title>
 
-          <div className="flex-1 min-h-0 w-full max-w-2xl flex flex-col items-center gap-4 overflow-y-auto">
+          <div ref={scrollRef} className="flex-1 min-h-0 w-full max-w-2xl flex flex-col items-center gap-4 overflow-y-auto">
             <div className="w-full aspect-[4/3] rounded-xl bg-white/10 flex items-center justify-center overflow-hidden shrink-0">
               {currentImageUrl ? (
                 <img src={currentImageUrl} alt="" className="w-full h-full object-cover" />
