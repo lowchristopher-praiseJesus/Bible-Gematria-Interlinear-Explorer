@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BookOpen } from 'lucide-react'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
 import { pickDefaultTranslationCode, translationLabel } from '@/lib/translationLabel'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -73,8 +74,9 @@ export function VerseBubble({ data }: Props) {
             type="button"
             onClick={() => openArtifact({ type: 'interlinear', label: `${reference} ▸`, params: { reference } })}
             aria-label={`Open ${reference} in the original language`}
-            className="shrink-0 text-[var(--color-theme-accent)] hover:underline text-xs font-mono"
+            className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[var(--color-theme-accent)]/30 bg-[var(--color-theme-accent)]/10 px-1.5 py-0.5 leading-none text-[var(--color-theme-accent)] hover:bg-[var(--color-theme-accent)]/20 text-xs font-mono"
           >
+            <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
             {vnum ?? '▸'}
           </button>
         )}
