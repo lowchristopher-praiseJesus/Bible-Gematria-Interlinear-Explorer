@@ -159,6 +159,10 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   const [reportOpen, setReportOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // The row of the most recent user message, and which user-message id we
+  // last scrolled to pin at the top — see the scroll effect below.
+  const lastUserMessageRef = useRef<HTMLDivElement>(null)
+  const pinnedUserIdRef = useRef<string | null>(null)
   // Set by the voice hook's onTranscript immediately before it calls
   // sendMessage, and consumed (and cleared) at the very top of sendMessage.
   // Non-null means "this turn came from speech"; `delegationId` is the id
@@ -199,14 +203,25 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     return () => clearInterval(interval)
   }, [devotionalPending])
 
-  // Keep the latest message in view as the conversation grows — a new
-  // message, a choice prompt resolving, or its options finishing a fetch
-  // all change the messages array and should pull the view down to it.
-  // `isBusy` is included so the view also follows the thinking indicator
-  // as it appears and disappears.
+  // When a new question comes in, pin it to the top of the scroll
+  // container instead of jumping to the bottom of the (possibly much
+  // taller than the viewport) reply — the user reads down and scrolls the
+  // rest themselves. `pinnedUserIdRef` makes this fire once per question,
+  // not on every streamed chunk of the answer that follows it. Falls back
+  // to the bottom sentinel when there's no user message yet (an opening
+  // greeting, a mode primer).
   useEffect(() => {
-    if (typeof bottomRef.current?.scrollIntoView === 'function') {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    const lastUserId = [...(session?.messages ?? [])].reverse().find((m) => m.role === 'user')?.id
+    if (!lastUserId) {
+      if (typeof bottomRef.current?.scrollIntoView === 'function') {
+        bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }
+      return
+    }
+    if (lastUserId === pinnedUserIdRef.current) return
+    pinnedUserIdRef.current = lastUserId
+    if (typeof lastUserMessageRef.current?.scrollIntoView === 'function') {
+      lastUserMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [session?.messages, isBusy])
 
@@ -785,6 +800,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     ((session.modeParams.completedDays?.length ?? 0) / READING_PLAN_TOTAL_DAYS) * 100
   )
   const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id
+  const lastUserId = [...session.messages].reverse().find((m) => m.role === 'user')?.id
 
   // The synthetic "💬 Ask Anything" bubble a mode starter posts as the
   // first message isn't a real question — strip a leading emoji and
@@ -851,7 +867,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {session.messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div
+            key={msg.id}
+            ref={msg.id === lastUserId ? lastUserMessageRef : undefined}
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
             {msg.role === 'user' ? (
               <div className="max-w-[80%] px-3 py-2 rounded-2xl rounded-br-sm text-sm whitespace-pre-wrap bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]">
                 {msg.text}
