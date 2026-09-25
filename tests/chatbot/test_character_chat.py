@@ -226,10 +226,11 @@ async def test_successful_reply_carries_character_data_and_follow_ups(llm):
     assert result["route"].startswith("character_chat")
 
 
-async def test_scripture_references_in_the_reply_become_links(llm):
+async def test_scripture_references_in_the_reply_stay_plain_text(llm):
     llm.state["reply"] = {"type": "chat", "message": "I said it in 1 Samuel 17:45.", "data": None}
     result = await character_chat.answer("david", "What did you say to him?")
-    assert "[1 Samuel 17:45](" in result["message"]
+    assert result["message"] == "I said it in 1 Samuel 17:45."
+    assert "[1 Samuel 17:45](" not in result["message"]
 
 
 async def test_llm_error_passes_through_without_follow_ups(llm):

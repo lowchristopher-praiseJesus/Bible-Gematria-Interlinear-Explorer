@@ -154,8 +154,11 @@ profile goes into every turn (0.7k–2.8k words, so no retrieval), and the perso
 prompt in `chatbot/character_chat.py` forbids adding anything the profile does not
 say, breaking character, or mentioning the profile or how it was made. Uncovered
 questions get an in-character "I don't know / it wasn't recorded". Scripture
-references in replies are linked via `wiki_refs`; follow-ups come from
-`generate_llm_follow_ups`. The session's opening turn is a short in-character
+references in replies stay plain text — deliberately **not** run through
+`wiki_refs.resolve_scripture_refs` (unlike wiki Q&A mode), since turning them
+into `[...](/explorer?...)` markdown links inside a first-person persona reply
+reads as an out-of-character citation and breaks immersion. Follow-ups come
+from `generate_llm_follow_ups`. The session's opening turn is a short in-character
 greeting (`character_chat.greeting`, static fallback if the LLM fails).
 
 Wiring mirrors Socratic/Topical: `GET /characters` lists them; every turn of a

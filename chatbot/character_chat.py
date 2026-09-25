@@ -5,7 +5,7 @@ character's profile (characters/<id>.md, see chatbot/character_loader.py)."""
 import re
 from typing import Any, Dict, List, Optional
 
-from chatbot import character_loader, wiki_refs
+from chatbot import character_loader
 from chatbot.ollama_client import call_ollama_with_context, generate_llm_follow_ups
 
 # Catches a reply that talks ABOUT its own source (a book, a chapter, "the
@@ -135,7 +135,6 @@ async def answer(
         return result
 
     result["message"] = await _rewrite_if_breaks_persona(character, result["message"])
-    result["message"] = wiki_refs.resolve_scripture_refs(result["message"])
     follow_ups = await generate_llm_follow_ups(message, result["message"])
     if follow_ups:
         result["follow_up_questions"] = follow_ups
