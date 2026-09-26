@@ -51,19 +51,22 @@ Canonical matches always outrank Apocrypha matches.
 ### New backend modules
 
 **`chatbot/bible_corpus.py`**. Loads the whole verse corpus into memory once, lazily and thread-safely, on first use: 31,102 `Complete` rows (tags stripped the way `search_english_sync` strips them) plus 5,705 `APOC` rows, about 6 MB. Each entry is `{ref, text, source: "canon"|"apocrypha", stems: set[str], tokens: list[str]}`.
-- `normalize(text) -> list[str]` lowercases, removes punctuation, and maps a small table of archaic forms (thee/thou/thy → you/your, -eth/-est verb endings reduced to their stem, "shall" and "will" treated as the same).
-- `exact_match(saying) -> list[Verse]` finds verses whose normalized token sequence contains the saying's full normalized token sequence.
+- `normalize(text) -> list[str]` handles both translations' spellings:
+  - Strips `<f data=…>…</f>` footnotes (APOC embeds these) and all other tags.
+  - Lowercases, maps `ſ`→`s` and `&`→`and`, and folds `v`→`u` and `j`→`i`, so the 1611 "vnto"/"Ieruſalem" and the modern spellings meet.
+  - Removes punctuation and splits into words.
+- `stem(word)` first changes a trailing `ie` to `y` ("mightie" → "mighty"), then removes one of the endings `eth`/`est`/`ing`/`ed`/`es`/`s` (only if at least 2 letters remain), then a trailing `e` from words longer than 3 letters, then keeps the first 6 letters. So "goeth" and "goes" both become `go`, and "spareth" and "spare" both become `spar`. Archaic pronouns such as thee, thou and ye are stopwords, so they're skipped rather than mapped to modern forms.
+- `exact_match(saying) -> list[ExactHit]` finds verses whose stemmed word sequence contains the saying's whole stemmed word sequence, in order and consecutively. `ExactHit = {verse, whole_verse: bool}`. `whole_verse` is true when the saying covers the entire verse.
 - `keyword_candidates(saying, k=25) -> list[Verse]` drops stopwords from the saying, takes a prefix stem of each remaining word (so "spare" matches "spareth"), and scores each verse as `matched_stems + 0.5 × matched_adjacent_pairs`. It returns the top `k` with score > 0.
 - `lookup(ref) -> Verse | None` resolves a reference from either table.
 
 No per-check SQL is run, because the existing `REPLACE(...) LIKE` full scan is too slow to call repeatedly.
 
-**`chatbot/jev_client.py`** — thin async wrapper around `typesafe-sdk`.
-- `is_configured() -> bool` — `TYPESAFE_API_KEY` set.
-- `async judge(saying, candidates) -> list[Judgment]` — see *JEV request*.
-  `Judgment = {ref, probabilities: dict[str, float], confidence: float}`.
-- Any SDK/network error or timeout (`MISQUOTE_JEV_TIMEOUT`, default 10 s)
-  raises `JevUnavailable`.
+**`chatbot/jev_client.py`** is a thin async client that calls JEV's documented HTTP API, `POST https://api.typesafe.ai/v1/systemone`, with `httpx`, which the app already depends on.
+- It deliberately doesn't use `typesafe-sdk`. The SDK's response attributes are only partly documented, the HTTP request and response format is fully documented, and this avoids adding a dependency.
+- `is_configured() -> bool` reports whether `TYPESAFE_API_KEY` is set.
+- `async judge(saying, candidates) -> list[Judgment]`: see *JEV request*. `Judgment = {ref, probabilities: dict[str, float], confidence: float}`, read from the response's `answers[<question id>]`.
+- Any HTTP error, a non-2xx status (401/422/429/529), a malformed response, or a timeout (`MISQUOTE_JEV_TIMEOUT`, default 10 s) raises `JevUnavailable`.
 
 **`chatbot/misquote.py`** is the orchestrator.
 - `async check(saying) -> dict` returns a chat response dict containing the bubble text and the `misquote` artifact.
@@ -77,7 +80,8 @@ No per-check SQL is run, because the existing `REPLACE(...) LIKE` full scan is t
 
 ```
 saying (1..300 chars, else polite length error)
-  ├─ exact_match() ── hit ──► verdict verbatim (canon) / apocrypha_only+verbatim; JEV not called
+  ├─ exact_match() ── whole-verse hit ──► verbatim (canon) / apocrypha_only+verbatim; JEV not called
+  │                └─ partial hit ──► becomes a candidate (listed first), JEV still judges it
   ├─ keyword_candidates(k=25) ─┐   (run concurrently)
   └─ suggest_refs() ───────────┤
                                ▼
@@ -121,13 +125,13 @@ Starting constants (tuned with the eval set):
 `SOURCE_MIN = 0.70`, `CONFIDENCE_MIN = 0.60`, `NOT_IN_BIBLE_MAX = 0.20`,
 `CONFIDENT_LABEL_MIN = 0.85`.
 
-1. Canonical exact hit → `verbatim`. Else Apocrypha-only exact hit →
-   `apocrypha_only` / sub-label `verbatim`. (No JEV call.)
-2. Best canonical candidate by `source`: if `source ≥ SOURCE_MIN` and its
-   `confidence ≥ CONFIDENCE_MIN` → `paraphrase` if
-   `P(same_meaning) > P(meaning_changed)`, else `distorted`.
-3. Else the same test on the best Apocrypha candidate → `apocrypha_only`
-   with sub-label `paraphrase` / `distorted`.
+1. A canonical **whole-verse** exact hit gives `verbatim`. Otherwise an Apocrypha-only whole-verse exact hit gives `apocrypha_only` with sub-label `verbatim`. JEV isn't called in either case.
+
+   A **partial** exact hit is never trusted on its own. "Money is the root of all evil" is a word-for-word fragment of 1 Timothy 6:10, and it's the model example of a *distorted* saying.
+2. Take the best canonical candidate by `source`. If `source ≥ SOURCE_MIN` and its `confidence ≥ CONFIDENCE_MIN`:
+   - `P(meaning_changed) ≥ P(same_meaning)` gives `distorted`;
+   - otherwise, a partial exact hit gives `verbatim`, and any other candidate gives `paraphrase`.
+3. Otherwise, run the same test on the best Apocrypha candidate. A pass gives `apocrypha_only`, with sub-label `verbatim`, `paraphrase` or `distorted`, chosen by the same rule as step 2.
 4. Else if **every** candidate has `source ≤ NOT_IN_BIBLE_MAX` →
    `not_in_bible`; attach up to 3 candidates with the highest
    `P(related_only)` (only those with `P(related_only) ≥ 0.5`) as
@@ -154,13 +158,11 @@ Branches in both `post_chat` and `_stream_chat_response` in `chatbot/api.py`, mi
 
 ### Freeform detection
 
-`route_deterministic` gains `_MISQUOTE_RE`, which matches phrasings like:
-- "is '…' (really) in the Bible"
-- "does the Bible (really) say (that) …"
-- "where (in the Bible) does it say …"
-- "is it biblical that …"
+`route_deterministic` gains `extract_saying(message) -> str | None` (in `misquote.py`). It is deliberately narrow, because a topic question like "does the Bible say anything about divorce?" must **not** be treated as a saying to check. It matches only:
+- a **quoted** saying, in straight or curly single or double quotes, of at least 3 words, in a message that also mentions "Bible", "scripture" or "biblical" (e.g. `Is "money is the root of all evil" in the Bible?`, `Where does the Bible say 'spare the rod'?`);
+- the unquoted forms "does the Bible (really) say that X" and "is it (really) in the Bible that X", where the word **"that"** is required.
 
-It extracts the saying from quotes if present, and otherwise takes the text after the phrase. It runs only when `jev_client.is_configured()`. A match returns `misquote.check(saying)` with `record_routing("deterministic: misquote check")`. Without JEV the regex is skipped and the message falls through to the normal LLM chat, exactly as today.
+It returns the saying with surrounding quotes and a trailing "?" removed, or `None`. It runs only when `jev_client.is_configured()`. A match returns `misquote.check(saying)` with `record_routing("deterministic: misquote check")`. Without JEV the regex is skipped and the message falls through to the normal LLM chat, exactly as today.
 
 ### `GET /misquote/status`
 
@@ -169,7 +171,7 @@ Returns `{ "available": bool }`, which reports only whether a key is configured,
 ### `POST /misquote/explain`
 
 Request: the `misquote` artifact params. The server:
-1. Loads each shown verse plus two verses either side of it (canon via `list_passage_verses_sync`, Apocrypha via `bible_corpus`).
+1. Loads each shown verse plus two verses either side of it using `bible_corpus.context(verse, radius=2)`, which works for both canon and Apocrypha and stays within the same chapter.
 2. Makes one LLM call covering where the saying really comes from (attributions hedged, e.g. "often attributed to…", never stated as fact unless well established) and what the real verse means in its context.
 3. Runs `wiki_refs.resolve_scripture_refs` on the reply.
 
@@ -222,9 +224,9 @@ The verse text is copied into the params, so reloads and share links redraw the 
 ## Testing
 
 Unit tests, in `tests/chatbot/`, make no real JEV or LLM calls:
-- `test_bible_corpus.py`: row counts (31,102 / 5,705); `normalize` handling archaic forms; `exact_match` ignoring case and punctuation; the source verse ranking in the top 25 for known sayings; `lookup` resolving both tables.
+- `test_bible_corpus.py`: row counts (31,102 / 5,705); `normalize` handling 1611 spelling and footnote tags; `stem` merging archaic and modern word endings; `exact_match` ignoring case and punctuation and flagging whole-verse vs partial hits; the source verse ranking in the top 25 for known sayings; `lookup` resolving both tables.
 - `test_misquote_verdict.py`: table-driven tests of `verdict_from` covering every branch and threshold edge, canon beating Apocrypha, and the `not_in_bible` related-verse filter.
-- `test_misquote_check.py`: the whole check with fake JEV and LLM responses. Suggested references that don't exist are dropped; LLM failure falls back to keywords only; JEV failure and a missing key produce the unavailable message; the length cap is enforced; the exact-match path never calls JEV.
+- `test_misquote_check.py`: the whole check with fake JEV and LLM responses. Suggested references that don't exist are dropped; LLM failure falls back to keywords only; JEV failure and a missing key produce the unavailable message; the length cap is enforced; a whole-verse exact hit never calls JEV, while a partial hit ("money is the root of all evil") is sent to JEV and can come back `distorted`.
 - `test_chat_endpoint_misquote.py`: `mode=misquote` through `post_chat` and the streaming path; the primer; freeform regex routing, including that it's skipped when unconfigured; `/misquote/status`.
 - `test_misquote_explain_endpoint.py`: context verses are loaded, references are linked, and failure gives the honest message.
 
@@ -239,7 +241,7 @@ Frontend tests:
 
 ## Deployment
 
-- Add `typesafe-sdk` to `requirements.txt`. The chatbot image is `python:3.13-slim`, which satisfies the SDK's Python 3.10 minimum.
+- No new Python dependency, since `jev_client` uses the existing `httpx`.
 - New environment variables, added to `.env.example` and `docker-compose.yml`:
   - `TYPESAFE_API_KEY`: when unset, the mode is disabled and the tile hidden.
   - `TYPESAFE_MODEL`: defaults to `jev-latest`.
