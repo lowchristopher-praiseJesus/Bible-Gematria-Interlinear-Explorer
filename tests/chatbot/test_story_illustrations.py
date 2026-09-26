@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 
 from chatbot import story_illustrations as si
@@ -102,6 +104,66 @@ def test_synthesize_illustration_wraps_client_construction_failure(monkeypatch):
             raise RuntimeError("credentials not found")
 
     monkeypatch.setattr(si.genai, "Client", FailingClient)
+
+    with pytest.raises(si.StoryIllustrationError):
+        si.synthesize_illustration("a prompt")
+
+
+class _FakeHttpxResponse:
+    def __init__(self, json_body, status_code=200):
+        self._json_body = json_body
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise si.httpx.HTTPStatusError("error", request=None, response=self)
+
+    def json(self):
+        return self._json_body
+
+
+def _abacus_env(monkeypatch):
+    monkeypatch.setattr(si, "IMAGE_PROVIDER", "abacus")
+    monkeypatch.setattr(si, "ABACUS_AI_API_KEY", "s2_fake_key")
+
+
+def test_synthesize_illustration_abacus_returns_image_bytes(monkeypatch):
+    _abacus_env(monkeypatch)
+    b64 = base64.b64encode(b"fake-png-bytes").decode("ascii")
+    body = {
+        "choices": [
+            {"message": {"images": [{"image_url": {"url": f"data:image/png;base64,{b64}"}}]}}
+        ]
+    }
+    monkeypatch.setattr(si.httpx, "post", lambda *a, **kw: _FakeHttpxResponse(body))
+
+    assert si.synthesize_illustration("a prompt") == b"fake-png-bytes"
+
+
+def test_synthesize_illustration_abacus_raises_when_no_image_returned(monkeypatch):
+    _abacus_env(monkeypatch)
+    body = {"choices": [{"message": {"images": []}}]}
+    monkeypatch.setattr(si.httpx, "post", lambda *a, **kw: _FakeHttpxResponse(body))
+
+    with pytest.raises(si.StoryIllustrationError):
+        si.synthesize_illustration("a prompt")
+
+
+def test_synthesize_illustration_abacus_wraps_api_failure(monkeypatch):
+    _abacus_env(monkeypatch)
+
+    def _raise(*a, **kw):
+        raise si.httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(si.httpx, "post", _raise)
+
+    with pytest.raises(si.StoryIllustrationError):
+        si.synthesize_illustration("a prompt")
+
+
+def test_synthesize_illustration_abacus_requires_api_key(monkeypatch):
+    monkeypatch.setattr(si, "IMAGE_PROVIDER", "abacus")
+    monkeypatch.setattr(si, "ABACUS_AI_API_KEY", "")
 
     with pytest.raises(si.StoryIllustrationError):
         si.synthesize_illustration("a prompt")

@@ -281,7 +281,7 @@ worth checking explicitly after a fresh deploy.
 
 ### Tell a Story illustrations
 
-Each page's illustration is generated via the Gemini API's image model
+Each page's illustration is generated via an image-capable model
 (`chatbot/story_illustrations.py`) and cached on the `story-image-cache`
 named volume, mounted into `chatbot` at `/app/STORY_IMAGE_CACHE` (env
 `STORY_IMAGE_CACHE_DIR`), keyed by a content hash of the full image
@@ -289,13 +289,39 @@ prompt (style prefix + scene + character description). There is no
 eviction — files accumulate indefinitely, same as `audio-cache`; an
 operator can clear the volume directly if it grows too large.
 
-**Manual step — Gemini API key (not automated by `docker compose up`):**
-Unlike the TTS credential above, this is a plain Google AI Studio API key
-(from ai.google.dev), not a GCP service-account file. Set `GEMINI_API_KEY`
-in `.env` — it's picked up automatically via the existing `env_file: [.env]`
-wiring, no docker-compose changes needed. A missing or invalid key
-degrades every illustration to text-only (see `chatbot/story_illustrations.py`'s
-fail-open behavior) rather than breaking Tell a Story.
+`IMAGE_PROVIDER` picks the backend, per-environment via `.env` — no code
+change needed to run one backend locally and the other on a hosted
+deployment:
+
+- `gemini` (default) — calls the Gemini API directly.
+- `abacus` — calls the same kind of image-capable model through Abacus.ai's
+  RouteLLM gateway (`https://routellm.abacus.ai/v1/chat/completions`, an
+  OpenAI-compatible endpoint with `modalities: ["image"]` and an
+  `image_config` block) instead of Google's API directly. Useful on a
+  deployment that already carries an Abacus.ai API key/subscription rather
+  than a Gemini one — e.g. the abacus.ai-hosted VM described in
+  "Abacus.ai remote deploy" above.
+
+**Manual step — API key (not automated by `docker compose up`):** whichever
+backend is selected needs its own key set in `.env` — picked up
+automatically via the existing `env_file: [.env]` wiring, no docker-compose
+changes needed:
+
+- `gemini`: `GEMINI_API_KEY`, a plain Google AI Studio API key (from
+  ai.google.dev), not a GCP service-account file. Override the model id via
+  `STORY_IMAGE_MODEL` only if Google renames/deprecates the default.
+- `abacus`: `ABACUS_AI_API_KEY`, from
+  https://abacus.ai/app/route-llm-apis. Override the model via
+  `ABACUS_IMAGE_MODEL` (default `nano_banana_pro`, Abacus.ai's name for
+  Google's own Gemini image model family — chosen because it matches the
+  Gemini backend's aspect ratio and PNG output; other catalog models such
+  as `flux2_pro`/`dalle`/`midjourney` may need
+  `chatbot/story_illustrations.py`'s PNG assumption revisited) and
+  `ABACUS_AI_BASE_URL` if Abacus.ai changes its gateway URL.
+
+A missing or invalid key degrades every illustration to text-only (see
+`chatbot/story_illustrations.py`'s fail-open behavior) rather than breaking
+Tell a Story.
 
 ---
 
