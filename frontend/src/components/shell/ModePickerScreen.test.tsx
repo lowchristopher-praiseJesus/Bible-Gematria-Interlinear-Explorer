@@ -5,7 +5,7 @@ import { ModePickerScreen } from './ModePickerScreen'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import * as chatApi from '@/lib/chatApi'
-import { listCharacters, listStudyWikis } from '@/lib/modeData'
+import { listStudyWikis } from '@/lib/modeData'
 
 vi.mock('@/lib/modeData', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/modeData')>()
@@ -210,91 +210,34 @@ describe('ModePickerScreen', () => {
     expect(session.messages[1].choices).toEqual([{ label: 'Surprise me', modeParams: { surprise: true } }])
   })
 
-  describe('Chat with a Character', () => {
-    beforeEach(() => {
-      vi.mocked(listCharacters).mockResolvedValue([
-        { id: 'david', name: 'David', testament: 'OT', summary: 'The shepherd boy who became king.' },
-      ])
-    })
-
-    it('opens the character picker from its own starter', async () => {
-      render(<ModePickerScreen onSessionStarted={() => {}} />)
-      await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
-
-      expect(await screen.findByRole('button', { name: /david/i })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /bible in a year/i })).not.toBeInTheDocument()
-      expect(Object.values(useSessionsStore.getState().sessions)).toHaveLength(0)
-    })
-
-    it('picking a character starts a character session and fetches the in-character greeting', async () => {
-      const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Peace. I am David.' })
-      const onSessionStarted = vi.fn()
-      render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
-      await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
-      await userEvent.click(await screen.findByRole('button', { name: /david/i }))
-
-      expect(onSessionStarted).toHaveBeenCalled()
-      const session = firstSession()
-      expect(session.mode).toBe('character')
-      expect(session.modeParams).toEqual({ characterId: 'david', characterName: 'David' })
-      expect(session.title).toBe('Chat with David')
-      expect(session.messages[0]).toMatchObject({ role: 'user', text: '💬 Chat with David' })
-      expect(session.messages[1]).toMatchObject({ role: 'assistant', text: 'Peace. I am David.' })
-      expect(postChat).toHaveBeenCalledWith({
-        message: '',
-        mode: 'character',
-        mode_params: { characterId: 'david', characterName: 'David' },
-      })
-    })
-
-    it('Back returns to the mode starters', async () => {
-      render(<ModePickerScreen onSessionStarted={() => {}} />)
-      await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
-      await screen.findByRole('button', { name: /david/i })
-      await userEvent.click(screen.getByRole('button', { name: /back/i }))
-
-      expect(screen.getByRole('button', { name: /bible in a year/i })).toBeInTheDocument()
-    })
-  })
-
-  it('opens the story starter screen and starts a Tell a Story session from a typed theme, needing no LLM call', async () => {
+  // Character/Story now start their session immediately, exactly like
+  // Devotional — the actual picking (character search/list, story theme
+  // chips) happens inline inside ChatPane afterward, not on a separate
+  // pre-chat screen. See ChatPane.test.tsx for that inline behavior.
+  it('starts a character session immediately with an inline starter prompt, needing no LLM call yet', async () => {
     const postChat = vi.spyOn(chatApi, 'postChat')
     const onSessionStarted = vi.fn()
+    render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
+    await userEvent.click(screen.getByRole('button', { name: /chat with a character/i }))
 
+    expect(postChat).not.toHaveBeenCalled()
+    expect(onSessionStarted).toHaveBeenCalled()
+    const session = firstSession()
+    expect(session.mode).toBe('character')
+    expect(session.messages[0]).toMatchObject({ role: 'user', text: '💬 Chat with a Character' })
+    expect(session.messages[1]).toMatchObject({ role: 'assistant', data: { characterStarter: true } })
+  })
+
+  it('starts a story session immediately with an inline starter prompt, needing no LLM call yet', async () => {
+    const postChat = vi.spyOn(chatApi, 'postChat')
+    const onSessionStarted = vi.fn()
     render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
     await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
-    await userEvent.type(screen.getByPlaceholderText(/what should the story be about/i), 'A brave little mouse')
-    await userEvent.click(screen.getByRole('button', { name: /^go$/i }))
 
-    // No backend round-trip: the theme came straight from the user, so
-    // this lands directly in the ThemePicker step with it pre-selected.
     expect(postChat).not.toHaveBeenCalled()
     expect(onSessionStarted).toHaveBeenCalled()
     const storySession = Object.values(useSessionsStore.getState().sessions).find((s) => s.mode === 'story')
-    expect(storySession?.messages[0]).toMatchObject({ role: 'user', text: '✨ Tell a Story about "A brave little mouse"' })
-    expect(storySession?.modeParams.storyThemes).toEqual([{ id: 'custom', label: 'A brave little mouse', description: '' }])
-    expect(storySession?.modeParams.storySelectedThemeIds).toEqual(['custom'])
-    expect(storySession?.modeParams.storyAgeRange).toBe('3-6')
-  })
-
-  it('starts a Tell a Story session from a clicked starter idea', async () => {
-    const onSessionStarted = vi.fn()
-    render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
-    await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
-    await userEvent.click(screen.getByRole('button', { name: /sharing what you have/i }))
-    await userEvent.click(screen.getByRole('button', { name: /^go$/i }))
-
-    expect(onSessionStarted).toHaveBeenCalled()
-    const storySession = Object.values(useSessionsStore.getState().sessions).find((s) => s.mode === 'story')
-    expect(storySession?.modeParams.storyThemes).toEqual([
-      { id: 'custom', label: 'Sharing what you have', description: '' },
-    ])
-  })
-
-  it('returns to the mode grid from the story starter screen on Back', async () => {
-    render(<ModePickerScreen onSessionStarted={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: /tell a story/i }))
-    await userEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(screen.getByRole('button', { name: /tell a story/i })).toBeInTheDocument()
+    expect(storySession?.messages[0]).toMatchObject({ role: 'user', text: '✨ Tell a Story' })
+    expect(storySession?.messages[1]).toMatchObject({ role: 'assistant', data: { storyStarter: true } })
   })
 })

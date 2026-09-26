@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, UserRound, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
-import { listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
+import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
-import { CharacterPickerScreen } from './CharacterPickerScreen'
-import { StoryStarterScreen } from './StoryStarterScreen'
 import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
 
 interface Props {
@@ -27,8 +25,6 @@ const STARTER_BUBBLE =
 export function ModePickerScreen({ onSessionStarted }: Props) {
   const [askInput, setAskInput] = useState('')
   const [asking, setAsking] = useState(false)
-  const [pickingCharacter, setPickingCharacter] = useState(false)
-  const [pickingStoryIdea, setPickingStoryIdea] = useState(false)
   const createSession = useSessionsStore((s) => s.createSession)
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
@@ -68,6 +64,17 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     const session = createSession(mode, {})
     appendMessage(session.id, { id: genId(), role: 'user', text: userLabel })
     appendMessage(session.id, { id: genId(), role: 'assistant', text: promptText, choicesStatus: 'ready', choices })
+    onSessionStarted(session.id)
+  }
+
+  // A starter whose next step is a custom inline widget (Chat with a
+  // Character's search/list, Tell a Story's theme chips) rather than the
+  // generic MessageChoice pills — `data` carries the marker ChatPane looks
+  // for to know which widget to mount under this prompt message.
+  function startWithInlineStarter(mode: SessionMode, userLabel: string, promptText: string, data: Record<string, unknown>) {
+    const session = createSession(mode, {})
+    appendMessage(session.id, { id: genId(), role: 'user', text: userLabel })
+    appendMessage(session.id, { id: genId(), role: 'assistant', text: promptText, data })
     onSessionStarted(session.id)
   }
 
@@ -127,44 +134,6 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
     }
     setAskInput('')
     onSessionStarted(session.id)
-  }
-
-  // The user states the story's theme directly (typed, or picked from a
-  // few example ideas) rather than an old conversation being derived into
-  // one — no LLM call is needed here at all, so this runs synchronously
-  // and lands straight in the same ThemePicker/"Make my story" step a
-  // derived theme would, with that one theme already selected.
-  function startTellAStoryWithTheme(theme: string) {
-    const themeObj = { id: 'custom', label: theme, description: '' }
-    const session = createSession('story', {
-      storyThemes: [themeObj],
-      storySelectedThemeIds: ['custom'],
-      storyAgeRange: '3-6',
-    })
-    appendMessage(session.id, { id: genId(), role: 'user', text: `✨ Tell a Story about "${theme}"` })
-    appendMessage(session.id, {
-      id: genId(),
-      role: 'assistant',
-      text: "Great idea — pick an age range, then I'll write it.",
-      type: 'chat',
-      data: { themes: [themeObj], digest: '' },
-    })
-    onSessionStarted(session.id)
-  }
-
-  if (pickingCharacter) {
-    return (
-      <CharacterPickerScreen
-        onBack={() => setPickingCharacter(false)}
-        onPick={(c: CharacterEntry) =>
-          startSession('character', `💬 Chat with ${c.name}`, { characterId: c.id, characterName: c.name })
-        }
-      />
-    )
-  }
-
-  if (pickingStoryIdea) {
-    return <StoryStarterScreen onBack={() => setPickingStoryIdea(false)} onSubmit={startTellAStoryWithTheme} />
   }
 
   return (
@@ -323,10 +292,27 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
           >
             <Layers className="h-4 w-4 shrink-0" aria-hidden="true" /> Deep Study
           </button>
-          <button className={STARTER_BUBBLE} onClick={() => setPickingCharacter(true)}>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithInlineStarter(
+                'character',
+                '💬 Chat with a Character',
+                'Which historical figure would you like to talk with?',
+                { characterStarter: true }
+              )
+            }
+          >
             <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" /> Chat with a Character
           </button>
-          <button className={STARTER_BUBBLE} onClick={() => setPickingStoryIdea(true)}>
+          <button
+            className={STARTER_BUBBLE}
+            onClick={() =>
+              startWithInlineStarter('story', '✨ Tell a Story', 'What should the story be about?', {
+                storyStarter: true,
+              })
+            }
+          >
             <Wand2 className="h-4 w-4 shrink-0" aria-hidden="true" /> Tell a Story
           </button>
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>

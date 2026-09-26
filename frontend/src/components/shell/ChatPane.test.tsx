@@ -40,7 +40,7 @@ describe('ChatPane', () => {
     render(<ChatPane sessionId={session.id} />)
     expect(screen.getByText('Ask me anything.')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'What is love?')
+    await userEvent.type(screen.getByRole('textbox'), 'What is love?')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(await screen.findByText('Sure, go ahead.')).toBeInTheDocument()
@@ -136,7 +136,7 @@ describe('ChatPane', () => {
     })
 
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), "I'm stuck — give me a hint.")
+    await userEvent.type(screen.getByRole('textbox'), "I'm stuck — give me a hint.")
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(await screen.findByText('Why would the soldiers do that?')).toBeInTheDocument()
@@ -446,7 +446,7 @@ describe('ChatPane', () => {
     render(<ChatPane sessionId={session.id} />)
     scrollIntoView.mockClear() // ignore the initial-render scroll; only care about growth from here
 
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'What is love?')
+    await userEvent.type(screen.getByRole('textbox'), 'What is love?')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
     await screen.findByText('Sure, go ahead.')
 
@@ -461,7 +461,7 @@ describe('ChatPane', () => {
     )
 
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'What is grace?')
+    await userEvent.type(screen.getByRole('textbox'), 'What is grace?')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(screen.getByRole('status', { name: /thinking/i })).toBeInTheDocument()
@@ -480,7 +480,7 @@ describe('ChatPane', () => {
     } as never)
 
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'hello')
+    await userEvent.type(screen.getByRole('textbox'), 'hello')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     const msgs = useSessionsStore.getState().sessions[session.id].messages
@@ -689,7 +689,7 @@ describe('ChatPane', () => {
     render(<ChatPane sessionId={session.id} />)
     expect(spy).not.toHaveBeenCalled()
 
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'Psalm 23')
+    await userEvent.type(screen.getByRole('textbox'), 'Psalm 23')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(await screen.findByText("Here's a devotional on", { exact: false })).toBeInTheDocument()
@@ -905,7 +905,7 @@ describe('ChatPane', () => {
     )
 
     render(<ChatPane sessionId={session.id} />)
-    const input = screen.getByPlaceholderText(/ask about a verse/i)
+    const input = screen.getByRole('textbox')
     const form = input.closest('form')!
 
     await userEvent.type(input, 'first question')
@@ -931,7 +931,7 @@ describe('ChatPane', () => {
     })
 
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'what is the Greek word?')
+    await userEvent.type(screen.getByRole('textbox'), 'what is the Greek word?')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(await screen.findByText('The Greek word here is eirēnē.')).toBeInTheDocument()
@@ -961,7 +961,7 @@ describe('ChatPane', () => {
     const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Sure, here it is.' } as never)
 
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'read out the devotion')
+    await userEvent.type(screen.getByRole('textbox'), 'read out the devotion')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(await screen.findByText('Sure, here it is.')).toBeInTheDocument()
@@ -992,7 +992,7 @@ describe('ChatPane', () => {
 
     const session = useSessionsStore.getState().createSession('hermeneutics', { reference: 'ROM 8:1' })
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'run it')
+    await userEvent.type(screen.getByRole('textbox'), 'run it')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     const messages = useSessionsStore.getState().sessions[session.id].messages
@@ -1016,7 +1016,7 @@ describe('ChatPane', () => {
 
     const session = useSessionsStore.getState().createSession('hermeneutics', { reference: 'ROM 8:1' })
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'run it')
+    await userEvent.type(screen.getByRole('textbox'), 'run it')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     expect(await screen.findByText(/no condemnation/)).toBeInTheDocument()
@@ -1034,7 +1034,7 @@ describe('ChatPane', () => {
 
     const session = useSessionsStore.getState().createSession('hermeneutics', {})
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'run 1 Thessalonians 4:15-18')
+    await userEvent.type(screen.getByRole('textbox'), 'run 1 Thessalonians 4:15-18')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     const params = useSessionsStore.getState().sessions[session.id].modeParams
@@ -1049,7 +1049,7 @@ describe('ChatPane', () => {
       reference: 'ROM 8:1', runDigest: 'existing digest',
     })
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'say more')
+    await userEvent.type(screen.getByRole('textbox'), 'say more')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     const params = useSessionsStore.getState().sessions[session.id].modeParams
@@ -1067,7 +1067,7 @@ describe('ChatPane', () => {
 
     const session = useSessionsStore.getState().createSession('hermeneutics', {})
     render(<ChatPane sessionId={session.id} />)
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'the patriarchs rise with the Church')
+    await userEvent.type(screen.getByRole('textbox'), 'the patriarchs rise with the Church')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     const params = useSessionsStore.getState().sessions[session.id].modeParams
@@ -1099,7 +1099,7 @@ describe('ChatPane', () => {
 
     const session = useSessionsStore.getState().createSession('hermeneutics', {})
     render(<ChatPane sessionId={session.id} />)
-    const input = screen.getByPlaceholderText(/ask about a verse/i)
+    const input = screen.getByRole('textbox')
     await userEvent.type(input, 'Genesis 1')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
     expect(useSessionsStore.getState().sessions[session.id].modeParams.scopeChapter).toBe('GEN 1')
@@ -1218,7 +1218,7 @@ describe('ChatPane', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     render(<ChatPane sessionId={session.id} />)
 
-    await userEvent.type(screen.getByPlaceholderText('Ask about a verse...'), 'Hello{Enter}')
+    await userEvent.type(screen.getByRole('textbox'), 'Hello{Enter}')
 
     await screen.findByText('Sure, go ahead.')
     expect(postChatStream.mock.calls[0]).toHaveLength(2)
@@ -1342,7 +1342,7 @@ describe('ChatPane', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     render(<ChatPane sessionId={session.id} />)
 
-    const input = screen.getByPlaceholderText(/ask about a verse/i)
+    const input = screen.getByRole('textbox')
     const form = input.closest('form')!
     fireEvent.change(input, { target: { value: 'a typed question' } })
     fireEvent.submit(form)
@@ -1411,7 +1411,7 @@ describe('ChatPane', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     render(<ChatPane sessionId={session.id} />)
 
-    await userEvent.type(screen.getByPlaceholderText(/ask about a verse/i), 'Hello')
+    await userEvent.type(screen.getByRole('textbox'), 'Hello')
     await userEvent.click(screen.getByRole('button', { name: /send/i }))
 
     await screen.findByText('Sure, go ahead.')
@@ -1521,6 +1521,15 @@ describe('ChatPane', () => {
         },
       })
       expect(await screen.findByText('Read the story ▸')).toBeInTheDocument()
+
+      // Regression: a "Try again" regenerate button used to appear here,
+      // but it never scrolled the new story into view, so a regeneration
+      // routinely landed off-screen and looked like the button did
+      // nothing. The whole picker (not just that button) is gone once a
+      // story exists, rather than leaving inert checkboxes with no submit
+      // affordance.
+      expect(screen.queryByRole('button', { name: /make my story|try again/i })).not.toBeInTheDocument()
+      expect(screen.queryByText('Trust')).not.toBeInTheDocument()
     })
 
     it('offers a Retry button when theme derivation failed, and re-derives themes against the live source session', async () => {
@@ -1585,6 +1594,282 @@ describe('ChatPane', () => {
       expect(postChat).toHaveBeenCalledTimes(1)
       resolvePostChat({ type: 'chat', message: 'themes', data: { themes: [], digest: '' } })
       await waitFor(() => expect(screen.getByText('themes')).toBeInTheDocument())
+    })
+
+    // The tile-click entry point (ModePickerScreen) now starts the session
+    // immediately with just this inline marker — no theme yet — instead of
+    // a separate pre-chat screen. See ModePickerScreen.test.tsx for that.
+    describe('inline theme starter', () => {
+      // Regression: an earlier version of this step had its own embedded
+      // text input for a typed theme, which duplicated the compose box
+      // already visible at the bottom of every mode. Typing a theme now
+      // goes through that one shared box instead.
+      it('typing a theme into the main compose box moves straight to the ThemePicker step, needing no LLM call', async () => {
+        const postChat = vi.spyOn(chatApi, 'postChat')
+        const story = useSessionsStore.getState().createSession('story', {})
+        useSessionsStore.getState().appendMessage(story.id, { id: 'u1', role: 'user', text: '✨ Tell a Story' })
+        useSessionsStore.getState().appendMessage(story.id, {
+          id: 'starter', role: 'assistant', text: 'What should the story be about?',
+          data: { storyStarter: true },
+        })
+
+        render(<ChatPane sessionId={story.id} />)
+        // Only one text input exists for this step — the shared compose box.
+        expect(screen.getAllByRole('textbox')).toHaveLength(1)
+        await userEvent.type(screen.getByRole('textbox'), 'A brave little mouse{enter}')
+
+        expect(postChat).not.toHaveBeenCalled()
+        const updated = useSessionsStore.getState().sessions[story.id]
+        expect(updated.modeParams.storyThemes).toEqual([{ id: 'custom', label: 'A brave little mouse', description: '' }])
+        expect(updated.modeParams.storySelectedThemeIds).toEqual(['custom'])
+        expect(updated.modeParams.storyAgeRange).toBe('3-6')
+        expect(updated.messages.at(-2)).toMatchObject({ role: 'user', text: 'A brave little mouse' })
+        expect(screen.getByRole('button', { name: 'Make my story' })).toBeInTheDocument()
+        // The starter chips are gone once a theme is chosen.
+        expect(screen.queryByRole('button', { name: /sharing what you have/i })).not.toBeInTheDocument()
+      })
+
+      it('clicking a starter idea chip picks that theme immediately, needing no LLM call', async () => {
+        const postChat = vi.spyOn(chatApi, 'postChat')
+        const story = useSessionsStore.getState().createSession('story', {})
+        useSessionsStore.getState().appendMessage(story.id, {
+          id: 'starter', role: 'assistant', text: 'What should the story be about?',
+          data: { storyStarter: true },
+        })
+
+        render(<ChatPane sessionId={story.id} />)
+        await userEvent.click(screen.getByRole('button', { name: /sharing what you have/i }))
+
+        expect(postChat).not.toHaveBeenCalled()
+        expect(useSessionsStore.getState().sessions[story.id].modeParams.storyThemes).toEqual([
+          { id: 'custom', label: 'Sharing what you have', description: '' },
+        ])
+        expect(screen.getByRole('button', { name: 'Make my story' })).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Chat with a Character (inline starter)', () => {
+    // The tile-click entry point (ModePickerScreen) now starts the session
+    // immediately with just this inline marker — no character yet —
+    // instead of a separate pre-chat screen. See ModePickerScreen.test.tsx.
+    it('picking a character inline fetches the in-character greeting and hides the picker', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            characters: [{ id: 'david', name: 'David', testament: 'OT', summary: 'The shepherd boy who became king.' }],
+          }),
+      } as Response)
+      const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Peace. I am David.' })
+      const character = useSessionsStore.getState().createSession('character', {})
+      useSessionsStore.getState().appendMessage(character.id, { id: 'u1', role: 'user', text: '💬 Chat with a Character' })
+      useSessionsStore.getState().appendMessage(character.id, {
+        id: 'starter', role: 'assistant', text: 'Which historical figure would you like to talk with?',
+        data: { characterStarter: true },
+      })
+
+      render(<ChatPane sessionId={character.id} />)
+      await userEvent.click(await screen.findByRole('button', { name: /david/i }))
+
+      expect(postChat).toHaveBeenCalledWith({
+        message: '',
+        mode: 'character',
+        mode_params: { characterId: 'david', characterName: 'David' },
+      })
+      const updated = useSessionsStore.getState().sessions[character.id]
+      expect(updated.modeParams).toEqual({ characterId: 'david', characterName: 'David' })
+      expect(updated.messages.at(-2)).toMatchObject({ role: 'user', text: '💬 Chat with David' })
+      expect(await screen.findByText('Peace. I am David.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /david/i })).not.toBeInTheDocument()
+    })
+
+    // Regression: typing a character's name into the main compose box
+    // (instead of clicking it in the inline list) used to fall through to
+    // the generic chat turn with no character_id set, and the backend
+    // answered a bare "Unknown character." — reported via "Report an
+    // issue". Typing now resolves against the same roster the list uses.
+    describe('typing a name into the main compose box', () => {
+      it('resolves a valid typed name to the matching character and fetches its greeting', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              characters: [{ id: 'david', name: 'David', testament: 'OT', summary: 'The shepherd boy who became king.' }],
+            }),
+        } as Response)
+        const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Peace. I am David.' })
+        const character = useSessionsStore.getState().createSession('character', {})
+        useSessionsStore.getState().appendMessage(character.id, {
+          id: 'starter', role: 'assistant', text: 'Which historical figure would you like to talk with?',
+          data: { characterStarter: true },
+        })
+
+        render(<ChatPane sessionId={character.id} />)
+        await userEvent.type(screen.getByRole('textbox'), 'david{enter}')
+
+        expect(postChat).toHaveBeenCalledWith({
+          message: '',
+          mode: 'character',
+          mode_params: { characterId: 'david', characterName: 'David' },
+        })
+        expect(useSessionsStore.getState().sessions[character.id].modeParams).toEqual({
+          characterId: 'david', characterName: 'David',
+        })
+        expect(await screen.findByText('Peace. I am David.')).toBeInTheDocument()
+      })
+
+      it('answers a typed name with no match instead of asking the backend for an empty character', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              characters: [{ id: 'david', name: 'David', testament: 'OT', summary: 'The shepherd boy who became king.' }],
+            }),
+        } as Response)
+        const postChat = vi.spyOn(chatApi, 'postChat')
+        const character = useSessionsStore.getState().createSession('character', {})
+        useSessionsStore.getState().appendMessage(character.id, {
+          id: 'starter', role: 'assistant', text: 'Which historical figure would you like to talk with?',
+          data: { characterStarter: true },
+        })
+
+        render(<ChatPane sessionId={character.id} />)
+        await userEvent.type(screen.getByRole('textbox'), 'Zorblax{enter}')
+
+        expect(postChat).not.toHaveBeenCalled()
+        expect(await screen.findByText(/couldn't find "Zorblax"/i)).toBeInTheDocument()
+        expect(useSessionsStore.getState().sessions[character.id].modeParams.characterId).toBeUndefined()
+      })
+
+      // Regression, also from the "Report an issue" thread: the real
+      // roster has an OT character named exactly "Joseph" and an NT one
+      // named "Joseph (Husband of Mary)" — an "exact match first, else
+      // substring" strategy would find only the OT one for a typed
+      // "Joseph" and never even look at the other, silently answering as
+      // him with no confirmation. A single combined substring match (used
+      // below) catches both.
+      it('asks which one when a typed name matches more than one character, instead of silently picking one', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              characters: [
+                { id: 'joseph', name: 'Joseph', testament: 'OT', summary: 'Son of Jacob, sold into Egypt.' },
+                { id: 'joseph_husband', name: 'Joseph (Husband of Mary)', testament: 'NT', summary: "Mary's husband." },
+              ],
+            }),
+        } as Response)
+        const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Peace. I am Joseph, husband of Mary.' })
+        const character = useSessionsStore.getState().createSession('character', {})
+        useSessionsStore.getState().appendMessage(character.id, {
+          id: 'starter', role: 'assistant', text: 'Which historical figure would you like to talk with?',
+          data: { characterStarter: true },
+        })
+
+        render(<ChatPane sessionId={character.id} />)
+        await userEvent.type(screen.getByRole('textbox'), 'Joseph{enter}')
+
+        expect(postChat).not.toHaveBeenCalled()
+        expect(await screen.findByText(/more than one "Joseph"/i)).toBeInTheDocument()
+        const otChoice = screen.getByRole('button', { name: /^joseph \(old testament\)$/i })
+        const husbandChoice = screen.getByRole('button', { name: /joseph \(husband of mary\) \(new testament\)/i })
+        expect(otChoice).toBeInTheDocument()
+        expect(husbandChoice).toBeInTheDocument()
+        expect(useSessionsStore.getState().sessions[character.id].modeParams.characterId).toBeUndefined()
+
+        await userEvent.click(husbandChoice)
+
+        expect(postChat).toHaveBeenCalledWith({
+          message: '',
+          mode: 'character',
+          mode_params: { characterId: 'joseph_husband', characterName: 'Joseph (Husband of Mary)' },
+        })
+        expect(useSessionsStore.getState().sessions[character.id].modeParams).toEqual({
+          characterId: 'joseph_husband', characterName: 'Joseph (Husband of Mary)',
+        })
+        expect(await screen.findByText('Peace. I am Joseph, husband of Mary.')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('compose box placeholder', () => {
+    // Regression: the compose box always said "Ask about a verse...",
+    // which is inaccurate for Character and Story mode — neither is about
+    // a verse, and the text gave no hint that this box also resolves a
+    // typed character name or theme.
+    it("hints at typing a character's name before one is picked, then names the character once picked", () => {
+      const character = useSessionsStore.getState().createSession('character', {})
+      const { rerender } = render(<ChatPane sessionId={character.id} />)
+      expect(screen.getByPlaceholderText(/type a character's name/i)).toBeInTheDocument()
+
+      useSessionsStore.getState().updateModeParams(character.id, { characterId: 'david', characterName: 'David' })
+      rerender(<ChatPane sessionId={character.id} />)
+      expect(screen.getByPlaceholderText('Ask David something…')).toBeInTheDocument()
+    })
+
+    it('asks what the story should be about before a theme is picked, then invites a follow-up', () => {
+      const story = useSessionsStore.getState().createSession('story', {})
+      const { rerender } = render(<ChatPane sessionId={story.id} />)
+      expect(screen.getByPlaceholderText('What should the story be about?')).toBeInTheDocument()
+
+      useSessionsStore.getState().updateModeParams(story.id, {
+        storyThemes: [{ id: 'custom', label: 'Trust', description: '' }],
+      })
+      rerender(<ChatPane sessionId={story.id} />)
+      expect(screen.getByPlaceholderText(/ask about the story/i)).toBeInTheDocument()
+    })
+
+    it('matches Ask Anything\'s placeholder to the wider scope ModePickerScreen and its own suggested prompts advertise', () => {
+      const session = useSessionsStore.getState().createSession('freeform', {})
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText('Ask about a verse, word, or theme…')).toBeInTheDocument()
+    })
+
+    it("asks for a verse reference or theme before a devotional is delivered, then invites a follow-up", () => {
+      const notYet = useSessionsStore.getState().createSession('devotional', { source: 'user' })
+      render(<ChatPane sessionId={notYet.id} />)
+      expect(screen.getByPlaceholderText('Type a verse reference or theme…')).toBeInTheDocument()
+
+      const delivered = useSessionsStore.getState().createSession('devotional', { source: 'user', delivered: true })
+      render(<ChatPane sessionId={delivered.id} />)
+      expect(screen.getByPlaceholderText('Ask about this devotional…')).toBeInTheDocument()
+    })
+
+    it("names today's reading for Bible in a Year, instead of the generic verse placeholder", () => {
+      const session = useSessionsStore.getState().createSession('reading_plan', { plan: 'chronological', dayIndex: 0, completedDays: [] })
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText("Ask about today's reading…")).toBeInTheDocument()
+    })
+
+    it('names the parable for Parable Study, instead of the generic verse placeholder', () => {
+      const session = useSessionsStore.getState().createSession('parable', { parableId: 'prodigal_son' })
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText(/ask about this parable/i)).toBeInTheDocument()
+    })
+
+    it('names the topic for Topical Study, instead of the generic verse placeholder', () => {
+      const session = useSessionsStore.getState().createSession('topic', { conceptSlug: 'holiness' })
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText(/ask about this topic/i)).toBeInTheDocument()
+    })
+
+    it("hints at typing a reference for Verse of the Day, matching its own \"type a reference below\" primer text", () => {
+      const session = useSessionsStore.getState().createSession('verse', {})
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText(/type a reference.*ask about a verse/i)).toBeInTheDocument()
+    })
+
+    it('invites naming a passage for Socratic Study, matching its own primer text', () => {
+      const session = useSessionsStore.getState().createSession('socratic', {})
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText(/name a passage.*what's on your mind/i)).toBeInTheDocument()
+    })
+
+    it('invites naming a passage for Deep Study, matching its own primer and "say go" text', () => {
+      const session = useSessionsStore.getState().createSession('hermeneutics', {})
+      render(<ChatPane sessionId={session.id} />)
+      expect(screen.getByPlaceholderText(/name a passage.*say 'go'/i)).toBeInTheDocument()
     })
   })
 })

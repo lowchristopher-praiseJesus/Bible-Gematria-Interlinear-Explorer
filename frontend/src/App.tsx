@@ -57,6 +57,15 @@ export default function App() {
   // columns and these flags are inert.
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [artifactOpen, setArtifactOpen] = useState(false)
+  // Bumped by startNewChat so ModePickerScreen remounts even when
+  // sessionId was already null — otherwise "+New" clicked from inside its
+  // Character/Story sub-picker (a screen shown before any session exists)
+  // is a no-op: sessionId doesn't change, so the picker's own "which
+  // sub-screen am I on" state survives and the user stays stuck there
+  // instead of landing back on the main tile screen, unlike every other
+  // mode (which starts its session immediately and so always has a real
+  // sessionId for "+New" to null out).
+  const [pickerResetKey, setPickerResetKey] = useState(0)
   const [importNotice, setImportNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null)
   const importHandled = useRef(false)
   const compact = useIsCompact()
@@ -187,6 +196,7 @@ export default function App() {
 
   function startNewChat() {
     setSessionId(null)
+    setPickerResetKey((k) => k + 1)
     setDrawerOpen(false)
   }
 
@@ -314,7 +324,7 @@ export default function App() {
             {activeSession ? (
               <ChatPane sessionId={activeSession.id} onNavigateToSession={setSessionId} />
             ) : (
-              <ModePickerScreen onSessionStarted={setSessionId} />
+              <ModePickerScreen key={pickerResetKey} onSessionStarted={setSessionId} />
             )}
           </ErrorBoundary>
         </div>

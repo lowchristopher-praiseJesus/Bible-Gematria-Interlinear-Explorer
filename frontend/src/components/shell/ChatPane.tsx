@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, RefreshCw, Share2, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
-import { listParables, listStudyWikis } from '@/lib/modeData'
+import { listCharacters, listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { toHistory } from '@/lib/history'
 import { startTellAStory, deriveStoryThemes, MAX_STORY_SOURCE_MESSAGES } from '@/lib/tellAStory'
 import { ThemePicker, type StoryAgeRange } from './ThemePicker'
+import { StoryThemeStarter } from './StoryThemeStarter'
+import { CharacterPickerInline } from './CharacterPickerInline'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { MODE_LABELS, useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
@@ -24,7 +26,7 @@ import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
 import { useVoiceMode, type UseVoiceModeResult } from './useVoiceMode'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
-import type { ArtifactLink, MessageChoice, SessionMessage, PhaseResult } from '@/types/session'
+import type { ArtifactLink, MessageChoice, Session, SessionMessage, PhaseResult } from '@/types/session'
 
 interface Props {
   sessionId: string
@@ -78,6 +80,62 @@ function hermeneuticsParams(data: unknown, opts: { fromPrimer?: boolean } = {}):
 
 const ARTIFACT_PILL =
   'text-xs px-2 py-1 rounded-full border border-[var(--color-theme-border)] hover:bg-[var(--color-surface-alt)]'
+
+// One placeholder per mode, each matched to what that mode's own primer
+// text (ModePickerScreen's starters, or the backend's mode-primer replies
+// in chatbot/router.py) actually asks for — a single "Ask about a verse..."
+// used to cover every mode regardless of fit. Two modes (Character, Story)
+// go further and change once their opening pick is made, since typing a
+// name/theme and chatting afterward are genuinely different asks; the rest
+// use one honest placeholder throughout, since their before/after turns
+// stay closely enough related (still the same passage or topic) not to
+// need a second wording.
+function composePlaceholder(session: Session): string {
+  switch (session.mode) {
+    case 'character':
+      return session.modeParams.characterName
+        ? `Ask ${session.modeParams.characterName} something…`
+        : "Type a character's name, or ask anything…"
+    case 'story':
+      return session.modeParams.storyThemes?.length
+        ? 'Ask about the story, or try another theme…'
+        : 'What should the story be about?'
+    case 'devotional':
+      // Mirrors the mode primer's own wording in chatbot/router.py
+      // ("Tell me a verse reference... or a theme...") for the step where
+      // that's genuinely what's being asked; afterward the devotional
+      // itself is what a follow-up would be about.
+      return session.modeParams.delivered
+        ? 'Ask about this devotional…'
+        : 'Type a verse reference or theme…'
+    case 'reading_plan':
+      // "Mark today's reading complete" is the app's own term for this.
+      return "Ask about today's reading…"
+    case 'parable':
+      return 'Ask about this parable, or pick one above…'
+    case 'topic':
+      return 'Ask about this topic, or pick one above…'
+    case 'verse':
+      // The mode primer explicitly invites typing a reference ("Want a
+      // random verse? Or type a reference below — e.g. John 3:16"), which
+      // "Ask about a verse..." doesn't hint at.
+      return 'Type a reference (e.g. John 3:16), or ask about a verse…'
+    case 'socratic':
+      // Mirrors the primer's own "Name a passage you want to interrogate,
+      // or just start typing what's on your mind."
+      return "Name a passage, or share what's on your mind…"
+    case 'hermeneutics':
+      // Mirrors the primer's "Name a passage..." opener and its "Say go
+      // when you're ready" once one resolves.
+      return "Name a passage, or say 'go' when ready…"
+    case 'freeform':
+    default:
+      // Matches ModePickerScreen's own home-screen input for the same
+      // mode, and the breadth of its SUGGESTED_PROMPTS (word studies,
+      // gematria, cross-Bible themes) — not just verses.
+      return 'Ask about a verse, word, or theme…'
+  }
+}
 
 // Both reading orders (chronological, canonical) are always distributed
 // across exactly 365 days — see _DAYS in chatbot/data/reading_plans.py.
@@ -150,6 +208,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   const [resolvingChoiceId, setResolvingChoiceId] = useState<string | null>(null)
   const [tellingStory, setTellingStory] = useState(false)
   const [storySubmitting, setStorySubmitting] = useState(false)
+  const [pickingCharacterId, setPickingCharacterId] = useState<string | null>(null)
   // Which theme-derivation message (by id) is currently being retried —
   // null when none is. Keyed by message id (not a bare boolean) since a
   // session can only ever have one live derivation prompt, but this keeps
@@ -185,7 +244,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   // for themes. Drives the "thinking" indicator — without it, that last
   // case in particular (an up-to-120s LLM call with no other UI change
   // until the new story session is ready) reads as the app hanging.
-  const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete || tellingStory
+  const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete || tellingStory || !!pickingCharacterId
 
   // Only the devotional generation leg of `isBusy` runs long enough (~10s+)
   // that the plain dots read as frozen — narrow the rotating status text to
@@ -342,6 +401,129 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     [session, sessionId, streamAssistantReply, updateModeParams]
   )
 
+  // Tell a Story's opening step (typed into the compose box below, or
+  // picked from a starter idea chip) — no LLM call needed, so this runs
+  // synchronously and lands straight in the ThemePicker/"Make my story"
+  // step with that one theme pre-selected, exactly like the
+  // source-conversation-derived path does once themes arrive. Posts the
+  // theme back as a user bubble so the transcript reads as a real exchange
+  // rather than a value silently appearing. Declared ahead of sendMessage,
+  // which calls it directly for a typed theme.
+  const submitStoryTheme = useCallback(
+    (theme: string) => {
+      if (!session) return
+      const themeObj = { id: 'custom', label: theme, description: '' }
+      updateModeParams(sessionId, {
+        storyThemes: [themeObj],
+        storySelectedThemeIds: ['custom'],
+        storyAgeRange: '3-6',
+      })
+      appendMessage(sessionId, { id: genId(), role: 'user', text: theme })
+      appendMessage(sessionId, {
+        id: genId(),
+        role: 'assistant',
+        text: "Great idea — pick an age range, then I'll write it.",
+        data: { themes: [themeObj], digest: '' },
+      })
+    },
+    [session, sessionId, updateModeParams, appendMessage]
+  )
+
+  // Chat with a Character's opening step: picking a character fetches the
+  // in-character greeting exactly as ModePickerScreen's old full-screen
+  // picker did, just now in place inside an already-open session instead
+  // of before one exists. Declared ahead of sendMessage, which calls it
+  // (via resolveCharacterByName) for a typed name.
+  const pickCharacterInline = useCallback(
+    async (character: CharacterEntry) => {
+      if (!session || pickingCharacterId) return
+      setPickingCharacterId(character.id)
+      updateModeParams(sessionId, { characterId: character.id, characterName: character.name })
+      appendMessage(sessionId, { id: genId(), role: 'user', text: `💬 Chat with ${character.name}` })
+      try {
+        const response = await postChat({
+          message: '',
+          mode: 'character',
+          mode_params: { characterId: character.id, characterName: character.name },
+        })
+        appendMessage(sessionId, {
+          id: genId(),
+          role: 'assistant',
+          text: response.message,
+          type: response.type,
+          data: response.data ?? undefined,
+          artifacts: response.artifacts,
+          followUpQuestions: response.follow_up_questions,
+        })
+      } catch (err) {
+        appendMessage(sessionId, {
+          id: genId(),
+          role: 'assistant',
+          text: 'Sorry, something went wrong: ' + errorMessage(err),
+        })
+      } finally {
+        setPickingCharacterId(null)
+      }
+    },
+    [session, sessionId, pickingCharacterId, updateModeParams, appendMessage]
+  )
+
+  // Chat with a Character's opening step, typed instead of clicked: before
+  // a character is picked, the compose box below doubles as the "search by
+  // name" input the inline picker's own search box is — matching a typed
+  // name against the real roster client-side, exactly like clicking that
+  // character would, rather than sending an empty character_id to the
+  // backend (which the "Report an issue" thread on this bug showed answers
+  // with a bare "Unknown character." instead of resolving it).
+  const resolveCharacterByName = useCallback(
+    async (typed: string) => {
+      if (!session) return
+      try {
+        const characters = await listCharacters()
+        const needle = typed.trim().toLowerCase()
+        // Several characters can share a name one is a prefix of (e.g. OT
+        // "Joseph" and NT "Joseph (Husband of Mary)") — matching on an
+        // exact name first and only falling back to a substring search
+        // would find just the OT one for "Joseph" and never even look at
+        // the other, so a single combined substring match is used instead:
+        // whenever it turns up more than one character, this always asks
+        // rather than silently picking one (a second bug the same "Report
+        // an issue" thread found — typing "Joseph" auto-selected the Old
+        // Testament one with no confirmation).
+        const candidates = characters.filter((c) => c.name.toLowerCase().includes(needle))
+        if (candidates.length === 1) {
+          await pickCharacterInline(candidates[0])
+          return
+        }
+        if (candidates.length > 1) {
+          appendMessage(sessionId, { id: genId(), role: 'user', text: typed })
+          appendMessage(sessionId, {
+            id: genId(),
+            role: 'assistant',
+            text: `There's more than one "${typed}" — which one did you mean?`,
+            choicesStatus: 'ready',
+            choices: candidates.map((c) => ({
+              label: `${c.name} (${c.testament === 'OT' ? 'Old Testament' : 'New Testament'})`,
+              modeParams: { characterId: c.id, characterName: c.name },
+            })),
+          })
+          return
+        }
+      } catch {
+        // Falls through to the same "couldn't find" reply a genuine
+        // no-match gets — a listing failure and no match both just leave
+        // the user back on the picker with the same guidance.
+      }
+      appendMessage(sessionId, { id: genId(), role: 'user', text: typed })
+      appendMessage(sessionId, {
+        id: genId(),
+        role: 'assistant',
+        text: `I couldn't find "${typed}" in the list above — check the spelling, or pick one from the list.`,
+      })
+    },
+    [session, sessionId, appendMessage, pickCharacterInline]
+  )
+
   const sendMessage = useCallback(
     async (text: string) => {
       // Claim the voice-turn marker before ANY early return. It is set by
@@ -373,6 +555,34 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         if (voiceTurn) {
           voiceModeRef.current?.speak(
             "One moment — I'm still finishing the last answer.",
+            voiceTurn.delegationId
+          )
+        }
+        return
+      }
+      // Tell a Story's opening step: before a theme is picked, the compose
+      // box below doubles as the "type your own" input the old dedicated
+      // starter screen had — handled entirely client-side (no backend
+      // round-trip), so this returns before the generic turn below ever
+      // appends its own user bubble or calls the backend.
+      if (session.mode === 'story' && !session.modeParams.storyThemes?.length) {
+        setInput('')
+        submitStoryTheme(text.trim())
+        if (voiceTurn) {
+          voiceModeRef.current?.speak("Great idea — pick an age range, then I'll write it.", voiceTurn.delegationId)
+        }
+        return
+      }
+      // Chat with a Character's opening step: before a character is picked,
+      // a typed name resolves against the real roster client-side instead
+      // of reaching the backend with no character_id (which used to answer
+      // "Unknown character." — see resolveCharacterByName above).
+      if (session.mode === 'character' && !session.modeParams.characterId) {
+        setInput('')
+        await resolveCharacterByName(text.trim())
+        if (voiceTurn) {
+          voiceModeRef.current?.speak(
+            'One moment — let me see who that is.',
             voiceTurn.delegationId
           )
         }
@@ -437,7 +647,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         setLoading(false)
       }
     },
-    [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn, updateModeParams]
+    [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn, updateModeParams, submitStoryTheme, resolveCharacterByName]
   )
 
   const voiceMode = useVoiceMode({
@@ -975,10 +1185,17 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
                   })()}
                   {(() => {
                     const storyThemes = (msg.data as { themes?: { id: string; label: string; description: string }[] } | undefined)?.themes
+                    // Hidden once a story already exists: regenerating from
+                    // here used to be possible via a "Try again" button, but
+                    // it never scrolled the new story into view, so it
+                    // routinely landed off-screen and looked like it did
+                    // nothing. Starting a fresh session is still available.
+                    const hasStory = session.messages.some((m) => m.artifacts?.some((a) => a.type === 'story'))
                     return (
                       session.mode === 'story' &&
                       Array.isArray(storyThemes) &&
-                      storyThemes.length > 0 && (
+                      storyThemes.length > 0 &&
+                      !hasStory && (
                         <ThemePicker
                           themes={storyThemes}
                           selectedIds={session.modeParams.storySelectedThemeIds ?? []}
@@ -987,11 +1204,16 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
                           onChangeAgeRange={setStoryAgeRange}
                           onSubmit={submitStory}
                           submitting={storySubmitting}
-                          hasStory={session.messages.some((m) => m.artifacts?.some((a) => a.type === 'story'))}
                         />
                       )
                     )
                   })()}
+                  {session.mode === 'story' &&
+                    (msg.data as { storyStarter?: boolean } | undefined)?.storyStarter &&
+                    !session.modeParams.storyThemes?.length && <StoryThemeStarter onPick={submitStoryTheme} />}
+                  {session.mode === 'character' &&
+                    (msg.data as { characterStarter?: boolean } | undefined)?.characterStarter &&
+                    !session.modeParams.characterId && <CharacterPickerInline onPick={pickCharacterInline} />}
                 </div>
                 {!!msg.passageReference && <PassageVerseBox reference={msg.passageReference} />}
                 {!!msg.phases?.length && <PhaseList phases={msg.phases} />}
@@ -1105,7 +1327,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about a verse..."
+          placeholder={composePlaceholder(session)}
           className="flex-1 bg-transparent outline-none text-sm"
         />
         <button

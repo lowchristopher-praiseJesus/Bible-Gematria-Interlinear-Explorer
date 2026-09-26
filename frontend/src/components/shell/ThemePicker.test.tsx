@@ -14,7 +14,7 @@ describe('ThemePicker', () => {
       <ThemePicker
         themes={themes} selectedIds={[]} ageRange="3-6"
         onToggleTheme={() => {}} onChangeAgeRange={() => {}} onSubmit={() => {}}
-        submitting={false} hasStory={false}
+        submitting={false}
       />
     )
     expect(screen.getByText('Trusting God')).toBeInTheDocument()
@@ -30,7 +30,7 @@ describe('ThemePicker', () => {
       <ThemePicker
         themes={themes} selectedIds={[]} ageRange="3-6"
         onToggleTheme={onToggleTheme} onChangeAgeRange={() => {}} onSubmit={() => {}}
-        submitting={false} hasStory={false}
+        submitting={false}
       />
     )
     await userEvent.click(screen.getByText('Trusting God'))
@@ -42,21 +42,10 @@ describe('ThemePicker', () => {
       <ThemePicker
         themes={themes} selectedIds={[]} ageRange="3-6"
         onToggleTheme={() => {}} onChangeAgeRange={() => {}} onSubmit={() => {}}
-        submitting={false} hasStory={false}
+        submitting={false}
       />
     )
     expect(screen.getByRole('button', { name: 'Make my story' })).toBeDisabled()
-  })
-
-  it('labels the submit button "Try again" once a story already exists', () => {
-    render(
-      <ThemePicker
-        themes={themes} selectedIds={['t1']} ageRange="3-6"
-        onToggleTheme={() => {}} onChangeAgeRange={() => {}} onSubmit={() => {}}
-        submitting={false} hasStory
-      />
-    )
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
   })
 
   it('calls onChangeAgeRange when a different age button is clicked', async () => {
@@ -65,7 +54,7 @@ describe('ThemePicker', () => {
       <ThemePicker
         themes={themes} selectedIds={['t1']} ageRange="3-6"
         onToggleTheme={() => {}} onChangeAgeRange={onChangeAgeRange} onSubmit={() => {}}
-        submitting={false} hasStory={false}
+        submitting={false}
       />
     )
     await userEvent.click(screen.getByRole('button', { name: 'Ages 7-8' }))
@@ -78,7 +67,7 @@ describe('ThemePicker', () => {
       <ThemePicker
         themes={themes} selectedIds={['t1']} ageRange="3-6"
         onToggleTheme={() => {}} onChangeAgeRange={() => {}} onSubmit={onSubmit}
-        submitting={false} hasStory={false}
+        submitting={false}
       />
     )
     await userEvent.click(screen.getByRole('button', { name: 'Make my story' }))

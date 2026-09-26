@@ -22,20 +22,19 @@ interface Props {
   onChangeAgeRange: (age: StoryAgeRange) => void
   onSubmit: () => void
   submitting: boolean
-  hasStory: boolean
 }
 
 /**
- * The Tell a Story mode's theme + age picker. Unlike the generic
- * MessageChoice pills (which resolve once and lock), this stays mounted
- * and interactive after a story has been delivered, so the user can pick
- * different themes or a different age range and generate again. Fully
- * controlled — the caller (ChatPane) owns the current selection in
- * session.modeParams, the same source of truth every other mode's
- * options already use.
+ * The Tell a Story mode's theme + age picker, shown until a story has been
+ * generated — ChatPane stops rendering it once one exists (regenerating
+ * from here was removed: its "Try again" button worked, but never
+ * scrolled the new story into view, so a regeneration routinely landed
+ * off-screen and looked broken). Fully controlled — the caller (ChatPane)
+ * owns the current selection in session.modeParams, the same source of
+ * truth every other mode's options already use.
  */
 export function ThemePicker({
-  themes, selectedIds, ageRange, onToggleTheme, onChangeAgeRange, onSubmit, submitting, hasStory,
+  themes, selectedIds, ageRange, onToggleTheme, onChangeAgeRange, onSubmit, submitting,
 }: Props) {
   return (
     <div className="mt-2 flex flex-col gap-3">
@@ -87,7 +86,7 @@ export function ThemePicker({
         className="self-start inline-flex items-center gap-2 text-sm px-3.5 py-2 rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] disabled:opacity-50"
       >
         {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-        {hasStory ? 'Try again' : 'Make my story'}
+        Make my story
       </button>
     </div>
   )

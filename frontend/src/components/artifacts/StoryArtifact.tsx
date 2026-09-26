@@ -22,7 +22,9 @@ export function StoryArtifact(props: StoryArtifactParams) {
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(pages.map((p) => p.text).join('\n\n'))
+      const tags = [AGE_RANGE_LABELS[age_range] ?? age_range, ...(themes ?? [])].join(' · ')
+      const text = [title, tags, ...pages.map((p) => p.text)].join('\n\n')
+      await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {

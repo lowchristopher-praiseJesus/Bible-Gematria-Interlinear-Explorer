@@ -38,14 +38,17 @@ describe('StoryArtifact', () => {
     expect(screen.getByText('850 words')).toBeInTheDocument()
   })
 
-  it("copies every page's text, joined, to the clipboard", async () => {
+  it('copies the title, age range and themes, then every page\'s text, to the clipboard', async () => {
     streamStoryIllustrations.mockReturnValue(emptyStream())
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     render(<StoryArtifact {...props} />)
     await userEvent.click(screen.getByRole('button', { name: /copy story/i }))
     expect(writeText).toHaveBeenCalledWith(
-      'Once upon a time, a small sparrow learned to trust the wind.\n\nIt flew home at last.'
+      'The Brave Little Sparrow\n\n' +
+        'Ages 7-8 · Trusting God · Coming home\n\n' +
+        'Once upon a time, a small sparrow learned to trust the wind.\n\n' +
+        'It flew home at last.'
     )
   })
 
