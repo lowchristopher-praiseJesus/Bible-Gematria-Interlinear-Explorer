@@ -184,3 +184,70 @@ def test_primer_offers_examples():
     result = ps.primer()
     assert result["type"] == "chat" and result["route"] == "Mode primer → passages"
     assert result["follow_up_questions"] == ps.EXAMPLE_QUERIES
+
+
+async def test_junk_jev_key_is_skipped_and_the_good_judgment_still_filters(index, monkeypatch):
+    _llm(monkeypatch)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+
+    async def fake(query, items):
+        good = {o: 0.0 for o in jev_client.OPTIONS}
+        good["directly"] = 0.9
+        return [Judgment("abc", dict(good), 0.9), Judgment("0", good, 0.9)]
+    monkeypatch.setattr(ps.jev_client, "judge_relevance", fake)
+    result = await ps.search("the rapture")
+    params = result["artifacts"][0]["params"]
+    assert params["verified"] is True
+    assert [p["ref"] for p in params["passages"]] == ["1 Thessalonians 4:16-17"]
+
+
+async def test_jev_timeout_fails_open_to_unverified(index, monkeypatch):
+    import asyncio
+    _llm(monkeypatch)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+    monkeypatch.setattr(ps, "JEV_TIMEOUT", 0.05)
+    monkeypatch.setattr(ps, "MIN_STAGE_SECONDS", 0.05)
+
+    async def slow(query, items):
+        await asyncio.sleep(1)
+        return []
+    monkeypatch.setattr(ps.jev_client, "judge_relevance", slow)
+    started = asyncio.get_running_loop().time()
+    result = await ps.search("the sabbath day")
+    assert asyncio.get_running_loop().time() - started < 0.9
+    params = result["artifacts"][0]["params"]
+    assert params["verified"] is False and params["passages"]
+
+
+async def test_reasons_follow_the_ranked_order_not_the_candidate_order(index, monkeypatch):
+    _llm(monkeypatch, rewrite="", reasons="1. Reason for the first shown.\n2. Reason for the second shown.")
+    monkeypatch.setattr(ps.passage_embed, "embed_queries",
+                        lambda texts: np.array([[1, 0, 0]] * len(texts), dtype=np.float32))
+
+    async def fake_rewrite(*a, **k):
+        return []
+    monkeypatch.setattr(ps, "rewrite_queries", fake_rewrite)
+    seen = {}
+    real = ps.retrieve
+
+    async def spy(idx, query, phrasings):
+        cands, sem = await real(idx, query, phrasings)
+        seen["order"] = [c.chunk_id for c in cands]
+        return cands, sem
+    monkeypatch.setattr(ps, "retrieve", spy)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+
+    async def fake(query, items):
+        out = []
+        for key, _r, _t in items:
+            probs = {o: 0.0 for o in jev_client.OPTIONS}
+            probs["directly"] = 0.95 if key == str(seen["order"][1]) else 0.6
+            out.append(Judgment(key, probs, 0.9))
+        return out
+    monkeypatch.setattr(ps.jev_client, "judge_relevance", fake)
+    result = await ps.search("the sabbath day light")
+    passages = result["artifacts"][0]["params"]["passages"]
+    a, b = seen["order"][0], seen["order"][1]
+    assert [p["ref"] for p in passages][:2] == [index.chunks[b].ref, index.chunks[a].ref]
+    assert passages[0]["reason"] == "Reason for the first shown."
+    assert passages[1]["reason"] == "Reason for the second shown."

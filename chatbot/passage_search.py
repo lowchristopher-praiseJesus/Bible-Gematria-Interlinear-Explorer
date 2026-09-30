@@ -234,9 +234,12 @@ async def _filter(
     except Exception:  # noqa: BLE001 — JevUnavailable, timeout, anything: fail open
         logger.warning("passages: JEV filter unavailable", exc_info=True)
         return unverified(candidates), False
-    relevance = {
-        int(j.key): Relevance(int(j.key), j.probabilities, j.confidence) for j in judgments
-    }
+    relevance: Dict[int, Relevance] = {}
+    for j in judgments:
+        try:
+            relevance[int(j.key)] = Relevance(int(j.key), j.probabilities, j.confidence)
+        except Exception:  # noqa: BLE001 — a junk judgment is dropped, the rest still filter
+            logger.warning("passages: skipping unusable JEV judgment", exc_info=True)
     return jev_filter(candidates, relevance), True
 
 
