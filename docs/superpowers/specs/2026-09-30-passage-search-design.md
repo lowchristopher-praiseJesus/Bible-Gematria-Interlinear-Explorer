@@ -34,7 +34,8 @@ non-KJV translations, Apocrypha, non-English queries.
 ## Where it lives
 
 New chat mode `passages` ("Find passages"): a tile on the mode picker, an inline
-`passage_search` artifact of ranked cards. The artifact carries its data
+`passage_search` artifact of ranked cards, each showing its passage in the shared
+`VerseRangeContent` verse box (translation switcher, fullscreen compare; lazily mounted). The artifact carries its data
 (reference, text, reason, source) so reloads and share links redraw it. Same
 wiring pattern as the other structured modes: `GET /passages/status` hides the
 tile when the feature is unavailable; a `mode == "passages"` branch in

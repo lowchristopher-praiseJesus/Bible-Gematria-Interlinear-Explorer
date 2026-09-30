@@ -1,10 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as chatApi from '@/lib/chatApi'
 import { useArtifactStore } from '@/store/useArtifactStore'
+import { useTranslationSettingsStore } from '@/store/useTranslationSettingsStore'
 import { PassageSearchArtifact } from './PassageSearchArtifact'
 import type { PassageSearchArtifactParams } from '@/types/session'
+import type { ChapterResponse } from '@/types/api'
+
+const CHAPTER: ChapterResponse = {
+  book: '1 Thessalonians',
+  chapter: 4,
+  verseCount: 1,
+  verses: [
+    {
+      versenumber: 29001,
+      vnum: 16,
+      ref: '1 Thessalonians 4:16',
+      translations: {
+        'eng-KJV': 'KJV: the Lord himself shall descend.',
+        'eng-NIV': 'NIV: the Lord himself will come down.',
+      },
+    },
+  ],
+}
 
 const BASE: PassageSearchArtifactParams = {
   query: 'Where is the rapture talked about in the Bible?',
@@ -29,14 +48,20 @@ const BASE: PassageSearchArtifactParams = {
 describe('PassageSearchArtifact', () => {
   beforeEach(() => {
     useArtifactStore.setState({ activeArtifact: null, history: [], status: 'idle', data: null, error: null })
+    useTranslationSettingsStore.setState({ defaultTranslationAbbr: 'KJV' })
+    // Default: the verse fetch fails, so every card shows its server-sent snippet.
+    vi.spyOn(chatApi, 'fetchChapter').mockRejectedValue(new Error('offline'))
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
 
-  it('shows the query, each passage, its reason and text', () => {
+  it('shows the query, each passage, its reason and text', async () => {
     render(<PassageSearchArtifact {...BASE} />)
     expect(screen.getByText(/Where is the rapture talked about/)).toBeInTheDocument()
     expect(screen.getByText('Describes believers being caught up to meet the Lord.')).toBeInTheDocument()
-    expect(screen.getByText(/shall descend from heaven/)).toBeInTheDocument()
+    expect(await screen.findByText(/shall descend from heaven/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '1 Thessalonians 4:16-17' })).toHaveAttribute(
       'href', '/explorer?reference=1%20Thessalonians%204%3A16',
     )
@@ -109,5 +134,57 @@ describe('PassageSearchArtifact', () => {
     expect(screen.getByText(/Not an exhaustive list/)).toBeInTheDocument()
     rerender(<PassageSearchArtifact {...BASE} passages={[]} />)
     expect(screen.queryByText(/Not an exhaustive list/)).not.toBeInTheDocument()
+  })
+
+  describe('verse box', () => {
+    it('shows each passage in a verse box with a translation switcher and a compare button', async () => {
+      vi.mocked(chatApi.fetchChapter).mockResolvedValue(CHAPTER)
+      render(<PassageSearchArtifact {...BASE} />)
+      expect(await screen.findAllByLabelText('Translation')).toHaveLength(2)
+      expect(chatApi.fetchChapter).toHaveBeenCalledWith('1 Thessalonians 4:16-17', { fast: true })
+      expect(chatApi.fetchChapter).toHaveBeenCalledWith('John 14:1-3', { fast: true })
+      expect(screen.getAllByRole('button', { name: /Compare all verses in/ })).toHaveLength(2)
+    })
+
+    it('displays the passage in the default translation from the user setting', async () => {
+      useTranslationSettingsStore.setState({ defaultTranslationAbbr: 'NIV' })
+      vi.mocked(chatApi.fetchChapter).mockResolvedValue(CHAPTER)
+      render(<PassageSearchArtifact {...BASE} passages={[BASE.passages[0]]} />)
+      expect(await screen.findByText('NIV: the Lord himself will come down.')).toBeInTheDocument()
+    })
+
+    it('falls back to the server-sent snippet when the verses cannot be fetched', async () => {
+      render(<PassageSearchArtifact {...BASE} passages={[BASE.passages[0]]} />)
+      expect(await screen.findByText(/shall descend from heaven/)).toBeInTheDocument()
+      expect(screen.queryByLabelText('Translation')).not.toBeInTheDocument()
+      expect(screen.queryByText('offline')).not.toBeInTheDocument()
+    })
+
+    it('only fetches a card once it scrolls near view', async () => {
+      const observed: Array<{ el: Element; fire: () => void }> = []
+      class FakeIO {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          observed.push({
+            el,
+            fire: () => this.cb([{ isIntersecting: true, target: el } as IntersectionObserverEntry], this as never),
+          })
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+      vi.stubGlobal('IntersectionObserver', FakeIO)
+      vi.mocked(chatApi.fetchChapter).mockResolvedValue(CHAPTER)
+      render(<PassageSearchArtifact {...BASE} />)
+      expect(chatApi.fetchChapter).not.toHaveBeenCalled()
+      expect(screen.getByText(/shall descend from heaven/)).toBeInTheDocument()
+
+      act(() => observed[0].fire())
+      await waitFor(() => expect(chatApi.fetchChapter).toHaveBeenCalledWith('1 Thessalonians 4:16-17', { fast: true }))
+      expect(chatApi.fetchChapter).not.toHaveBeenCalledWith('John 14:1-3', { fast: true })
+    })
   })
 })

@@ -249,7 +249,10 @@ is the rapture talked about in the Bible?"), returns up to 10 ranked passages,
 each with a one-sentence reason and a link, as an inline `passage_search`
 artifact (passage text copied into the params so reloads/shares redraw it).
 Clicking a passage opens an `interlinear` artifact for the passage's *first*
-verse (the card itself shows the whole passage text).
+verse. The card itself shows the whole passage in the shared `VerseRangeContent`
+verse box (translation switcher defaulting to the user's setting, fullscreen
+compare), mounted lazily once the card nears the viewport; the copied KJV
+`text` is the placeholder until then and the fallback if the fetch fails.
 The corpus is 4,284 KJV chunks (2-16 verses) cut at topic boundaries by JEV
 (`experiments/chunking/`, committed as `chatbot/data/passage_chunks.json`),
 embedded once with a local ONNX model (`BAAI/bge-small-en-v1.5` via

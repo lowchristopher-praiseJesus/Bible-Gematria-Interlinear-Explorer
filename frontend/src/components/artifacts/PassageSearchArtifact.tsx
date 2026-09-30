@@ -1,6 +1,42 @@
-import type { MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { VerseRangeContent } from '@/components/shell/VerseRangeContent'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import type { PassageResult, PassageSearchArtifactParams } from '@/types/session'
+
+/** The passage's verse box (translation switcher, fullscreen compare), mounted
+ * only once the card is near the viewport — each box fetches on mount, so a
+ * long result list would otherwise fire every request at once. Until then, and
+ * if the fetch fails, the server-sent KJV snippet is shown. Without
+ * IntersectionObserver the box mounts immediately. */
+function LazyVerseBox({ passage }: { passage: PassageResult }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined')
+
+  useEffect(() => {
+    const el = ref.current
+    if (near || !el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [near])
+
+  const snippet = (
+    <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{passage.text}</p>
+  )
+  return (
+    <div ref={ref}>
+      {near ? <VerseRangeContent reference={passage.ref} fallback={snippet} /> : snippet}
+    </div>
+  )
+}
 
 function PassageCard({ passage }: { passage: PassageResult }) {
   const openArtifact = useArtifactStore((s) => s.openArtifact)
@@ -32,7 +68,7 @@ function PassageCard({ passage }: { passage: PassageResult }) {
           {passage.reason}
         </p>
       )}
-      <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{passage.text}</p>
+      <LazyVerseBox passage={passage} />
     </div>
   )
 }

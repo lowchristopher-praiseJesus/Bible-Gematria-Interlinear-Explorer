@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BookOpen } from 'lucide-react'
 import { fetchChapter } from '@/lib/chatApi'
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities'
@@ -41,6 +41,9 @@ interface Props {
   /** Shown in the header in place of the reference itself. Defaults to
    * `reference`. */
   label?: string
+  /** Rendered in place of the error message when the verses cannot be
+   * fetched (e.g. a search result's own snippet). */
+  fallback?: ReactNode
 }
 
 /**
@@ -52,7 +55,7 @@ interface Props {
  * fetch (ChapterReadingBubble's collapsed pill) does so by not mounting
  * this until it's ready to load.
  */
-export function VerseRangeContent({ reference, label }: Props) {
+export function VerseRangeContent({ reference, label, fallback }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   // Tracks the background fetch that fills in every other translation
   // after the fast KJV-only paint — independent of `status` so it never
@@ -131,7 +134,8 @@ export function VerseRangeContent({ reference, label }: Props) {
       {(status === 'idle' || status === 'loading') && (
         <div className="text-xs text-[var(--color-text-secondary)]">Loading…</div>
       )}
-      {status === 'error' && <div className="text-xs text-red-600">{error}</div>}
+      {status === 'error' &&
+        (fallback ?? <div className="text-xs text-red-600">{error}</div>)}
       {status === 'ready' && data && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
