@@ -165,3 +165,42 @@ def test_25_verse_boundary():
     assert q.kind == "passage" and len(q.verse_ids) == 25
     msg = ps.parse_query("Psalm 119:1-26")
     assert isinstance(msg, str) and "25" in msg
+
+
+def test_en_dash_and_em_dash_ranges_are_passages():
+    for text, label, count in (("John 3:16–21", "John 3:16-21", 6),
+                               ("Matthew 5:3–12", "Matthew 5:3-12", 10),
+                               ("John 3:16—21", "John 3:16-21", 6),
+                               ("John 3:16−21", "John 3:16-21", 6)):
+        q = ps.parse_query(text)
+        assert not isinstance(q, str) and q.kind == "passage", text
+        assert q.label == label and len(q.verse_ids) == count, text
+
+
+def test_dashed_cross_chapter_and_reversed_ranges_keep_their_messages():
+    msg = ps.parse_query("Romans 8:28–9:3")
+    assert isinstance(msg, str) and "single chapter" in msg
+    msg = ps.parse_query("Romans 8:30–28")
+    assert isinstance(msg, str) and "backwards" in msg
+
+
+def test_single_chapter_books_treat_a_bare_number_as_a_verse():
+    for text, label in (("Jude 3", "Jude 1:3"), ("3 John 4", "3 John 1:4"),
+                        ("Philemon 6", "Philemon 1:6"), ("Obadiah 1", "Obadiah 1:1"),
+                        ("2 John 5", "2 John 1:5")):
+        q = ps.parse_query(text)
+        assert not isinstance(q, str) and q.kind == "passage", text
+        assert q.label == label and len(q.verse_ids) == 1, text
+
+
+def test_single_chapter_book_bare_number_out_of_range_and_multichapter_books():
+    msg = ps.parse_query("Jude 99")
+    assert isinstance(msg, str) and "couldn't find" in msg.lower()
+    msg = ps.parse_query("Romans 8")
+    assert isinstance(msg, str) and "whole chapter" in msg
+
+
+def test_parse_phrasings_keeps_leading_numbers_but_strips_list_markers():
+    out = ps.parse_phrasings("1 Corinthians 13\n12 baskets full\n1. caught up together\n2) twinkling of an eye\n- the trump of God")
+    assert out == ["1 Corinthians 13", "12 baskets full", "caught up together",
+                   "twinkling of an eye", "the trump of God"]

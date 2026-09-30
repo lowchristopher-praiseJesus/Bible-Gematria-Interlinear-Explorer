@@ -54,12 +54,14 @@ _TRIM = " \t\r\n.?!,;:"
 _SCOPE_RE = re.compile(r"^([1-3]?[A-Z]{2,3})\s+(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$")
 _BARE_CHAPTER_RE = re.compile(r"^((?:[1-3]\s?)?[A-Za-z][A-Za-z.\s]*?)\.?\s+(\d{1,3})$")
 _RANGE_RE = re.compile(
-    r"^((?:[1-3]\s?)?[A-Za-z][A-Za-z.\s]*?)\.?\s+(\d{1,3}):(\d{1,3})\s*[-\u2013]\s*(\d{1,3})(?::(\d{1,3}))?$")
+    r"^((?:[1-3]\s?)?[A-Za-z][A-Za-z.\s]*?)\.?\s+(\d{1,3}):(\d{1,3})\s*-\s*(\d{1,3})(?::(\d{1,3}))?$")
 
 
 def _book_usfm(raw: str) -> Optional[str]:
     return _BOOK_ABBREVIATIONS.get(re.sub(r"[.\s]", "", raw).lower())
-_BULLET_RE = re.compile(r"^[\s\-\*•\d.)]+")
+_BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+_SINGLE_CHAPTER_BOOKS = frozenset({"OBA", "PHM", "2JN", "3JN", "JUD"})
+_DASHES = str.maketrans({"\u2013": "-", "\u2014": "-", "\u2212": "-"})
 
 _REWRITE_SYSTEM = "You help search the King James Bible. You reply with search phrases only."
 
@@ -82,7 +84,7 @@ def _as_reference(text: str) -> Optional[str]:
 
 
 def parse_query(text: str) -> Union[Query, str]:
-    text = text.strip()
+    text = text.strip().translate(_DASHES)
     rng = _RANGE_RE.match(text.strip(_TRIM))
     if rng and _book_usfm(rng.group(1)):
         book = _USFM_TO_BOOK.get(_book_usfm(rng.group(1)), rng.group(1))
@@ -99,6 +101,8 @@ def parse_query(text: str) -> Union[Query, str]:
             usfm = _book_usfm(bare.group(1))
             if usfm:
                 book = _USFM_TO_BOOK.get(usfm, usfm)
+                if usfm in _SINGLE_CHAPTER_BOOKS:      # "Jude 3" means Jude 1:3
+                    return parse_query(f"{book} 1:{bare.group(2)}")
                 return (f"That's a whole chapter. Give me a verse or a short range from {book} "
                         f"{bare.group(2)} (up to {MAX_PASSAGE_VERSES} verses) — for example "
                         f"\"{book} {bare.group(2)}:1-5\".")
