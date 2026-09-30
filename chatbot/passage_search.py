@@ -34,6 +34,7 @@ MAX_PHRASINGS = 5
 BUDGET_SECONDS = 15.0
 REWRITE_TIMEOUT = 8.0
 JEV_TIMEOUT = 5.0
+JEV_BACKSTOP_GRACE = 1.0     # outer wait_for slack beyond the client's own overall timeout
 REASONS_TIMEOUT = 15.0
 MIN_STAGE_SECONDS = 0.5
 REASON_TEXT_CHARS = 600
@@ -230,10 +231,13 @@ async def _filter(
         (str(c.chunk_id), index.chunks[c.chunk_id].ref, index.chunks[c.chunk_id].plain[:JEV_TEXT_CHARS])
         for c in candidates
     ]
+    stage = _remaining(deadline, JEV_TIMEOUT)
     try:
+        # The client cancels stragglers at `stage` and returns what it has;
+        # the outer wait_for is only a backstop so a hang can never exceed it.
         judgments = await asyncio.wait_for(
-            jev_client.judge_relevance(_query_for_judging(query), items),
-            timeout=_remaining(deadline, JEV_TIMEOUT),
+            jev_client.judge_relevance(_query_for_judging(query), items, timeout=stage),
+            timeout=stage + JEV_BACKSTOP_GRACE,
         )
     except Exception:  # noqa: BLE001 — JevUnavailable, timeout, anything: fail open
         logger.warning("passages: JEV filter unavailable", exc_info=True)

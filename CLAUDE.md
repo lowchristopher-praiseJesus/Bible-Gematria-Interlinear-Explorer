@@ -277,7 +277,7 @@ merge by reciprocal-rank fusion, then JEV judges each candidate
 `directly`/`partly`/`tangentially`/`not_relevant`; the whole JEV stage is
 separately capped at 5 s by `JEV_TIMEOUT` in `chatbot/passage_search.py`, not
 an env var, so raising the env var above 5 does not lengthen it, and a stage
-that hits the cap falls open to "relevance not verified"), and `chatbot/passage_rank.py`
+that hits the cap uses the judgments already received and drops the unjudged candidates — it falls open to "relevance not verified" only if no request completed), and `chatbot/passage_rank.py`
 — a pure module holding every threshold — keeps the relevant ones. One
 batched LLM call writes the reasons. Every stage after retrieval fails open:
 no JEV key → results marked "relevance not verified"; no embedder →

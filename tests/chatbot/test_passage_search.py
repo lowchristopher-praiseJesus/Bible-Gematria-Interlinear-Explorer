@@ -40,7 +40,7 @@ def _jev(monkeypatch, answers):
     """answers: {chunk key: (label, confidence)} — anything missing is not answered."""
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
 
-    async def fake(query, items):
+    async def fake(query, items, timeout=None):
         out = []
         for key, _ref, _text in items:
             if key in answers:
@@ -78,7 +78,7 @@ async def test_jev_unavailable_falls_back_to_unverified_results(index, monkeypat
     _llm(monkeypatch)
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
 
-    async def down(query, items):
+    async def down(query, items, timeout=None):
         raise JevUnavailable("down")
     monkeypatch.setattr(ps.jev_client, "judge_relevance", down)
     result = await ps.search("the sabbath day")
@@ -107,7 +107,7 @@ async def test_everything_optional_failing_still_returns_keyword_results(index, 
     _llm(monkeypatch, rewrite="", reasons="")
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
 
-    async def down(query, items):
+    async def down(query, items, timeout=None):
         raise JevUnavailable("down")
     monkeypatch.setattr(ps.jev_client, "judge_relevance", down)
     result = await ps.search("the sabbath day")
@@ -190,7 +190,7 @@ async def test_junk_jev_key_is_skipped_and_the_good_judgment_still_filters(index
     _llm(monkeypatch)
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
 
-    async def fake(query, items):
+    async def fake(query, items, timeout=None):
         good = {o: 0.0 for o in jev_client.OPTIONS}
         good["directly"] = 0.9
         return [Judgment("abc", dict(good), 0.9), Judgment("0", good, 0.9)]
@@ -207,8 +207,9 @@ async def test_jev_timeout_fails_open_to_unverified(index, monkeypatch):
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
     monkeypatch.setattr(ps, "JEV_TIMEOUT", 0.05)
     monkeypatch.setattr(ps, "MIN_STAGE_SECONDS", 0.05)
+    monkeypatch.setattr(ps, "JEV_BACKSTOP_GRACE", 0.05)
 
-    async def slow(query, items):
+    async def slow(query, items, timeout=None):
         await asyncio.sleep(1)
         return []
     monkeypatch.setattr(ps.jev_client, "judge_relevance", slow)
@@ -237,7 +238,7 @@ async def test_reasons_follow_the_ranked_order_not_the_candidate_order(index, mo
     monkeypatch.setattr(ps, "retrieve", spy)
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
 
-    async def fake(query, items):
+    async def fake(query, items, timeout=None):
         out = []
         for key, _r, _t in items:
             probs = {o: 0.0 for o in jev_client.OPTIONS}
@@ -251,3 +252,22 @@ async def test_reasons_follow_the_ranked_order_not_the_candidate_order(index, mo
     assert [p["ref"] for p in passages][:2] == [index.chunks[b].ref, index.chunks[a].ref]
     assert passages[0]["reason"] == "Reason for the first shown."
     assert passages[1]["reason"] == "Reason for the second shown."
+
+
+async def test_jev_stage_cap_keeps_the_judgments_already_received(index, monkeypatch):
+    import asyncio
+    _llm(monkeypatch, reasons="1. Reason.")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+    seen = {}
+
+    async def partial(query, items, timeout=None):
+        seen["timeout"] = timeout
+        await asyncio.sleep(0.01)                  # the cap hits: only one judgment arrived
+        probs = {o: 0.0 for o in jev_client.OPTIONS}
+        probs["partly"] = 0.9
+        return [Judgment(items[0][0], probs, 0.8)]
+    monkeypatch.setattr(ps.jev_client, "judge_relevance", partial)
+    result = await ps.search("the rapture")
+    params = result["artifacts"][0]["params"]
+    assert params["verified"] is True and len(params["passages"]) == 1
+    assert seen["timeout"] is not None and 0 < seen["timeout"] <= ps.JEV_TIMEOUT

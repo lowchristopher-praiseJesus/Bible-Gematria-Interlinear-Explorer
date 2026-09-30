@@ -155,3 +155,42 @@ async def test_boolean_probability_skipped(monkeypatch):
     _use(monkeypatch, handler)
     with pytest.raises(JevUnavailable):
         await judge_relevance("q", [("1", "A 1:1", "t")])
+
+
+ITEMS4 = [(str(i), f"B {i}:1", f"text {i}") for i in range(4)]
+
+
+def _slow_handler(fast_keys):
+    import asyncio
+
+    async def handler(request: httpx.Request):
+        import json
+        passage = json.loads(request.content)["state"]["passage"]
+        if not any(f"text {k}" in passage for k in fast_keys):
+            await asyncio.sleep(5)
+        return httpx.Response(200, json={"answers": {"c0": ANSWER}})
+    return handler
+
+
+async def test_overall_timeout_returns_the_judgments_already_received(monkeypatch):
+    import time
+    _use(monkeypatch, _slow_handler({0, 2}))
+    started = time.monotonic()
+    out = await judge_relevance("q", ITEMS4, timeout=0.2)
+    assert time.monotonic() - started < 1.0
+    assert [j.key for j in out] == ["0", "2"]
+
+
+async def test_overall_timeout_with_nothing_completed_raises(monkeypatch):
+    import time
+    _use(monkeypatch, _slow_handler(set()))
+    started = time.monotonic()
+    with pytest.raises(JevUnavailable):
+        await judge_relevance("q", ITEMS4, timeout=0.2)
+    assert time.monotonic() - started < 1.0
+
+
+async def test_without_overall_timeout_behaviour_is_unchanged(monkeypatch):
+    _use(monkeypatch, lambda request: httpx.Response(200, json={"answers": {"c0": ANSWER}}))
+    out = await judge_relevance("q", ITEMS4)
+    assert [j.key for j in out] == ["0", "1", "2", "3"]

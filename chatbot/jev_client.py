@@ -103,16 +103,21 @@ def _parse(answer: Any, key: str) -> Optional[Judgment]:
     return Judgment(key=key, probabilities=probabilities, confidence=confidence)
 
 
-async def judge_relevance(query: str, items: Sequence[Tuple[str, str, str]]) -> List[Judgment]:
+async def judge_relevance(
+    query: str, items: Sequence[Tuple[str, str, str]], timeout: Optional[float] = None
+) -> List[Judgment]:
     """items: (key, reference, passage text). Returns one Judgment per item
-    that could be judged, in input order."""
+    that could be judged, in input order. `timeout` (seconds) is an optional
+    overall cap: when it elapses the still-pending requests are cancelled and
+    the judgments already received are returned; JevUnavailable is raised only
+    if none succeeded."""
     if not is_configured():
         raise JevUnavailable("TYPESAFE_API_KEY is not set")
     if not items:
         return []
     url = os.getenv("TYPESAFE_API_URL", "https://api.typesafe.ai/v1/systemone")
     model = os.getenv("TYPESAFE_MODEL", "jev-latest")
-    timeout = float(os.getenv("PASSAGES_JEV_TIMEOUT", "5"))
+    request_timeout = float(os.getenv("PASSAGES_JEV_TIMEOUT", "5"))
     headers = {"Authorization": f"Bearer {os.getenv('TYPESAFE_API_KEY', '').strip()}"}
     semaphore = asyncio.Semaphore(_CONCURRENCY)
 
@@ -134,9 +139,24 @@ async def judge_relevance(query: str, items: Sequence[Tuple[str, str, str]]) -> 
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 return None
 
-    async with _client_factory(timeout) as client:
-        results = await asyncio.gather(*(one(client, k, r, t) for k, r, t in items))
-    judgments = [j for j in results if j is not None]
+    async with _client_factory(request_timeout) as client:
+        tasks = [asyncio.ensure_future(one(client, k, r, t)) for k, r, t in items]
+        try:
+            if timeout is None:
+                await asyncio.gather(*tasks)
+            else:
+                await asyncio.wait(tasks, timeout=timeout)
+        finally:
+            pending = [t for t in tasks if not t.done()]
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+    judgments = [
+        j for t in tasks
+        if t.done() and not t.cancelled() and t.exception() is None
+        for j in [t.result()] if j is not None
+    ]
     if not judgments:
         raise JevUnavailable("no JEV request succeeded")
     return judgments
