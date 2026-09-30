@@ -21,7 +21,7 @@ function PassageCard({ passage }: { passage: PassageResult }) {
         <a href={href} onClick={handleClick} className="font-semibold text-[var(--color-theme-accent)] hover:underline">
           {passage.ref}
         </a>
-        {passage.sources.includes('cross_reference') && (
+        {passage.sources?.includes('cross_reference') && (
           <span className="text-xs rounded px-1.5 py-0.5 bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]">
             cross-reference
           </span>
@@ -64,6 +64,11 @@ export function PassageSearchArtifact(params: PassageSearchArtifactParams) {
           <PassageCard key={passage.ref} passage={passage} />
         ))}
       </div>
+      {passages.length > 0 && (
+        <p className="text-xs text-[var(--color-text-secondary)]">
+          Not an exhaustive list — try rephrasing if you don't see what you're after.
+        </p>
+      )}
       {credits.map((credit) => (
         <p key={credit} className="text-xs text-[var(--color-text-secondary)]">{credit}</p>
       ))}

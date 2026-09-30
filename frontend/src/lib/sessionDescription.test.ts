@@ -121,4 +121,24 @@ describe('describeSession', () => {
     const session = makeSession({ mode: 'freeform', messages: [] })
     expect(describeSession(session)).toBe('New conversation')
   })
+
+  it('describes a Find passages session by its first real query, not the tile label', () => {
+    const session = makeSession({
+      mode: 'passages',
+      messages: [
+        { id: 'm1', role: 'user', text: '📖 Find passages' },
+        { id: 'm2', role: 'assistant', text: 'Type a verse…' },
+        { id: 'm3', role: 'user', text: 'Where is the rapture talked about in the Bible?' },
+      ] as Session['messages'],
+    })
+    expect(describeSession(session)).toBe('Where is the rapture talked about in the Bible?')
+  })
+
+  it('falls back to "Find passages" before any query is typed', () => {
+    const session = makeSession({
+      mode: 'passages',
+      messages: [{ id: 'm1', role: 'user', text: '📖 Find passages' }] as Session['messages'],
+    })
+    expect(describeSession(session)).toBe('Find passages')
+  })
 })

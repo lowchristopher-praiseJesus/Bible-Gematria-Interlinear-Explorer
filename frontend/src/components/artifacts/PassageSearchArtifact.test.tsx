@@ -96,4 +96,18 @@ describe('PassageSearchArtifact', () => {
     render(<PassageSearchArtifact {...(BASE as PassageSearchArtifactParams)} passages={undefined as never} phrasings={undefined as never} credits={undefined as never} />)
     expect(screen.getByText(/Where is the rapture talked about/)).toBeInTheDocument()
   })
+
+  it('renders a passage that has no sources field', () => {
+    const passage = { ref: 'Jude 1:3', first_ref: 'Jude 1:3', text: '[3] contend', reason: '' } as unknown as PassageSearchArtifactParams['passages'][number]
+    render(<PassageSearchArtifact {...BASE} passages={[passage]} />)
+    expect(screen.getByRole('link', { name: 'Jude 1:3' })).toBeInTheDocument()
+    expect(screen.queryByText('cross-reference')).not.toBeInTheDocument()
+  })
+
+  it('shows the not-exhaustive note only when there are passages', () => {
+    const { rerender } = render(<PassageSearchArtifact {...BASE} />)
+    expect(screen.getByText(/Not an exhaustive list/)).toBeInTheDocument()
+    rerender(<PassageSearchArtifact {...BASE} passages={[]} />)
+    expect(screen.queryByText(/Not an exhaustive list/)).not.toBeInTheDocument()
+  })
 })

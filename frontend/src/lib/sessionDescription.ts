@@ -1,5 +1,7 @@
 import type { Session } from '@/types/session'
 
+const PASSAGES_TILE_LABEL = '📖 Find passages'
+
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
@@ -43,6 +45,12 @@ export function describeSession(session: Session): string {
         ?.reference as string | undefined
       const reference = modeParams.reference ?? primerReference
       return reference ?? 'Random verse'
+    }
+    case 'passages': {
+      // The first user message is always the tile label ("📖 Find passages"),
+      // so describe the session by the first real query instead.
+      const firstQuery = messages.find((m) => m.role === 'user' && m.text.trim() !== PASSAGES_TILE_LABEL)?.text
+      return firstQuery ? truncate(firstQuery, 60) : 'Find passages'
     }
     case 'freeform':
     default: {
