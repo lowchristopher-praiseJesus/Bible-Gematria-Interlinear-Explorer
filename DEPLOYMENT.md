@@ -348,7 +348,11 @@ results are still returned but marked "relevance not verified", and the tile
 still shows whenever the index loads (`GET /passages/status`), independent of
 JEV. With a key, JEV judges each candidate with one Choice request per candidate
 (concurrency 8, up to 30 requests per search); `PASSAGES_JEV_TIMEOUT` (default
-5) is the per-request timeout in seconds.
+5) is the timeout in seconds of each individual JEV request. Separately, the
+whole JEV filtering stage is capped at 5 s (`JEV_TIMEOUT` in
+`chatbot/passage_search.py`, not an env var), so raising the env var above 5
+does not lengthen the stage; a stage that hits the cap falls open to
+"relevance not verified".
 
 **If the index files are missing or mismatched** (wrong model name, row counts
 that do not match, a partial copy), the first request makes `get_index()` cache

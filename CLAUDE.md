@@ -273,8 +273,11 @@ into KJV-style phrases. That step is essential, not optional: the KJV never
 says "rapture" (it says "caught up") and no embedding bridges that gap. Lists
 merge by reciprocal-rank fusion, then JEV judges each candidate
 (`chatbot/jev_client.py`, one Choice request per candidate, concurrency 8,
-`PASSAGES_JEV_TIMEOUT` default 5 s each, up to 30 requests per search:
-`directly`/`partly`/`tangentially`/`not_relevant`), and `chatbot/passage_rank.py`
+`PASSAGES_JEV_TIMEOUT` default 5 s per request, up to 30 requests per search:
+`directly`/`partly`/`tangentially`/`not_relevant`; the whole JEV stage is
+separately capped at 5 s by `JEV_TIMEOUT` in `chatbot/passage_search.py`, not
+an env var, so raising the env var above 5 does not lengthen it, and a stage
+that hits the cap falls open to "relevance not verified"), and `chatbot/passage_rank.py`
 — a pure module holding every threshold — keeps the relevant ones. One
 batched LLM call writes the reasons. Every stage after retrieval fails open:
 no JEV key → results marked "relevance not verified"; no embedder →
