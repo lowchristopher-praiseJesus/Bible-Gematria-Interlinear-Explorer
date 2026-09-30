@@ -279,7 +279,14 @@ separately capped at 5 s by `JEV_TIMEOUT` in `chatbot/passage_search.py`, not
 an env var, so raising the env var above 5 does not lengthen it, and a stage
 that hits the cap uses the judgments already received and drops the unjudged candidates — it falls open to "relevance not verified" only if no request completed), and `chatbot/passage_rank.py`
 — a pure module holding every threshold — keeps the relevant ones. One
-batched LLM call writes the reasons. Every stage after retrieval fails open:
+batched LLM call writes the reasons. Both LLM calls (phrase rewrite, reasons)
+are short and are sent with reasoning disabled on OpenRouter
+(`simple_completion(..., no_reasoning=True)`, which adds
+`"reasoning": {"enabled": false}` and is ignored by other providers). With a
+reasoning model and reasoning left on, they return empty within the stage
+caps and the mode silently degrades to keyword+embedding retrieval with no
+rewrite and no reasons — if quality drops, check the provider/model first.
+Every stage after retrieval fails open:
 no JEV key → results marked "relevance not verified"; no embedder →
 keyword-only. If the index files are missing or mismatched at first use,
 `get_index()` caches "unavailable" for the life of the process — restart the

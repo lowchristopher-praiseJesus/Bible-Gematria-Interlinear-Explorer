@@ -373,16 +373,26 @@ curl -s localhost/api/bible-chat/passages/status
 `python scripts/eval_passages.py` with a real key
 (`set -a; . ./.env; set +a`), record recall@10 and the off-topic result with
 and without JEV, and tune the constants in `chatbot/passage_rank.py` only from
-those numbers. First run, 2026-09-30, thresholds untouched:
+those numbers. Run of 2026-09-30 (after the reasoning fix), thresholds untouched:
 
 ```
-[with JEV] recall@10 overall 60/108 = 56%; concept 50/90, passage 10/18; verified 35/35 queries; off-topic: quiet 6/6, returned results 0, other 0
-[without JEV] recall@10 overall 49/108 = 45%; concept 39/90, passage 10/18; verified 0/36 queries (JEV disabled); off-topic: quiet 0/6, returned results 6, other 0 (informational: without JEV, retrieval always returns something)
+[with JEV] recall@10 overall 64/108 = 59%; concept 53/90, passage 11/18; verified 36/36 queries; off-topic: quiet 6/6, returned results 0, other 0
+[without JEV] recall@10 overall 62/108 = 57%; concept 52/90, passage 10/18; verified 0/36 queries (JEV disabled); off-topic: quiet 0/6, returned results 6, other 0 (informational: without JEV, retrieval always returns something)
 ```
 
 No `WARNING: JEV fell open` line appeared, so the with-JEV arm is a clean JEV
-measurement. JEV raised recall@10 by 11 points and kept all 6 off-topic
-queries quiet; no calibration issue is open.
+measurement; all 6 off-topic queries stayed quiet with JEV on. The earlier run
+(56% with JEV / 45% without) is **superseded**: it was measured with the query
+rewrite and reasons stages returning empty (see below), so it understated
+recall.
+
+**LLM stages and reasoning models.** The mode's two LLM calls (phrase rewrite,
+reasons) are short and are sent with reasoning disabled on OpenRouter
+(`no_reasoning=True` in `chatbot/ollama_client.py::simple_completion`, which
+adds `"reasoning": {"enabled": false}`; other providers ignore it). With a
+reasoning model and reasoning left on, both calls return empty content within
+the stage caps and the mode silently degrades to keyword+embedding retrieval
+without rewrite or reasons. If quality drops, check the provider/model first.
 
 ---
 
