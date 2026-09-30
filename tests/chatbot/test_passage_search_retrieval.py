@@ -135,3 +135,33 @@ async def test_passage_spanning_two_chunks_excludes_both(monkeypatch):
     query = ps.Query("passage", "text", verse_ids=(2, 3), label="Genesis 1:2-3")
     cands, _ = await ps.retrieve(idx, query, [])
     assert {0, 1}.isdisjoint({c.chunk_id for c in cands})
+
+
+def test_multiword_and_numbered_bare_chapters_ask_for_a_verse():
+    for text in ("Song of Solomon 2", "Song of Solomon 2.", "1 John 3"):
+        msg = ps.parse_query(text)
+        assert isinstance(msg, str) and "verse" in msg.lower(), text
+
+
+def test_non_book_phrase_with_a_number_stays_a_statement():
+    for text in ("chapter 5", "top 10"):
+        assert ps.parse_query(text).kind == "statement", text
+
+
+def test_cross_chapter_range_asks_for_a_single_chapter():
+    for text in ("Romans 8:28-9:3", "Genesis 1:1-2:3"):
+        msg = ps.parse_query(text)
+        assert isinstance(msg, str) and "single chapter" in msg, text
+
+
+def test_reversed_range_is_not_silently_swapped():
+    for text in ("Romans 8:30-28", "Romans 8:28-9"):
+        msg = ps.parse_query(text)
+        assert isinstance(msg, str) and "backwards" in msg, text
+
+
+def test_25_verse_boundary():
+    q = ps.parse_query("Psalm 119:1-25")
+    assert q.kind == "passage" and len(q.verse_ids) == 25
+    msg = ps.parse_query("Psalm 119:1-26")
+    assert isinstance(msg, str) and "25" in msg

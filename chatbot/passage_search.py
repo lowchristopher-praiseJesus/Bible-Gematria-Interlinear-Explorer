@@ -31,7 +31,13 @@ MAX_PHRASINGS = 5
 
 _TRIM = " \t\r\n.?!,;:"
 _SCOPE_RE = re.compile(r"^([1-3]?[A-Z]{2,3})\s+(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$")
-_BARE_CHAPTER_RE = re.compile(r"^([1-3]?\s?[A-Za-z]{2,})\.?\s+(\d{1,3})$")
+_BARE_CHAPTER_RE = re.compile(r"^((?:[1-3]\s?)?[A-Za-z][A-Za-z.\s]*?)\.?\s+(\d{1,3})$")
+_RANGE_RE = re.compile(
+    r"^((?:[1-3]\s?)?[A-Za-z][A-Za-z.\s]*?)\.?\s+(\d{1,3}):(\d{1,3})\s*[-\u2013]\s*(\d{1,3})(?::(\d{1,3}))?$")
+
+
+def _book_usfm(raw: str) -> Optional[str]:
+    return _BOOK_ABBREVIATIONS.get(re.sub(r"[.\s]", "", raw).lower())
 _BULLET_RE = re.compile(r"^[\s\-\*•\d.)]+")
 
 _REWRITE_SYSTEM = "You help search the King James Bible. You reply with search phrases only."
@@ -56,11 +62,20 @@ def _as_reference(text: str) -> Optional[str]:
 
 def parse_query(text: str) -> Union[Query, str]:
     text = text.strip()
+    rng = _RANGE_RE.match(text.strip(_TRIM))
+    if rng and _book_usfm(rng.group(1)):
+        book = _USFM_TO_BOOK.get(_book_usfm(rng.group(1)), rng.group(1))
+        chapter, start, second = int(rng.group(2)), int(rng.group(3)), int(rng.group(4))
+        if rng.group(5) is not None:
+            return (f"Please give me a range within a single chapter (up to {MAX_PASSAGE_VERSES} "
+                    f"verses) — for example \"{book} {chapter}:{start}-{start + 4}\".")
+        if second < start:
+            return f"That range runs backwards — did you mean {book} {chapter}:{second}-{start}?"
     ref = _as_reference(text)
     if ref is None:
         bare = _BARE_CHAPTER_RE.match(text.strip(_TRIM))
         if bare:
-            usfm = _BOOK_ABBREVIATIONS.get(re.sub(r"[.\s]", "", bare.group(1)).lower())
+            usfm = _book_usfm(bare.group(1))
             if usfm:
                 book = _USFM_TO_BOOK.get(usfm, usfm)
                 return (f"That's a whole chapter. Give me a verse or a short range from {book} "
