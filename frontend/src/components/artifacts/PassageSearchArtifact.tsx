@@ -6,12 +6,13 @@ function PassageCard({ passage }: { passage: PassageResult }) {
   const openArtifact = useArtifactStore((s) => s.openArtifact)
   const href = `/explorer?reference=${encodeURIComponent(passage.first_ref)}`
 
-  // This SPA doesn't serve `/explorer` as a real route — open the passage
-  // in-app instead (same interception the other artifacts apply). The href
+  // This SPA doesn't serve `/explorer` as a real route — open the passage's
+  // first verse as an interlinear artifact instead (same as ChatPane's verse
+  // links; `first_ref` because fetchInterlinear takes one verse). The href
   // stays for keyboard/middle-click/a11y.
   function handleClick(e: MouseEvent<HTMLAnchorElement>) {
     e.preventDefault()
-    openArtifact({ type: 'chapter', label: `${passage.ref} ▸`, params: { reference: passage.ref } })
+    openArtifact({ type: 'interlinear', label: `${passage.ref} ▸`, params: { reference: passage.first_ref } })
   }
 
   return (

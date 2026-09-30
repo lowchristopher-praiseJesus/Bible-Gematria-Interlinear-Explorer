@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import * as chatApi from '@/lib/chatApi'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { PassageSearchArtifact } from './PassageSearchArtifact'
 import type { PassageSearchArtifactParams } from '@/types/session'
@@ -46,12 +47,16 @@ describe('PassageSearchArtifact', () => {
     expect(screen.getAllByTestId('passage-reason')).toHaveLength(1)
   })
 
-  it('opens a passage in-app instead of navigating to the dead legacy route', async () => {
+  it('opens a passage in-app as an interlinear artifact instead of navigating to the dead legacy route', async () => {
+    vi.spyOn(chatApi, 'fetchInterlinear').mockResolvedValue({} as Awaited<ReturnType<typeof chatApi.fetchInterlinear>>)
     render(<PassageSearchArtifact {...BASE} />)
     await userEvent.click(screen.getByRole('link', { name: 'John 14:1-3' }))
     expect(useArtifactStore.getState().activeArtifact).toEqual({
-      type: 'chapter', label: 'John 14:1-3 ▸', params: { reference: 'John 14:1-3' },
+      type: 'interlinear', label: 'John 14:1-3 ▸', params: { reference: 'John 14:1' },
     })
+    await waitFor(() => expect(useArtifactStore.getState().status).toBe('ready'))
+    expect(chatApi.fetchInterlinear).toHaveBeenCalledWith('John 14:1')
+    expect(useArtifactStore.getState().error).toBeNull()
   })
 
   it('notes when relevance was not verified and when semantic search was unavailable', () => {
