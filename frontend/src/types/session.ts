@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story' | 'passages'
 
 export interface ModeParams {
   plan?: 'chronological' | 'canonical'
@@ -62,7 +62,7 @@ export interface ModeParams {
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story' | 'passage_search'
   label: string
   params: Record<string, unknown>
 }
@@ -133,6 +133,28 @@ export interface StoryArtifactParams {
   characters: string
   cover: StoryCover
   pages: StoryPage[]
+}
+
+export interface PassageResult {
+  ref: string
+  first_ref: string
+  text: string
+  reason: string
+  sources: Array<'embedding' | 'keyword' | 'cross_reference'>
+}
+
+/** Params for a `passage_search`-type ArtifactLink — the whole result list
+ * (passage text included) travels inline, so reloads and share links redraw
+ * it without re-running the search. */
+export interface PassageSearchArtifactParams {
+  query: string
+  kind: 'passage' | 'statement'
+  label: string
+  phrasings: string[]
+  verified: boolean
+  semantic: boolean
+  credits: string[]
+  passages: PassageResult[]
 }
 
 /** One clickable option in a "choice" prompt — e.g. Chronological vs

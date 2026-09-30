@@ -240,4 +240,29 @@ describe('ModePickerScreen', () => {
     expect(storySession?.messages[0]).toMatchObject({ role: 'user', text: '✨ Tell a Story' })
     expect(storySession?.messages[1]).toMatchObject({ role: 'assistant', data: { storyStarter: true } })
   })
+
+  it('hides the "Find passages" tile when the index is unavailable', async () => {
+    vi.spyOn(chatApi, 'fetchPassagesStatus').mockResolvedValue(false)
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await waitFor(() => expect(chatApi.fetchPassagesStatus).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /find passages/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the tile when available and starts a passages session from the primer', async () => {
+    vi.spyOn(chatApi, 'fetchPassagesStatus').mockResolvedValue(true)
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+      type: 'chat',
+      message: "Type a verse, or ask where a topic appears in the Bible, and I'll find the relevant passages.",
+      data: null,
+      follow_up_questions: ['Romans 8:28'],
+    } as Awaited<ReturnType<typeof chatApi.postChat>>)
+    const onStarted = vi.fn()
+    render(<ModePickerScreen onSessionStarted={onStarted} />)
+    await userEvent.click(await screen.findByRole('button', { name: /find passages/i }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    expect(chatApi.postChat).toHaveBeenCalledWith({ message: '', mode: 'passages', mode_params: {} })
+    const s = firstSession()
+    expect(s.mode).toBe('passages')
+    expect(s.messages.at(-1)?.followUpQuestions).toEqual(['Romans 8:28'])
+  })
 })

@@ -55,6 +55,7 @@ export const MODE_LABELS: Record<SessionMode, string> = {
   hermeneutics: 'Deep Study',
   character: 'Chat with a Character',
   story: 'Tell a Story',
+  passages: 'Find passages',
 }
 
 function deriveTitle(mode: SessionMode, modeParams: ModeParams): string {

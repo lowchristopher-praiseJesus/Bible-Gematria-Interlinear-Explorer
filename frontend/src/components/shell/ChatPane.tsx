@@ -128,6 +128,8 @@ function composePlaceholder(session: Session): string {
       // Mirrors the primer's "Name a passage..." opener and its "Say go
       // when you're ready" once one resolves.
       return "Name a passage, or say 'go' when ready…"
+    case 'passages':
+      return 'Type a verse, or ask where a topic appears…'
     case 'freeform':
     default:
       // Matches ModePickerScreen's own home-screen input for the same

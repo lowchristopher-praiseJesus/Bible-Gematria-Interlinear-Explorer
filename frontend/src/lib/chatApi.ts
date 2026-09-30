@@ -271,6 +271,19 @@ export async function fetchChapter(reference: string, opts?: { fast?: boolean })
   return parseJsonResponse<ChapterResponse>(res)
 }
 
+/** Whether "Find passages" is available (the chunk index loaded on the
+ * server). Any failure reads as unavailable — the tile just hides. */
+export async function fetchPassagesStatus(): Promise<boolean> {
+  try {
+    const res = await fetch(`${CHAT_API}/passages/status`)
+    if (!res.ok) return false
+    const json = (await res.json()) as { available?: boolean }
+    return json.available === true
+  } catch {
+    return false
+  }
+}
+
 export async function fetchStrongsEntry(id: string): Promise<StrongsResponse> {
   const res = await fetch(`/api/strongs?strongsnumber=${encodeURIComponent(id)}`)
   return parseJsonResponse<StrongsResponse>(res)

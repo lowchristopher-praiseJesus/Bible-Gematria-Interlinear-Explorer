@@ -58,6 +58,10 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
       // The finished story travels inline on the link params (set by the
       // chat message that produced it) — nothing to fetch.
       return link.params
+    case 'passage_search':
+      // The whole result list travels inline on the link params (set by the
+      // chat message that produced it) — nothing to fetch.
+      return link.params
     default:
       throw new Error(`Unknown artifact type: ${link.type}`)
   }

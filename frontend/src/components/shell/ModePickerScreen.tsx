@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { ArrowUp, BookHeart, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, UserRound, Wand2 } from 'lucide-react'
-import { postChat, postChatStream } from '@/lib/chatApi'
+import { useEffect, useState } from 'react'
+import { ArrowUp, BookHeart, BookMarked, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, UserRound, Wand2 } from 'lucide-react'
+import { fetchPassagesStatus, postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
@@ -29,6 +29,16 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
   const appendMessage = useSessionsStore((s) => s.appendMessage)
   const updateMessage = useSessionsStore((s) => s.updateMessage)
   const readingPlanProgress = useReadingPlanStore((s) => s.progress)
+  const [passagesAvailable, setPassagesAvailable] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void fetchPassagesStatus().then((available) => {
+      if (!cancelled) setPassagesAvailable(available)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // A starter that already knows what it needs (no sub-choice) starts the
   // session and fetches its first real response immediately.
@@ -315,6 +325,14 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
           >
             <Wand2 className="h-4 w-4 shrink-0" aria-hidden="true" /> Tell a Story
           </button>
+          {passagesAvailable && (
+            <button
+              className={STARTER_BUBBLE}
+              onClick={() => startSession('passages', '📖 Find passages', {})}
+            >
+              <BookMarked className="h-4 w-4 shrink-0" aria-hidden="true" /> Find passages
+            </button>
+          )}
           <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
             <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything
           </button>
