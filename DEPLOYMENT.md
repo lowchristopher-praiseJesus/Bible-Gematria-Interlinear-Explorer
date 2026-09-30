@@ -323,6 +323,62 @@ A missing or invalid key degrades every illustration to text-only (see
 `chatbot/story_illustrations.py`'s fail-open behavior) rather than breaking
 Tell a Story.
 
+### Find passages
+
+The mode is served entirely from data files that live inside `chatbot/`
+(which `Dockerfile.chatbot` already copies), so nothing extra needs mounting:
+`chatbot/data/passage_chunks.json` (4,284 chunks), `passage_embeddings.npy`
+(chunk vectors, float32, 6.6 MB), `passage_verse_embeddings.npy` (31,102 verse
+vectors, float16, 23.9 MB), `passage_index_meta.json` (model, dim, chunks,
+verse_rows) and `tsk_crossrefs.json` (1.3 MB). Retrieval embeds each query
+locally with `fastembed` (ONNX, `BAAI/bge-small-en-v1.5`); `Dockerfile.chatbot`
+pre-fetches that model at build time into `FASTEMBED_CACHE_PATH=/opt/fastembed_cache`,
+so the first image build downloads about 67 MB and the running container never
+needs to reach the model host.
+
+Measured on Apple Silicon (dev machine): embedding model load about 4.3 s,
+about 3 ms per query embedding, dimension 384, full index build about 6
+minutes (`python scripts/build_passage_index.py`, embeds chunks then verses).
+The chatbot image measured 952 MB before the 24 MB verse file was added; that
+file is plain data, so the image was not re-measured. These are not ARM64
+Ampere figures.
+
+Configuration: `TYPESAFE_API_KEY` is **optional** for this mode. Without it
+results are still returned but marked "relevance not verified", and the tile
+still shows whenever the index loads (`GET /passages/status`), independent of
+JEV. With a key, JEV judges each candidate with one Choice request per candidate
+(concurrency 8, up to 30 requests per search); `PASSAGES_JEV_TIMEOUT` (default
+5) is the per-request timeout in seconds.
+
+**If the index files are missing or mismatched** (wrong model name, row counts
+that do not match, a partial copy), the first request makes `get_index()` cache
+"unavailable" for the life of the process, and the tile stays hidden. Fixing
+the files is not enough: `docker compose restart chatbot`. Changing the model,
+the chunks or the verse text recipe requires a rebuild of the index, and the
+~30 MB of vectors are committed to git, so every rebuild adds that again to the
+repository history. Rebuild rarely.
+
+Verify (host-reachable path through nginx, like the other checks in §6):
+
+```bash
+curl -s localhost/api/bible-chat/passages/status
+```
+
+**Calibration (required before production, first run recorded here).** Run
+`python scripts/eval_passages.py` with a real key
+(`set -a; . ./.env; set +a`), record recall@10 and the off-topic result with
+and without JEV, and tune the constants in `chatbot/passage_rank.py` only from
+those numbers. First run, 2026-09-30, thresholds untouched:
+
+```
+[with JEV] recall@10 overall 60/108 = 56%; concept 50/90, passage 10/18; verified 35/35 queries; off-topic: quiet 6/6, returned results 0, other 0
+[without JEV] recall@10 overall 49/108 = 45%; concept 39/90, passage 10/18; verified 0/36 queries (JEV disabled); off-topic: quiet 0/6, returned results 6, other 0 (informational: without JEV, retrieval always returns something)
+```
+
+No `WARNING: JEV fell open` line appeared, so the with-JEV arm is a clean JEV
+measurement. JEV raised recall@10 by 11 points and kept all 6 off-topic
+queries quiet; no calibration issue is open.
+
 ---
 
 ## 4. Open the firewall — in TWO places

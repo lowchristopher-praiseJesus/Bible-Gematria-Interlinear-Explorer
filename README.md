@@ -43,3 +43,10 @@ The following are the capabilities of this explorer:
 * View and Search Strong's definitions
 * Search English phrases
 * And more
+
+&nbsp;
+
+# Data credits
+
+* Cross-reference data (used by "Find passages") is from [OpenBible.info](https://www.openbible.info/labs/cross-references/) (CC-BY), derived from the Treasury of Scripture Knowledge.
+* Section headings, used only to evaluate chunk boundaries, came from the Berean Standard Bible (public domain) via [helloao.org](https://helloao.org).

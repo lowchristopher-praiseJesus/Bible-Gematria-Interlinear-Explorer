@@ -242,6 +242,50 @@ holds the live-conversation trigger's session-creation/primer helper;
 `StoryStarterScreen`'s typed-theme path builds its session inline in
 `ModePickerScreen` instead, since it has no primer call to share.
 
+## "Find passages" mode (internal id `passages`)
+
+Given a verse reference ("Romans 8:28") or a plain-English statement ("Where
+is the rapture talked about in the Bible?"), returns up to 10 ranked passages,
+each with a one-sentence reason and a link, as an inline `passage_search`
+artifact (passage text copied into the params so reloads/shares redraw it).
+Clicking a passage opens an `interlinear` artifact for the passage's *first*
+verse (the card itself shows the whole passage text).
+The corpus is 4,284 KJV chunks (2-16 verses) cut at topic boundaries by JEV
+(`experiments/chunking/`, committed as `chatbot/data/passage_chunks.json`),
+embedded once with a local ONNX model (`BAAI/bge-small-en-v1.5` via
+`fastembed`). Dense retrieval scores each chunk as `0.7 x max cosine over its
+verses + 0.3 x chunk cosine` (`passage_index.VERSE_WEIGHT`/`CHUNK_WEIGHT`), so
+the committed vectors are `passage_embeddings.npy` (chunks, float32, 6.6 MB)
+and `passage_verse_embeddings.npy` (all 31,102 verses, float16, 23.9 MB), with
+`passage_index_meta.json` (model, dim, chunks, verse_rows). Rebuild with
+`scripts/build_passage_index.py` (about 6 minutes) — **changing the model, the
+chunks, or the verse text recipe requires a rebuild**, and a model-name or
+row-count mismatch makes the mode report unavailable. The ~30 MB of vectors
+are committed to git, so every rebuild adds that again to repository history:
+rebuild rarely. (Why verse-level vectors: in a 108-target spike, chunk-only
+retrieval ranked 1 Thessalonians 4:13-18 only 45th for a query that nearly
+quotes it; the verse-max blend fixed it.)
+Retrieval is embedding search + in-memory BM25 (`chatbot/passage_index.py`)
++ TSK cross-references for passage input (`chatbot/passage_tsk.py`,
+`chatbot/data/tsk_crossrefs.json`, OpenBible.info data, CC-BY — attribution
+shown in the artifact); statement queries are first rewritten by one LLM call
+into KJV-style phrases. That step is essential, not optional: the KJV never
+says "rapture" (it says "caught up") and no embedding bridges that gap. Lists
+merge by reciprocal-rank fusion, then JEV judges each candidate
+(`chatbot/jev_client.py`, one Choice request per candidate, concurrency 8,
+`PASSAGES_JEV_TIMEOUT` default 5 s each, up to 30 requests per search:
+`directly`/`partly`/`tangentially`/`not_relevant`), and `chatbot/passage_rank.py`
+— a pure module holding every threshold — keeps the relevant ones. One
+batched LLM call writes the reasons. Every stage after retrieval fails open:
+no JEV key → results marked "relevance not verified"; no embedder →
+keyword-only. If the index files are missing or mismatched at first use,
+`get_index()` caches "unavailable" for the life of the process — restart the
+chatbot after fixing them. The tile shows when the index loads
+(`GET /passages/status`), independent of JEV. Tune thresholds only with
+`scripts/eval_passages.py` (live, manual) against
+`chatbot/data/passage_eval.py`. See
+`docs/superpowers/specs/2026-09-30-passage-search-design.md`.
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.
