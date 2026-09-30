@@ -49,6 +49,47 @@ describe('ChatPane', () => {
     expect(updated.messages[1]).toMatchObject({ role: 'user', text: 'What is love?' })
   })
 
+  it('editing a user message drops the old reply and resends with the edited text', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const st = useSessionsStore.getState()
+    st.appendMessage(session.id, { id: 'a0', role: 'assistant', text: 'Ask me anything.' })
+    st.appendMessage(session.id, { id: 'u1', role: 'user', text: 'What is love?' })
+    st.appendMessage(session.id, { id: 'a1', role: 'assistant', text: 'Old answer.' })
+    const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'New answer.' })
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit message' }))
+    const box = screen.getByRole('textbox', { name: 'Edit message' })
+    await userEvent.clear(box)
+    await userEvent.type(box, 'What is grace?')
+    await userEvent.click(screen.getByRole('button', { name: /save & resend/i }))
+
+    expect(await screen.findByText('New answer.')).toBeInTheDocument()
+    expect(screen.queryByText('Old answer.')).not.toBeInTheDocument()
+    expect(screen.queryByText('What is love?')).not.toBeInTheDocument()
+    const req = spy.mock.calls[0][0] as { message: string; history: { text: string }[] }
+    expect(req.message).toBe('What is grace?')
+    expect(req.history.map((h) => h.text)).not.toContain('Old answer.')
+    const texts = useSessionsStore.getState().sessions[session.id].messages.map((m) => m.text)
+    expect(texts.slice(-2)).toEqual(['What is grace?', 'New answer.'])
+  })
+
+  it('cancelling an edit leaves the conversation untouched', async () => {
+    const session = useSessionsStore.getState().createSession('freeform', {})
+    const st = useSessionsStore.getState()
+    st.appendMessage(session.id, { id: 'u1', role: 'user', text: 'What is love?' })
+    st.appendMessage(session.id, { id: 'a1', role: 'assistant', text: 'Old answer.' })
+    const spy = vi.spyOn(chatApi, 'postChatStream')
+
+    render(<ChatPane sessionId={session.id} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit message' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(screen.getByText('Old answer.')).toBeInTheDocument()
+    expect(screen.getByText('What is love?')).toBeInTheDocument()
+  })
+
   it('renders markdown bold spans and paragraph breaks in assistant messages', () => {
     const session = useSessionsStore.getState().createSession('freeform', {})
     useSessionsStore.getState().appendMessage(session.id, {

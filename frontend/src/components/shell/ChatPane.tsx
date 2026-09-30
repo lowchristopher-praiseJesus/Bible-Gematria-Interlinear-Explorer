@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, RefreshCw, Share2, Wand2 } from 'lucide-react'
+import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Pencil, RefreshCw, Share2, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listCharacters, listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -52,6 +52,86 @@ function errorMessage(err: unknown): string {
 // from a truncated history each time.
 function socraticReference(data: unknown): string | undefined {
   return (data as { reference?: string | null } | undefined)?.reference ?? undefined
+}
+
+// Synthetic openers (mode-label bubbles, "📖 …" verse seeds) aren't things
+// the user typed, so they aren't editable.
+function isSyntheticUserText(text: string): boolean {
+  if (text.startsWith('📖')) return true
+  return (Object.values(MODE_LABELS) as string[]).includes(text.replace(/^\p{Emoji}\s*/u, '').trim())
+}
+
+function UserBubble({ text, canEdit, onSave }: { text: string; canEdit: boolean; onSave: (t: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(text)
+
+  const save = () => {
+    const next = draft.trim()
+    setEditing(false)
+    if (next && next !== text.trim()) onSave(next)
+  }
+  const cancel = () => {
+    setEditing(false)
+    setDraft(text)
+  }
+
+  if (editing) {
+    return (
+      <div className="w-full max-w-[80%] flex flex-col gap-1.5">
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              save()
+            } else if (e.key === 'Escape') {
+              cancel()
+            }
+          }}
+          rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+          aria-label="Edit message"
+          className="w-full px-3 py-2 rounded-2xl text-sm bg-[var(--color-surface-alt)] border border-[var(--color-theme-accent)] outline-none resize-none"
+        />
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={cancel} className="text-xs px-3 py-1 rounded-full border border-[var(--color-theme-border)]">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!draft.trim()}
+            className="text-xs px-3 py-1 rounded-full bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)] disabled:opacity-50"
+          >
+            Save &amp; resend
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group flex items-end gap-1.5 max-w-[80%]">
+      {canEdit && (
+        <button
+          type="button"
+          aria-label="Edit message"
+          title="Edit message"
+          onClick={() => {
+            setDraft(text)
+            setEditing(true)
+          }}
+          className="shrink-0 mb-1 p-1 rounded-full text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+        >
+          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      )}
+      <div className="px-3 py-2 rounded-2xl rounded-br-sm text-sm whitespace-pre-wrap bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]">
+        {text}
+      </div>
+    </div>
+  )
 }
 
 type HermeneuticsPatch = { reference?: string; runDigest?: string; scopeChapter?: string }
@@ -527,7 +607,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   )
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, editFromId?: string) => {
       // Claim the voice-turn marker before ANY early return. It is set by
       // onTranscript just before this call, so a path that leaves it in
       // place would both strand the voice hook at 'thinking' (nothing ever
@@ -590,9 +670,19 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         }
         return
       }
+      // Editing an earlier user message: drop it and everything after it
+      // (the old reply and any later turns answered the old text), and
+      // build history from what remains rather than the stale session.
+      let priorMessages = session.messages
+      if (editFromId) {
+        const editIdx = session.messages.findIndex((m) => m.id === editFromId)
+        if (editIdx === -1) return
+        priorMessages = session.messages.slice(0, editIdx)
+        truncateMessagesFrom(sessionId, editFromId)
+      }
       const userMessage: SessionMessage = { id: genId(), role: 'user', text }
       appendMessage(sessionId, userMessage)
-      setInput('')
+      if (!editFromId) setInput('')
 
       if (session.mode === 'devotional' && !session.modeParams.delivered) {
         // The devotional turn's answer is a ~600-word document that opens
@@ -609,7 +699,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         return
       }
 
-      const history = toHistory(session.messages.slice(-6))
+      const history = toHistory(priorMessages.slice(-6))
       // Voice mode's BYOK override only ever applies to a voice-originated
       // turn — a typed message never carries it, even with the setting on,
       // since the toggle's whole premise is "the answer GPT-Live is about
@@ -649,7 +739,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         setLoading(false)
       }
     },
-    [session, sessionId, loading, appendMessage, streamAssistantReply, runDevotionalTurn, updateModeParams, submitStoryTheme, resolveCharacterByName]
+    [session, sessionId, loading, appendMessage, truncateMessagesFrom, streamAssistantReply, runDevotionalTurn, updateModeParams, submitStoryTheme, resolveCharacterByName]
   )
 
   const voiceMode = useVoiceMode({
@@ -1013,6 +1103,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   )
   const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id
   const lastUserId = [...session.messages].reverse().find((m) => m.role === 'user')?.id
+  const canEditUserMessage = (m: SessionMessage) =>
+    !isSyntheticUserText(m.text) &&
+    !(session.mode === 'devotional' && !session.modeParams.delivered) &&
+    !(session.mode === 'story' && !session.modeParams.storyThemes?.length) &&
+    !(session.mode === 'character' && !session.modeParams.characterId)
 
   // The synthetic "💬 Ask Anything" bubble a mode starter posts as the
   // first message isn't a real question — strip a leading emoji and
@@ -1085,9 +1180,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             {msg.role === 'user' ? (
-              <div className="max-w-[80%] px-3 py-2 rounded-2xl rounded-br-sm text-sm whitespace-pre-wrap bg-[var(--color-theme-accent)] text-[var(--color-theme-accent-contrast)]">
-                {msg.text}
-              </div>
+              <UserBubble
+                text={msg.text}
+                canEdit={canEditUserMessage(msg) && !isBusy}
+                onSave={(edited) => void sendMessage(edited, msg.id)}
+              />
             ) : (
               <div className="max-w-[85%] flex flex-col gap-1.5">
                 <div
