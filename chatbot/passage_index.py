@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parent / "data"
 CHUNKS_FILE = DATA_DIR / "passage_chunks.json"
 VECTORS_FILE = DATA_DIR / "passage_embeddings.npy"
+VERSE_VECTORS_FILE = DATA_DIR / "passage_verse_embeddings.npy"
 META_FILE = DATA_DIR / "passage_index_meta.json"
 DB_FILE = Path(__file__).resolve().parent.parent / "Complete.db"
 
@@ -44,6 +45,8 @@ will would should can could may might must do does did doth hath have has had le
 """.split())
 BM25_K1 = 1.5
 BM25_B = 0.75
+VERSE_WEIGHT = 0.7  # dense score = VERSE_WEIGHT * best verse cosine + CHUNK_WEIGHT * chunk cosine
+CHUNK_WEIGHT = 0.3
 
 
 @dataclass(frozen=True)
@@ -121,9 +124,15 @@ def tokenize(text: str) -> List[str]:
 
 
 class Index:
-    def __init__(self, chunks: List[Chunk], vectors: np.ndarray, verses: Sequence[Verse]):
+    def __init__(self, chunks: List[Chunk], vectors: np.ndarray, verses: Sequence[Verse],
+                 verse_vectors: Optional[np.ndarray] = None):
         self.chunks = chunks
         self.vectors = vectors
+        self.verse_vectors = None if verse_vectors is None else np.asarray(verse_vectors, dtype=np.float32)
+        self._verse_slices: List[Tuple[int, int]] = []
+        if self.verse_vectors is not None:
+            position = {v.id: i for i, v in enumerate(verses)}
+            self._verse_slices = [(position[c.first_id], position[c.last_id] + 1) for c in chunks]
         self._first_ids = [c.first_id for c in chunks]
         self._ref_to_id = {v.ref: v.id for v in verses}
         self._postings: Dict[str, List[Tuple[int, int]]] = defaultdict(list)
@@ -138,8 +147,21 @@ class Index:
     def nearest(self, vector: np.ndarray, k: int) -> List[int]:
         if not len(self.chunks):
             return []
-        scores = self.vectors @ vector
+        with np.errstate(all="ignore"):  # numpy/Accelerate on macOS emits spurious matmul warnings
+            scores = self.vectors @ vector
+            if self.verse_vectors is not None:
+                verse_sim = self.verse_vectors @ vector
+                best = self._max_over_verses(verse_sim)
+                scores = VERSE_WEIGHT * best + CHUNK_WEIGHT * scores
         return [int(i) for i in np.argsort(-scores, kind="stable")[:k]]
+
+    def _max_over_verses(self, verse_sim: np.ndarray) -> np.ndarray:
+        slices = self._verse_slices
+        tiled = slices[0][0] == 0 and slices[-1][1] == len(verse_sim) and all(
+            slices[i][1] == slices[i + 1][0] for i in range(len(slices) - 1))
+        if tiled:
+            return np.maximum.reduceat(verse_sim, [a for a, _ in slices])
+        return np.array([verse_sim[a:b].max() for a, b in slices], dtype=np.float32)
 
     def keyword(self, query: str, k: int) -> List[int]:
         n = len(self.chunks)
@@ -173,11 +195,12 @@ class Index:
 
 def load_index(
     chunks_file: Path = None, vectors_file: Path = None, meta_file: Path = None,
-    db_file: Path = None, expected_model: Optional[str] = None,
+    db_file: Path = None, expected_model: Optional[str] = None, verse_vectors_file: Path = None,
 ) -> Index:
     chunks_file = chunks_file or CHUNKS_FILE
     vectors_file = vectors_file or VECTORS_FILE
     meta_file = meta_file or META_FILE
+    verse_vectors_file = verse_vectors_file or VERSE_VECTORS_FILE
     if expected_model is None:
         from chatbot.passage_embed import MODEL_NAME as expected_model
     meta = json.loads(meta_file.read_text())
@@ -190,7 +213,11 @@ def load_index(
     if vectors.ndim != 2 or vectors.shape[1] != meta.get("dim"):
         raise ValueError("vector dimension does not match the meta file")
     verses = load_verses(db_file or DB_FILE)
-    return Index(build_chunks(pairs, verses), vectors, verses)
+    verse_vectors = np.load(verse_vectors_file).astype(np.float32)
+    if verse_vectors.shape != (len(verses), vectors.shape[1]) or meta.get("verse_rows") != len(verses):
+        raise ValueError(
+            f"verse vector rows {verse_vectors.shape[0]} != verses {len(verses)} (meta verse_rows {meta.get('verse_rows')})")
+    return Index(build_chunks(pairs, verses), vectors, verses, verse_vectors)
 
 
 _INDEX: Optional[Index] = None

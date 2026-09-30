@@ -27,6 +27,12 @@ COPY requirements.txt .
 # registry + commentary merge).
 RUN pip install --no-cache-dir -r requirements.txt "pyyaml>=6.0"
 
+# Find passages: fastembed downloads its ONNX model on first use. Fetch it at
+# build time into a fixed path so the container never downloads at request
+# time (and the model survives restarts). Must match chatbot/passage_embed.py.
+ENV FASTEMBED_CACHE_PATH=/opt/fastembed_cache
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')"
+
 # Chatbot package (includes chatbot/data/ study wikis, parsed at start-up).
 COPY chatbot/ ./chatbot/
 

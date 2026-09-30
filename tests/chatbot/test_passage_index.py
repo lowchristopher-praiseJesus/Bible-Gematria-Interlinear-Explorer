@@ -111,3 +111,88 @@ def test_get_index_returns_none_when_files_are_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(passage_index, "VECTORS_FILE", tmp_path / "missing.npy")
     assert passage_index.get_index() is None
     passage_index._reset()
+
+
+def _blend_index(verse_vectors):
+    verses = _verses()
+    chunks = build_chunks([[1, 3], [4, 5]], verses)
+    vectors = np.array([[0.6, 0.8], [0.8, 0.6]], dtype=np.float32)
+    return Index(chunks, vectors, verses, verse_vectors)
+
+
+def test_blend_uses_best_verse_so_one_matching_verse_beats_weak_chunk_vector():
+    # chunk 0's own vector is weakly similar to the query, but verse 2 matches it exactly.
+    verse_vectors = np.array([[0, 1], [1, 0], [0, 1], [0, 1], [0, 1]], dtype=np.float32)
+    idx = _blend_index(verse_vectors)
+    q = np.array([1.0, 0.0], dtype=np.float32)
+    assert idx.nearest(q, 2) == [0, 1]
+    assert idx.nearest(q, 2) != _blend_index(None).nearest(q, 2)  # chunk-only would prefer chunk 1
+
+
+def test_blend_exact_score(monkeypatch):
+    verse_vectors = np.array([[0, 1], [1, 0], [0, 1], [0, 1], [0, 1]], dtype=np.float32)
+    idx = _blend_index(verse_vectors)
+    q = np.array([1.0, 0.0], dtype=np.float32)
+    captured = {}
+    real = np.argsort
+    monkeypatch.setattr(np, "argsort", lambda a, **kw: captured.setdefault("s", np.array(a)) is None or real(a, **kw))
+    idx.nearest(q, 2)
+    scores = -captured["s"]
+    assert scores[0] == pytest.approx(0.7 * 1.0 + 0.3 * 0.6)
+    assert scores[1] == pytest.approx(0.7 * 0.0 + 0.3 * 0.8)
+
+
+def test_blend_handles_chunks_that_do_not_tile_the_verses():
+    verses = _verses()
+    chunks = build_chunks([[2, 3]], verses)  # skips verse 1 and 4-5
+    verse_vectors = np.array([[0, 1], [1, 0], [0, 1], [0, 1], [0, 1]], dtype=np.float32)
+    idx = Index(chunks, np.array([[0.6, 0.8]], dtype=np.float32), verses, verse_vectors)
+    assert idx.nearest(np.array([1.0, 0.0], dtype=np.float32), 1) == [0]
+
+
+def test_no_verse_vectors_falls_back_to_chunk_only():
+    idx = _blend_index(None)
+    assert idx.verse_vectors is None
+    assert idx.nearest(np.array([1.0, 0.0], dtype=np.float32), 2) == [1, 0]
+
+
+def _write_index_files(tmp_path, verse_rows, meta_verse_rows):
+    verses = load_verses()
+    pairs = json.loads(passage_index.CHUNKS_FILE.read_text())
+    (tmp_path / "meta.json").write_text(json.dumps(
+        {"model": "m", "dim": 2, "chunks": len(pairs), "verse_rows": meta_verse_rows}))
+    np.save(tmp_path / "c.npy", np.zeros((len(pairs), 2), dtype=np.float32))
+    np.save(tmp_path / "v.npy", np.zeros((verse_rows, 2), dtype=np.float16))
+    return len(verses)
+
+
+def test_load_index_rejects_a_verse_row_count_mismatch(tmp_path):
+    n = _write_index_files(tmp_path, 10, 10)
+    assert n != 10
+    with pytest.raises(ValueError, match="verse"):
+        passage_index.load_index(vectors_file=tmp_path / "c.npy", meta_file=tmp_path / "meta.json",
+                                 verse_vectors_file=tmp_path / "v.npy", expected_model="m")
+
+
+def test_load_index_accepts_matching_verse_rows(tmp_path):
+    n = _write_index_files(tmp_path, len(load_verses()), len(load_verses()))
+    idx = passage_index.load_index(vectors_file=tmp_path / "c.npy", meta_file=tmp_path / "meta.json",
+                                   verse_vectors_file=tmp_path / "v.npy", expected_model="m")
+    assert idx.verse_vectors.shape == (n, 2) and idx.verse_vectors.dtype == np.float32
+
+
+def test_float16_verse_vectors_score_within_tolerance():
+    rng = np.random.default_rng(0)
+    vv = rng.normal(size=(5, 8)).astype(np.float32)
+    vv /= np.linalg.norm(vv, axis=1, keepdims=True)
+    cv = rng.normal(size=(2, 8)).astype(np.float32)
+    cv /= np.linalg.norm(cv, axis=1, keepdims=True)
+    verses = _verses()
+    chunks = build_chunks([[1, 3], [4, 5]], verses)
+    q = rng.normal(size=8).astype(np.float32)
+    q /= np.linalg.norm(q)
+    full = Index(chunks, cv, verses, vv)
+    half = Index(chunks, cv, verses, vv.astype(np.float16))
+    assert half.verse_vectors.dtype == np.float32
+    assert np.abs(full.verse_vectors @ q - half.verse_vectors @ q).max() < 1e-2
+    assert full.nearest(q, 2) == half.nearest(q, 2)

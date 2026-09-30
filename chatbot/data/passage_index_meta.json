@@ -1,0 +1,7 @@
+{
+ "model": "BAAI/bge-small-en-v1.5",
+ "dim": 384,
+ "chunks": 4284,
+ "verse_rows": 31102,
+ "built": "2026-09-30"
+}
