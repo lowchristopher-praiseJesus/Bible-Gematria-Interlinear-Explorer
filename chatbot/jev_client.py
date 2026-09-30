@@ -9,6 +9,7 @@ request fails or comes back malformed is skipped; only a missing key or *all*
 requests failing raises JevUnavailable — callers then fail open."""
 
 import asyncio
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -60,8 +61,43 @@ def _client_factory(timeout: float) -> httpx.AsyncClient:
 def _parse(answer: Any, key: str) -> Optional[Judgment]:
     try:
         raw = answer["probabilities"]
-        probabilities = {option: float(raw.get(option, 0.0)) for option in OPTIONS}
-        confidence = float(answer["confidence"])
+        # Check that raw is a dict and contains exactly all OPTIONS as keys
+        if not isinstance(raw, dict) or set(raw.keys()) != set(OPTIONS):
+            return None
+
+        # Validate and extract probabilities
+        probabilities = {}
+        prob_sum = 0.0
+        for option in OPTIONS:
+            value = raw[option]
+            # Reject bools and non-numeric types
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return None
+            # Reject non-finite values (NaN, inf)
+            if not math.isfinite(value):
+                return None
+            # Reject out-of-range values (allow 1e-6 tolerance)
+            if not (-1e-6 <= value <= 1.0 + 1e-6):
+                return None
+            probabilities[option] = float(value)
+            prob_sum += probabilities[option]
+
+        # Reject if probabilities sum to less than 0.5
+        if prob_sum < 0.5:
+            return None
+
+        # Validate confidence
+        conf_value = answer["confidence"]
+        # Reject bools and non-numeric types
+        if isinstance(conf_value, bool) or not isinstance(conf_value, (int, float)):
+            return None
+        # Reject non-finite values
+        if not math.isfinite(conf_value):
+            return None
+        # Reject out-of-range values (allow 1e-6 tolerance)
+        if not (-1e-6 <= conf_value <= 1.0 + 1e-6):
+            return None
+        confidence = float(conf_value)
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
     return Judgment(key=key, probabilities=probabilities, confidence=confidence)

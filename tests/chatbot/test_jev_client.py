@@ -76,3 +76,82 @@ def test_is_configured(monkeypatch):
     assert jev_client.is_configured() is False
     monkeypatch.setenv("TYPESAFE_API_KEY", "k")
     assert jev_client.is_configured() is True
+
+
+async def test_empty_probabilities_dict_alone_raises(monkeypatch):
+    """Empty probabilities dict should cause all items to be skipped."""
+    def handler(request: httpx.Request):
+        return httpx.Response(200, json={"answers": {"c0": {"probabilities": {}, "confidence": 0.9}}})
+
+    _use(monkeypatch, handler)
+    with pytest.raises(JevUnavailable):
+        await judge_relevance("q", [("1", "A 1:1", "t")])
+
+
+async def test_missing_option_skipped_but_valid_returned(monkeypatch):
+    """Missing option in one response should skip it; valid responses are kept."""
+    def handler(request: httpx.Request):
+        import json
+        body = json.loads(request.content)
+        if "text A" in body["state"]["passage"]:
+            # Missing 'partly' option
+            return httpx.Response(200, json={"answers": {"c0": {
+                "probabilities": {"directly": 0.8, "tangentially": 0.05, "not_relevant": 0.05},
+                "confidence": 0.9
+            }}})
+        else:
+            return httpx.Response(200, json={"answers": {"c0": ANSWER}})
+
+    _use(monkeypatch, handler)
+    out = await judge_relevance("q", [("1", "A 1:1", "text A"), ("2", "B 1:1", "text B")])
+    assert [j.key for j in out] == ["2"]
+
+
+async def test_all_zero_probabilities_skipped(monkeypatch):
+    """All-zero probabilities should be rejected (sum < 0.5)."""
+    def handler(request: httpx.Request):
+        return httpx.Response(200, json={"answers": {"c0": {
+            "probabilities": {"directly": 0.0, "partly": 0.0, "tangentially": 0.0, "not_relevant": 0.0},
+            "confidence": 0.9
+        }}})
+
+    _use(monkeypatch, handler)
+    with pytest.raises(JevUnavailable):
+        await judge_relevance("q", [("1", "A 1:1", "t")])
+
+
+async def test_confidence_nan_skipped(monkeypatch):
+    """NaN confidence should be rejected."""
+    def handler(request: httpx.Request):
+        # Send raw response with NaN (no JSON encoder can produce it, so we use raw content)
+        return httpx.Response(200, content=b'{"answers":{"c0":{"probabilities":{"directly":0.8,"partly":0.1,"tangentially":0.05,"not_relevant":0.05},"confidence":NaN}}}')
+
+    _use(monkeypatch, handler)
+    with pytest.raises(JevUnavailable):
+        await judge_relevance("q", [("1", "A 1:1", "t")])
+
+
+async def test_out_of_range_probability_skipped(monkeypatch):
+    """Probability > 1.0 should be rejected."""
+    def handler(request: httpx.Request):
+        return httpx.Response(200, json={"answers": {"c0": {
+            "probabilities": {"directly": 1.5, "partly": 0.1, "tangentially": 0.05, "not_relevant": 0.05},
+            "confidence": 0.9
+        }}})
+
+    _use(monkeypatch, handler)
+    with pytest.raises(JevUnavailable):
+        await judge_relevance("q", [("1", "A 1:1", "t")])
+
+
+async def test_boolean_probability_skipped(monkeypatch):
+    """Boolean as probability should be rejected."""
+    def handler(request: httpx.Request):
+        return httpx.Response(200, json={"answers": {"c0": {
+            "probabilities": {"directly": True, "partly": 0.1, "tangentially": 0.05, "not_relevant": 0.05},
+            "confidence": 0.9
+        }}})
+
+    _use(monkeypatch, handler)
+    with pytest.raises(JevUnavailable):
+        await judge_relevance("q", [("1", "A 1:1", "t")])
