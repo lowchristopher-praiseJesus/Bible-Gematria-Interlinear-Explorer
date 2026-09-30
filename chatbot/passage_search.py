@@ -150,7 +150,9 @@ async def rewrite_queries(statement: str, timeout: float) -> List[str]:
         "no commentary."
     )
     try:
-        reply = await simple_completion(_REWRITE_SYSTEM, prompt, max_tokens=120, timeout=timeout)
+        reply = await simple_completion(
+            _REWRITE_SYSTEM, prompt, max_tokens=120, timeout=timeout, no_reasoning=True
+        )
     except Exception:  # noqa: BLE001 — optional; the original statement still searches
         logger.warning("passages: phrase rewrite failed", exc_info=True)
         return []
@@ -267,7 +269,8 @@ async def _reasons(
     )
     try:
         reply = await simple_completion(
-            _REASONS_SYSTEM, prompt, max_tokens=900, timeout=_remaining(deadline, REASONS_TIMEOUT)
+            _REASONS_SYSTEM, prompt, max_tokens=900, timeout=_remaining(deadline, REASONS_TIMEOUT),
+            no_reasoning=True,
         )
     except Exception:  # noqa: BLE001 — reasons are optional
         logger.warning("passages: reasons call failed", exc_info=True)

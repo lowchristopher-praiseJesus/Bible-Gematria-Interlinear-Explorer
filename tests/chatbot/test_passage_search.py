@@ -271,3 +271,17 @@ async def test_jev_stage_cap_keeps_the_judgments_already_received(index, monkeyp
     params = result["artifacts"][0]["params"]
     assert params["verified"] is True and len(params["passages"]) == 1
     assert seen["timeout"] is not None and 0 < seen["timeout"] <= ps.JEV_TIMEOUT
+
+
+async def test_both_llm_stages_disable_reasoning(index, monkeypatch):
+    calls = []
+
+    async def fake(system, user, **kw):
+        calls.append(kw)
+        if "search phrases" in system:
+            return "caught up together"
+        return "1. Describes the Lord gathering believers."
+    monkeypatch.setattr(ps, "simple_completion", fake)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    await ps.search("Where is the rapture talked about in the Bible?")
+    assert len(calls) == 2 and all(kw.get("no_reasoning") is True for kw in calls)

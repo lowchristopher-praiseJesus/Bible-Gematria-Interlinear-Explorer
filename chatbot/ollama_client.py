@@ -624,11 +624,15 @@ async def stream_chat_with_ollama(
 
 async def simple_completion(
     system_prompt: str, user_prompt: str, *, max_tokens: int = 2048,
-    timeout: float = 60.0,
+    timeout: float = 60.0, no_reasoning: bool = False,
 ) -> str:
     """One non-streamed completion from an explicit system + user prompt.
     Returns the model's text, or "" on an unconfigured provider or any HTTP
-    / parse error (callers treat "" as "no usable answer")."""
+    / parse error (callers treat "" as "no usable answer").
+
+    `no_reasoning=True` asks OpenRouter to skip the model's reasoning phase
+    (a reasoning model otherwise spends a small max_tokens budget on thinking
+    and returns empty content). Ignored for every other provider."""
     if llm_unconfigured_error():
         return ""
     messages = [
@@ -638,6 +642,8 @@ async def simple_completion(
     provider, url, headers, payload = _build_request(
         messages, stream=False, max_tokens=max_tokens
     )
+    if no_reasoning and provider == "openrouter":
+        payload["reasoning"] = {"enabled": False}
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=payload, timeout=timeout)

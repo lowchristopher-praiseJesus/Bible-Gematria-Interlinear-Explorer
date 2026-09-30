@@ -51,11 +51,15 @@ def test_parse_phrasings_cleans_and_caps():
 
 
 async def test_rewrite_queries_uses_the_llm_and_fails_open(monkeypatch):
+    seen = {}
+
     async def ok(system, user, **kw):
         assert "rapture" in user
+        seen.update(kw)
         return "caught up together\nthe trump of God"
     monkeypatch.setattr(ps, "simple_completion", ok)
     assert await ps.rewrite_queries("the rapture", 5.0) == ["caught up together", "the trump of God"]
+    assert seen.get("no_reasoning") is True
 
     async def boom(system, user, **kw):
         raise RuntimeError("provider down")

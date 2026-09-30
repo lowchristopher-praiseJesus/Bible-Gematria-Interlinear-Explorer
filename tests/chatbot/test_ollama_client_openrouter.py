@@ -86,3 +86,50 @@ async def test_call_ollama_with_context_parses_openrouter_response(monkeypatch):
     assert result["type"] == "chat"
     assert result["message"] == "42"
     assert "OpenRouter (qwen/qwen3.8-27b:free)" in result["route"]
+
+
+class _FakeResponse:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+
+def _capture_post(monkeypatch):
+    sent = {}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None, timeout=None):
+            sent["json"] = json
+            return _FakeResponse()
+
+    monkeypatch.setattr(oc.httpx, "AsyncClient", lambda *a, **k: FakeClient())
+    return sent
+
+
+async def test_simple_completion_no_reasoning_openrouter_disables_reasoning(monkeypatch):
+    _set_provider(monkeypatch, "openrouter")
+    sent = _capture_post(monkeypatch)
+    assert await oc.simple_completion("s", "u", no_reasoning=True) == "ok"
+    assert sent["json"]["reasoning"] == {"enabled": False}
+
+
+async def test_simple_completion_default_has_no_reasoning_key(monkeypatch):
+    _set_provider(monkeypatch, "openrouter")
+    sent = _capture_post(monkeypatch)
+    await oc.simple_completion("s", "u")
+    assert "reasoning" not in sent["json"]
+
+
+async def test_simple_completion_no_reasoning_ignored_for_other_providers(monkeypatch):
+    _set_provider(monkeypatch, "nvidia", NVIDIA_API_KEY="nv-test")
+    sent = _capture_post(monkeypatch)
+    await oc.simple_completion("s", "u", no_reasoning=True)
+    assert "reasoning" not in sent["json"]
