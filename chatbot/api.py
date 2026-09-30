@@ -18,6 +18,7 @@ from chatbot.schemas import (
     PassageResponse,
     PassageVerse,
     ParablesResponse,
+    PassagesStatusResponse,
     StoryIllustrationItem,
     StoryIllustrationsRequest,
     StrongsResponse,
@@ -48,7 +49,7 @@ from chatbot.story_illustrations import (
     synthesize_illustration,
 )
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader
+from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader, passage_search
 from chatbot.router import (
     build_mode_primer,
     route_deterministic,
@@ -232,6 +233,13 @@ async def list_characters():
     return CharactersResponse(characters=character_loader.list_characters())
 
 
+@router.get("/passages/status", response_model=PassagesStatusResponse)
+async def passages_status():
+    """Whether "Find passages" can run (the chunk index loaded). Never calls
+    JEV or the LLM — the frontend asks once, to show or hide the tile."""
+    return PassagesStatusResponse(available=await asyncio.to_thread(passage_search.is_available))
+
+
 @router.post("/devotional/audio", response_model=DevotionalAudioResponse)
 async def post_devotional_audio(request: DevotionalAudioRequest):
     """Generate (or reuse a cached) Neural2 MP3 for a devotional's full
@@ -376,6 +384,12 @@ async def post_chat(request: ChatRequest):
         if request.mode == "character":
             character_id = (request.mode_params or {}).get("character_id", "")
             result = await character_chat.answer(character_id, request.message, history)
+            return _with_trace(result)
+
+        # Every turn in a "Find passages" session is a query to search for —
+        # never the generic deterministic/LLM path.
+        if request.mode == "passages":
+            result = await passage_search.search(request.message)
             return _with_trace(result)
 
         # Every turn in a Hermeneutics session needs the phase pipeline (or
@@ -598,6 +612,13 @@ async def _stream_chat_response(
         if request.mode == "character":
             character_id = (request.mode_params or {}).get("character_id", "")
             result = await character_chat.answer(character_id, request.message, history)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        # Same special case as post_chat(): the result arrives whole.
+        if request.mode == "passages":
+            result = await passage_search.search(request.message)
             _note_outcome(result)
             yield await sse_event("final", {"result": result})
             return

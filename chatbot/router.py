@@ -1323,6 +1323,10 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
             "follow_up_questions": [],
         }
 
+    if mode == "passages":
+        from chatbot import passage_search
+        return passage_search.primer()
+
     if mode == "story":
         return await story_mode.build_primer(mode_params)
 
