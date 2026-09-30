@@ -55,9 +55,9 @@ tile when the feature is unavailable; a `mode == "passages"` branch in
 3. Optionally imports TSK cross-references (see below).
 
 The embedding model is a small local ONNX model (candidate: `BAAI/bge-small-en-v1.5`
-via `fastembed`, 384-d) so the chatbot image does not need PyTorch. **To verify
-before planning:** the model's licence, the image-size increase, and query
-latency on the deployment host.
+via `fastembed`, 384-d) so the chatbot image does not need PyTorch. Verified while
+planning: the model is MIT-licensed, 384-d, about 67 MB quantized; query latency and
+image-size increase are measured in the implementation plan's Task 4.
 
 ## Runtime units
 
@@ -65,7 +65,7 @@ latency on the deployment host.
 |---|---|---|
 | `chatbot/passage_index.py` | Load chunks + vectors once (double-checked lock); `nearest(vector, k)` by brute-force cosine; chunk lookup by verse id; refuses to load if the meta's model name ≠ the runtime model | numpy, data files |
 | `chatbot/passage_embed.py` | Embed a query with the local model; returns `None` on any failure | fastembed |
-| `chatbot/jev_client.py` | One batched request judging N candidates for a query; raises `JevUnavailable` on any failure | httpx, `TYPESAFE_API_KEY` |
+| `chatbot/jev_client.py` | One Choice request per candidate (concurrency 8) judging a passage against the query; a failed candidate is skipped, all failing raises `JevUnavailable` | httpx, `TYPESAFE_API_KEY` |
 | `chatbot/passage_rank.py` | **Pure functions**: reciprocal rank fusion, the JEV filter, ordering and cap | none |
 | `chatbot/passage_search.py` | Orchestrator; returns the result dict | all of the above, existing reference parser, keyword search, LLM client |
 
@@ -88,12 +88,15 @@ rejected with a message asking for a narrower range (matches Deep Study's
   only the original statement is used.
 
 **3. Retrieve and merge (no LLM).** For each query: embed it, take the top 20
-chunks by cosine; also run the existing English keyword search and map matching
-verses to chunks. Merge with reciprocal rank fusion, dedupe by chunk, keep the
+chunks by cosine; also run an in-memory BM25 keyword search over the chunk texts
+(the existing English full-text search is a `LIKE` full scan of one literal
+substring, unsuited to multi-phrase queries). Merge with reciprocal rank fusion, dedupe by chunk, keep the
 top 30 candidates. Each candidate records its sources (`embedding`, `keyword`,
 `cross_reference`).
 
-**4. JEV relevance filter.** One batched request, one Choice per candidate:
+**4. JEV relevance filter.** One request per candidate (concurrency 8; a single
+request of 30 chunk-sized passages risks JEV's weakness with large unfocused
+input), each a Choice:
 `directly` / `partly` / `tangentially` / `not_relevant` ("does this passage
 address the query?"). A pure function in `passage_rank.py` keeps `directly` and
 `partly` at or above a confidence floor, orders by JEV score with retrieval rank as
@@ -120,11 +123,11 @@ Every dependency fails open to the next-best result; none may crash the turn.
 | LLM rewrite fails | Original statement is the only query |
 | LLM reasons fails | Cards without a reason line |
 | Embedding model fails to load/run | Keyword-only retrieval and a "semantic search unavailable" banner |
-| Index files missing, or embedding model ≠ meta | `GET /passages/status` reports unavailable; tile hidden |
+| Index files missing, or embedding model ≠ meta | `GET /passages/status` reports unavailable; tile hidden (availability does not depend on JEV) |
 | Nothing relevant after the filter | Plain "no passages found"; no filler results |
 
-Limits: query ≤ 500 characters; passage ≤ 25 verses; one JEV request of ≤ 30
-items; one reasons call of ≤ 10; overall budget ≈ 15 s, a stage over its share is
+Limits: query ≤ 500 characters; passage ≤ 25 verses; ≤ 30 JEV requests per search;
+one reasons call of ≤ 10; overall budget ≈ 15 s, a stage over its share is
 skipped rather than awaited. Queries go to the LLM provider (already true of chat)
 and, for the filter, to TypeSafe. Reasons on contested topics (e.g. the rapture)
 present passages people cite and take no position.
@@ -134,8 +137,8 @@ present passages people cite and take no position.
 Source: OpenBible.info's TSK-derived cross-references or
 `CrossReferences-org/bible-cross-references` (CC-BY / CC BY 4.0). Attribution goes
 in the artifact footer and `README`. Imported to `chatbot/data/` as a compact
-verse-id → verse-ids table. **To verify before planning:** the file's verse
-numbering against `Complete.db`'s KJV, and its exact licence text.
+verse-id → `[target verse id, votes]` table (votes ≥ 5, ≤ 25 per verse). Verified while
+planning: every reference maps to `Complete.db` except `3John.1.15`; the file is CC-BY.
 
 ## Testing and evaluation
 
