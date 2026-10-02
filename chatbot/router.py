@@ -104,6 +104,16 @@ _QUOTE_KW_RE = re.compile(
 )
 
 
+# A reference-less message that names a different chapter / the next-previous
+# one ("what does chapter 13 say right after this?") asks about a passage the
+# history verse is not — re-quoting that verse silently drops the question.
+_OTHER_PASSAGE_RE = re.compile(
+    r"\b(?:chapters?\s+\d{1,3}|(?:next|previous|following|preceding)\s+(?:chapter|verse|passage)s?"
+    r"|(?:right\s+)?(?:after|before)\s+(?:this|that|it))\b",
+    re.IGNORECASE,
+)
+
+
 def _matches_study_keyword(text_lower: str) -> bool:
     """STUDY_KEYWORDS mixes plain substrings with one regex entry
     ("what does .* mean"). Match each the right way. A plain
@@ -798,6 +808,9 @@ async def route_deterministic(
             # devotional", not "re-quote the bare verse". Defer to the LLM
             # (which has the devotional's full text in its history) instead
             # of hijacking the turn with a one-line verse card.
+            if _OTHER_PASSAGE_RE.search(text_lower):
+                record_routing("fell through to LLM (other passage, context ref)")
+                return None
             if _QUOTE_KW_RE.search(text_lower) and mode != "devotional":
                 resp = await _quote_response(
                     context_ref,

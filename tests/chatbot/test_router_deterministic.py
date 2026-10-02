@@ -261,3 +261,25 @@ async def test_what_does_x_mean_with_a_history_verse_defers_to_the_ai(monkeypatc
     history = [{"role": "assistant", "text": "Here is **PRO 1:1**."}]
 
     assert await route_deterministic(message, history=history) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "What does chapter 13 say right after this?",
+        "show me the next chapter",
+        "what does the verse before this say",
+    ],
+)
+async def test_other_passage_follow_up_does_not_requote_the_history_verse(monkeypatch, message):
+    # "What does chapter 13 say right after this?" matched the quote keyword
+    # "what does" and was answered with a re-quote of the history verse
+    # (1CO 12:4) instead of reaching the LLM.
+    async def fake_fetch(reference, languages=None):
+        return {"eng-KJV": "Now there are diversities of gifts..."}
+
+    monkeypatch.setattr("chatbot.router.fetch_verse_translations", fake_fetch)
+    history = [{"role": "assistant", "text": "Spiritual gifts (1 Corinthians 12:4)."}]
+
+    assert await route_deterministic(message, history=history) is None
