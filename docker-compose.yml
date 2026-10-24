@@ -176,7 +176,7 @@ services:
       # locally or on the VM) and bind-mount the result. See the commented
       # `frontend-build` note below for the in-Docker alternative.
       - ./frontend/dist:/usr/share/nginx/html:ro
-      # Leningrad Codex scans — served directly by nginx via `alias`.
+      # Leningrad Codex scans — served directly by nginx via `root`.
       - ./LC_:/srv/LC_:ro
       # Logs on the host for easy tailing while debugging.
       - ./nginx/logs:/var/log/nginx

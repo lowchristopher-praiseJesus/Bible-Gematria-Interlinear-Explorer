@@ -21,7 +21,7 @@ No business-logic or route changes. The edits made:
 ```
                        ┌──────── nginx  (public :80) ─────────┐
   browser ────────────▶│  /               → SPA (dist/, disk)  │
-                       │  /LC_/           → images (disk, alias)│
+                       │  /LC_/           → images (disk, root) │
                        │  /static/        → flask-api           │
                        │  /explorer …     → flask-api           │
                        │  /api/…          → flask-api           │
