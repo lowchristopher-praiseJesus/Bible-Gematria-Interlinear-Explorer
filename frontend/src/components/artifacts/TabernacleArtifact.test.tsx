@@ -105,10 +105,21 @@ describe('TabernacleArtifact', () => {
     })
     expect(screen.getByRole('dialog')).toHaveTextContent(/3D view couldn't load/)
     expect(screen.getByRole('link')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Close full screen' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(document.querySelectorAll('iframe')).toHaveLength(1)
     expect(document.querySelector('iframe')).toBe(iframe)
+  })
+
+  it('names the way out of full screen in words, not just a cross that reads as "close"', () => {
+    render(<TabernacleArtifact spot={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+    const exit = screen.getByRole('button', { name: 'Exit full screen' })
+    expect(exit).toHaveTextContent('Exit full screen')
+    fireEvent.click(exit)
+    // back in the side panel, the viewer is still there to maximize again
+    expect(screen.getByRole('button', { name: 'Full screen' })).toBeInTheDocument()
+    expect(document.querySelectorAll('iframe')).toHaveLength(1)
   })
 
   it('Escape closes full screen', () => {

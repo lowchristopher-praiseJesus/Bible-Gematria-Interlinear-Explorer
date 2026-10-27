@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Maximize2, X } from 'lucide-react'
+import { Maximize2, Minimize2 } from 'lucide-react'
 import {
   emitViewerEvent, markViewerReady, parseViewerMessage, registerViewer, VIEWER_PAGE, viewerSrc,
 } from '@/lib/tabernacleBridge'
@@ -106,10 +106,12 @@ export function TabernacleArtifact({ spot }: TabernacleArtifactParams) {
             <button
               ref={closeRef}
               onClick={() => setFullscreen(false)}
-              aria-label="Close full screen"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+              // Words, not a bare cross: a cross reads as closing the 3D view,
+              // when this only returns it to the side panel.
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Exit full screen
             </button>
           </div>
         )}
