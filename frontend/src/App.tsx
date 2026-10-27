@@ -339,7 +339,10 @@ export default function App() {
           inert={compact && !sheetOpen}
           data-state={sheetOpen ? 'open' : 'closed'}
           className={`fixed inset-x-0 bottom-0 z-40 flex h-[85dvh] flex-col rounded-t-2xl border-t border-[var(--color-theme-border)] bg-[var(--color-surface)] shadow-2xl transition-transform duration-200 ${
-            sheetOpen ? 'translate-y-0' : 'translate-y-full'
+            // Open must be `translate-none`, not `translate-y-0`: any non-`none` translate
+            // makes this aside the containing block of fixed descendants, so a `fixed
+            // inset-0` full-screen layer (3D tabernacle) would only fill the sheet.
+            sheetOpen ? 'translate-none' : 'translate-y-full'
           } lg:static lg:z-auto lg:h-auto lg:w-96 lg:shrink-0 lg:translate-none lg:rounded-none lg:border-t-0 lg:shadow-none lg:transition-none ${
             hasDetail ? 'lg:flex' : 'lg:hidden'
           }`}

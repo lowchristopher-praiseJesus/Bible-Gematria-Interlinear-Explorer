@@ -78,6 +78,20 @@ describe('App', () => {
     )
   })
 
+  it('the open detail sheet uses translate-none so fixed descendants cover the viewport', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+    useArtifactStore.getState().openArtifact({ type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } })
+
+    const sheet = await screen.findByRole('complementary', { name: 'Scripture details' })
+    await waitFor(() => expect(sheet).toHaveAttribute('data-state', 'open'))
+    expect(sheet.className).toContain('translate-none')
+    expect(sheet.className.split(/\s+/)).not.toContain('translate-y-0')
+  })
+
   it('selecting a session from the drawer closes the drawer', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
