@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -140,8 +141,27 @@ async def test_answer_uses_spot_named_in_message(llm):
 
 async def test_answer_falls_back_to_current_spot(llm):
     r = await tabernacle_mode.answer("why gold?", [], {"tabernacle_spot": "ark"})
+    # grounded on the saved spot, but the camera stays put: neither text names one
     assert tabernacle_mode.grounding_for("ark") == llm.calls[0]["research_data"]
-    assert r["data"] == {"tabernacle_spot": "ark"}
+    assert r["data"] == {"tabernacle_spot": None}
+
+
+async def test_answer_cue_from_reply_over_saved_spot(llm):
+    llm.state["reply"] = {"type": "chat", "message": "Then the priest washed at the laver.", "data": None}
+    r = await tabernacle_mode.answer("what came next?", [], {"tabernacle_spot": "ark"})
+    assert tabernacle_mode.grounding_for("ark") == llm.calls[0]["research_data"]
+    assert r["data"] == {"tabernacle_spot": "laver"}
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Beyond the veil stood the ark", "veil"),
+    ("the altar of incense", "incense"),
+    ("At the altar, then the laver", "altar"),
+    ("nothing here", None),
+    ("", None),
+])
+def test_first_spot_in(text, expected):
+    assert tabernacle_mode.first_spot_in(text) == expected
 
 
 async def test_answer_cue_from_reply_when_message_names_none(llm):
@@ -170,6 +190,13 @@ async def test_answer_llm_failure_is_honest(llm):
     assert r["data"] == {"tabernacle_spot": "ark"}
 
 
+async def test_answer_llm_failure_does_not_cue_the_saved_spot(llm):
+    llm.state["reply"] = {"type": "error", "message": ""}
+    r = await tabernacle_mode.answer("why gold?", [], {"tabernacle_spot": "ark"})
+    assert r["message"] == "I couldn't answer that right now \u2014 please try again."
+    assert r["data"] == {"tabernacle_spot": None}
+
+
 async def test_answer_without_spot_data_says_so(llm, monkeypatch):
     monkeypatch.setattr(tabernacle_mode, "load_spots", lambda: {})
     await tabernacle_mode.answer("hello", [], None)
@@ -189,6 +216,27 @@ def test_post_chat_routes_tabernacle(client, monkeypatch):
                                      "mode_params": {"tabernacle_spot": "ark"}})
     assert res.status_code == 200
     assert res.json()["message"] == "[tab]"
+    assert captured == {"message": "why gold?", "mode_params": {"tabernacle_spot": "ark"}}
+
+
+def test_chat_stream_routes_tabernacle(client, monkeypatch):
+    import chatbot.api as api_module
+    captured = {}
+
+    async def fake_answer(message, history, mode_params):
+        captured.update(message=message, mode_params=mode_params)
+        return {"type": "chat", "message": "[tab]", "data": {"tabernacle_spot": "laver"}, "route": "t"}
+
+    monkeypatch.setattr(api_module.tabernacle_mode, "answer", fake_answer)
+    res = client.post("/chat/stream", json={"message": "why gold?", "mode": "tabernacle",
+                                            "mode_params": {"tabernacle_spot": "ark"}})
+    assert res.status_code == 200
+    events = [json.loads(c.strip()[len("data: "):]) for c in res.text.strip().split("\n\n")
+              if c.strip().startswith("data: ")]
+    finals = [e for e in events if e["type"] == "final"]
+    assert len(finals) == 1
+    assert finals[0]["result"]["message"] == "[tab]"
+    assert finals[0]["result"]["data"] == {"tabernacle_spot": "laver"}
     assert captured == {"message": "why gold?", "mode_params": {"tabernacle_spot": "ark"}}
 
 

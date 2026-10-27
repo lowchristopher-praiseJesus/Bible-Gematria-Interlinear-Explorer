@@ -52,9 +52,8 @@ def load_spots() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
-def match_spot(text: str) -> Optional[str]:
-    """Id of the spot named in `text`: longest alias first, whole words,
-    case-insensitive. None if nothing matches."""
+def _alias_pairs() -> List[Tuple[str, str]]:
+    """(alias, spot id) for every well-formed alias, longest alias first."""
     pairs: List[Tuple[str, str]] = [
         (alias, spot_id)
         for spot_id, spot in load_spots().items()
@@ -63,10 +62,29 @@ def match_spot(text: str) -> Optional[str]:
         if isinstance(alias, str) and alias
     ]
     pairs.sort(key=lambda p: len(p[0]), reverse=True)
-    for alias, spot_id in pairs:
+    return pairs
+
+
+def match_spot(text: str) -> Optional[str]:
+    """Id of the spot named in `text`: longest alias first, whole words,
+    case-insensitive. None if nothing matches."""
+    for alias, spot_id in _alias_pairs():
         if re.search(rf"\b{re.escape(alias)}\b", text, re.IGNORECASE):
             return spot_id
     return None
+
+
+def first_spot_in(text: str) -> Optional[str]:
+    """Id of the spot whose alias occurs earliest in `text` (whole words,
+    case-insensitive); at the same position the longer alias wins, so "altar
+    of incense" beats "altar". Used on a reply, which may name several spots
+    but is about the first. None if nothing matches."""
+    best: Optional[Tuple[int, str]] = None
+    for alias, spot_id in _alias_pairs():  # longest first: a tie keeps the longer
+        m = re.search(rf"\b{re.escape(alias)}\b", text, re.IGNORECASE)
+        if m and (best is None or m.start() < best[0]):
+            best = (m.start(), spot_id)
+    return best[1] if best else None
 
 
 def primer(mode_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -152,10 +170,13 @@ async def answer(
     mode_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """One turn: ground the LLM on the spot named in the message (else the
-    viewer's current spot) and report which spot the reply is about."""
+    viewer's current spot) and cue the camera to the spot the message names,
+    else the first one the reply names. The saved spot is never a cue: the
+    camera is already there."""
     saved = (mode_params or {}).get("tabernacle_spot")
     current = saved if isinstance(saved, str) and saved in load_spots() else None
-    spot = match_spot(message) or current
+    named = match_spot(message)
+    spot = named or current
 
     result = await call_ollama_with_context(
         message,
@@ -168,12 +189,12 @@ async def answer(
         return {
             "type": "chat",
             "message": _FAILURE_MESSAGE,
-            "data": {"tabernacle_spot": spot},
+            "data": {"tabernacle_spot": named},
             "route": route,
         }
 
     result["message"] = wiki_refs.resolve_scripture_refs(result["message"])
-    cue = spot or match_spot(result["message"])
+    cue = named or first_spot_in(result["message"])
     result["data"] = {"tabernacle_spot": cue}
     result["route"] = route
     follow_ups = await generate_llm_follow_ups(message, result["message"])
