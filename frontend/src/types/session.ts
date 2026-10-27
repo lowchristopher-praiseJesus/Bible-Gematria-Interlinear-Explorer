@@ -1,9 +1,11 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story' | 'passages'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story' | 'passages' | 'tabernacle'
 
 export interface ModeParams {
+  /** Tabernacle mode: the last spot the viewer's camera was at. */
+  tabernacleSpot?: string
   plan?: 'chronological' | 'canonical'
   dayIndex?: number
   completedDays?: number[]
@@ -62,7 +64,7 @@ export interface ModeParams {
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story' | 'passage_search'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story' | 'passage_search' | 'tabernacle'
   label: string
   params: Record<string, unknown>
 }
@@ -141,6 +143,11 @@ export interface PassageResult {
   text: string
   reason: string
   sources: Array<'embedding' | 'keyword' | 'cross_reference'>
+}
+
+/** Params for a `tabernacle`-type ArtifactLink: the spot the viewer opens at. */
+export interface TabernacleArtifactParams {
+  spot: string | null
 }
 
 /** Params for a `passage_search`-type ArtifactLink — the whole result list

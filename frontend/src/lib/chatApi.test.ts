@@ -170,6 +170,10 @@ describe('chatApi', () => {
     await expect(postChat({ message: 'hi' })).rejects.toThrow(/500/)
   })
 
+  it('toWireModeParams maps tabernacleSpot to tabernacle_spot', () => {
+    expect(toWireModeParams({ tabernacleSpot: 'ark' })).toEqual({ tabernacle_spot: 'ark' })
+  })
+
   it('toWireModeParams maps seriesId and conceptSlug to snake_case', () => {
     expect(toWireModeParams({ seriesId: 'present-day-ministry-of-jesus', conceptSlug: 'grace' })).toEqual({
       series_id: 'present-day-ministry-of-jesus',

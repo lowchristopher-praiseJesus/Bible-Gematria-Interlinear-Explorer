@@ -62,6 +62,9 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
       // The whole result list travels inline on the link params (set by the
       // chat message that produced it) — nothing to fetch.
       return link.params
+    case 'tabernacle':
+      // Just the opening spot; travels inline on the link params.
+      return link.params
     default:
       throw new Error(`Unknown artifact type: ${link.type}`)
   }

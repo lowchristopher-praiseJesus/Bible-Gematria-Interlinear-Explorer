@@ -265,4 +265,20 @@ describe('ModePickerScreen', () => {
     expect(s.mode).toBe('passages')
     expect(s.messages.at(-1)?.followUpQuestions).toEqual(['Romans 8:28'])
   })
+
+  it('starts a tabernacle session from the primer', async () => {
+    vi.spyOn(chatApi, 'fetchPassagesStatus').mockResolvedValue(false)
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({
+      type: 'chat',
+      message: 'Welcome to the Tabernacle.',
+      data: null,
+      follow_up_questions: [],
+    } as Awaited<ReturnType<typeof chatApi.postChat>>)
+    const onStarted = vi.fn()
+    render(<ModePickerScreen onSessionStarted={onStarted} />)
+    await userEvent.click(await screen.findByRole('button', { name: /walk the tabernacle/i }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    expect(chatApi.postChat).toHaveBeenCalledWith({ message: '', mode: 'tabernacle', mode_params: {} })
+    expect(firstSession().mode).toBe('tabernacle')
+  })
 })

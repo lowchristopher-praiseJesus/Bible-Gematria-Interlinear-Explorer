@@ -6,6 +6,7 @@ import { EnglishSearchArtifact } from '@/components/artifacts/EnglishSearchArtif
 import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
 import { HermeneuticsArtifact } from '@/components/artifacts/HermeneuticsArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
+import { TabernacleArtifact } from '@/components/artifacts/TabernacleArtifact'
 import { PassageSearchArtifact } from '@/components/artifacts/PassageSearchArtifact'
 import { StoryArtifact } from '@/components/artifacts/StoryArtifact'
 import { StrongsArtifact } from '@/components/artifacts/StrongsArtifact'
@@ -21,6 +22,7 @@ import type {
   DevotionalArtifactParams,
   HermeneuticsArtifactParams,
   PassageSearchArtifactParams,
+  TabernacleArtifactParams,
   StoryArtifactParams,
 } from '@/types/session'
 
@@ -95,6 +97,9 @@ export function ArtifactPane({ onClose }: Props) {
                 )}
                 {activeArtifact.type === 'passage_search' && (
                   <PassageSearchArtifact {...(data as PassageSearchArtifactParams)} />
+                )}
+                {activeArtifact.type === 'tabernacle' && (
+                  <TabernacleArtifact {...(data as TabernacleArtifactParams)} />
                 )}
               </>
             )}
