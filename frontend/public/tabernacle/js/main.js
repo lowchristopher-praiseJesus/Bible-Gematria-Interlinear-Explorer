@@ -359,12 +359,15 @@ addEventListener('resize', resize);
 resize();
 
 // ---------------- startup ----------------
+let SPOT_DATA = {};
 const loadDone = new Promise((resolve) => {
   THREE.DefaultLoadingManager.onLoad = resolve;
 });
 
 (async () => {
+  const spotsReady = fetch('data/spots.json').then((r) => (r.ok ? r.json() : {})).then((d) => { SPOT_DATA = d; }).catch(() => {});
   await Promise.all([
+    spotsReady,
     document.fonts.load('600 40px "Barlow Condensed"'),
     document.fonts.load('500 40px "Barlow Condensed"'),
     document.fonts.load('italic 400 40px "Spectral"'),
@@ -485,9 +488,12 @@ const loadDone = new Promise((resolve) => {
   }));
   let openSpot = null;
   function openInfo(spot) {
+    const data = SPOT_DATA[spot.id];
+    if (!data) return; // spots.json missing or failed to load: stay clickable, open nothing
     if (openSpot) openSpot.el.setAttribute('aria-expanded', 'false');
     openSpot = spot;
-    infoBody.replaceChildren(document.getElementById(`info-${spot.id}`).content.cloneNode(true));
+    const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    infoBody.innerHTML = `<p class="ref">${data.refs.map((r) => esc(r.label)).join('; ')}</p><h2 id="info-title">${data.title}</h2>${data.html}`;
     infoEl.hidden = false;
     infoBody.scrollTop = 0;
     spot.el.setAttribute('aria-expanded', 'true');
