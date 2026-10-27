@@ -354,8 +354,10 @@ containing block for fixed descendants. Messages between app and viewer are
 origin-checked `postMessage`s: `frontend/src/lib/tabernacleBridge.ts` (app side)
 and `frontend/public/tabernacle/js/bridge.js` (viewer side). `ChatPane` wiring:
 a clicked spot sets `modeParams.tabernacleSpot`; Ask posts a user message; a
-panel ref opens an `interlinear` artifact; a reply's camera cue sends the viewer
-to that spot. The spot is in `modeParams`, and `TabernacleArtifact` opens the
+panel ref opens an `interlinear` artifact; a reply's camera cue is saved as
+`modeParams.tabernacleSpot` and moves a showing viewer to that spot, or, when
+the 3D view isn't the open artifact, opens it there (except at phone width,
+where it would cover the answer full screen; the spot is only saved). The spot is in `modeParams`, and `TabernacleArtifact` opens the
 viewer at the shown session's saved spot (the `?session=` URL param, falling
 back to the artifact's own `spot`), so a reload, a share link or coming back
 from an interlinear artifact resumes the walk there. The iframe `src` is frozen
