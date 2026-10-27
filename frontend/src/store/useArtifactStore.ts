@@ -25,6 +25,12 @@ interface ArtifactState {
   status: ArtifactStatus
   data: unknown
   error: string | null
+  /** A one-shot request to open `link` once `sessionId` is the session on
+   * screen. A session switch resets the panel (App), so a starter that
+   * wants its new session to land with an artifact already open (Walk the
+   * Tabernacle) asks here instead of opening it before the switch. */
+  openOnShow: { sessionId: string; link: ArtifactLink } | null
+  setOpenOnShow: (request: { sessionId: string; link: ArtifactLink } | null) => void
   openArtifact: (link: ArtifactLink) => Promise<void>
   openNote: (sessionId: string, noteId: string) => void
   openNewNote: (sessionId: string) => void
@@ -77,6 +83,8 @@ export const useArtifactStore = create<ArtifactState>((set, get) => ({
   status: 'idle',
   data: null,
   error: null,
+  openOnShow: null,
+  setOpenOnShow: (request) => set({ openOnShow: request }),
 
   openArtifact: async (link) => {
     const current = get().activeArtifact

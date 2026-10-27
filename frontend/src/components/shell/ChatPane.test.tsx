@@ -1921,6 +1921,19 @@ describe('ChatPane', () => {
       vi.spyOn(bridge, 'loadSpotLabels').mockResolvedValue(labels)
     })
 
+    it('shows the tabernacle artifact as a clear "Open the 3D tabernacle" button that opens it', async () => {
+      const session = useSessionsStore.getState().createSession('tabernacle', {})
+      const link = { type: 'tabernacle' as const, label: 'The Tabernacle', params: { spot: null } }
+      useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'assistant', text: 'Scroll to walk.', artifacts: [link] })
+      const open = vi.fn()
+      useArtifactStore.setState({ openArtifact: open } as never)
+      render(<ChatPane sessionId={session.id} />)
+      const button = screen.getByRole('button', { name: /open the 3d tabernacle/i })
+      expect(button).toHaveTextContent(/walk through it/i)
+      await userEvent.click(button)
+      expect(open).toHaveBeenCalledWith(link)
+    })
+
     it('a spot event saves the spot in modeParams', () => {
       const session = useSessionsStore.getState().createSession('tabernacle', {})
       render(<ChatPane sessionId={session.id} />)
@@ -1980,8 +1993,10 @@ describe('ChatPane', () => {
         await userEvent.type(screen.getByRole('textbox'), 'What was the laver for?')
         await userEvent.click(screen.getByRole('button', { name: /send/i }))
       }
+      // Restore the setup file's desktop polyfill rather than removing it.
+      const desktopMatchMedia = window.matchMedia
       afterEach(() => {
-        delete (window as { matchMedia?: unknown }).matchMedia
+        window.matchMedia = desktopMatchMedia
       })
 
       it('saves the cue as the session spot even when the viewer is showing', async () => {

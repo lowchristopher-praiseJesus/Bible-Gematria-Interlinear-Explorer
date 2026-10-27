@@ -309,6 +309,13 @@ furnishings (`boards`, `table`, `menorah`, `incense`, `ark`, `laver`, `altar`,
 answer grounded on that panel plus KJV verses from `Complete.db`; when an
 answer moves on to another furnishing the 3D view follows.
 
+A new session lands with the 3D view already open in the side panel: the
+mode picker files a one-shot `openOnShow` request in `useArtifactStore`, which
+`App` honours right after the session switch resets the panel (opening it any
+earlier would be closed by that reset). At phone width it is skipped, since
+the view would open full screen over the intro. In the chat, the artifact is a
+card ("Open the 3D tabernacle") rather than the usual small pill.
+
 **The viewer has exactly one copy: `frontend/public/tabernacle/`**, served by
 nginx at `/tabernacle/` (Vite copies `public/` verbatim into `dist/`, so no
 nginx change is needed to serve the viewer; the chatbot image does change, see

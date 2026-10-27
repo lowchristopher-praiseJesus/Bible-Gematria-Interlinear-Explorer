@@ -105,6 +105,12 @@ export default function App() {
     if (!artifact.activeNote || artifact.activeNote.sessionId !== sessionId) {
       artifact.close()
     }
+    // A starter's request to land with an artifact open (see openOnShow).
+    const request = artifact.openOnShow
+    if (request) {
+      artifact.setOpenOnShow(null)
+      if (request.sessionId === sessionId) void artifact.openArtifact(request.link)
+    }
     setArtifactOpen(false)
     setDrawerOpen(false)
   }, [sessionId])

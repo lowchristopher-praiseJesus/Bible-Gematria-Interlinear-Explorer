@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Pencil, RefreshCw, Share2, Wand2 } from 'lucide-react'
+import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Pencil, RefreshCw, Share2, Tent, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listCharacters, listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
@@ -1274,6 +1274,22 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
                               </button>
                             )}
                           </div>
+                        ) : group.primary.type === 'tabernacle' ? (
+                          // The 3D walk is the point of the mode, so it gets a
+                          // card that says what it opens, not a bare pill.
+                          <button
+                            key={i}
+                            onClick={() => openArtifact(group.primary)}
+                            className="flex w-full max-w-sm items-center gap-3 rounded-lg border border-[var(--color-theme-border)] bg-[var(--color-surface)] px-3 py-2.5 text-left transition-colors hover:border-[var(--color-theme-accent)] hover:bg-[var(--color-surface-alt)]"
+                          >
+                            <Tent className="h-5 w-5 shrink-0 text-[var(--color-theme-accent)]" aria-hidden="true" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold">Open the 3D tabernacle</span>
+                              <span className="block text-xs text-[var(--color-text-secondary)]">
+                                Walk through it: scroll to move, click a furnishing to read about it
+                              </span>
+                            </span>
+                          </button>
                         ) : (
                           <div key={i} className="flex flex-wrap gap-1.5">
                             <button onClick={() => openArtifact(group.primary)} className={ARTIFACT_PILL}>

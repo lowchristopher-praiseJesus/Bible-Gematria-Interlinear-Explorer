@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowUp, BookHeart, BookMarked, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, Tent, UserRound, Wand2 } from 'lucide-react'
 import { fetchPassagesStatus, postChat, postChatStream } from '@/lib/chatApi'
 import { listParables, listStudyWikis } from '@/lib/modeData'
+import { useArtifactStore } from '@/store/useArtifactStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import type { MessageChoice, ModeParams, SessionMessage, SessionMode } from '@/types/session'
@@ -57,6 +58,12 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
         followUpQuestions: response.follow_up_questions,
       }
       appendMessage(session.id, message)
+      // Walk the Tabernacle is the 3D walk, so the session lands with it open
+      // — except at phone width, where it would open full screen over the
+      // intro; there the chat's "Open the 3D tabernacle" button is one tap.
+      const viewer = mode === 'tabernacle' ? response.artifacts?.find((a) => a.type === 'tabernacle') : undefined
+      const narrow = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches
+      if (viewer && !narrow) useArtifactStore.getState().setOpenOnShow({ sessionId: session.id, link: viewer })
     } catch (err) {
       appendMessage(session.id, {
         id: genId(),

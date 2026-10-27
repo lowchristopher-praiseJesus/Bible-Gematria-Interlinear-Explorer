@@ -34,6 +34,43 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /new session/i })).toBeInTheDocument()
   })
 
+  describe('Walk the Tabernacle opens its 3D view on start', () => {
+    const primer = {
+      type: 'chat',
+      message: 'Scroll to walk from the gate to the Holy of Holies.',
+      artifacts: [{ type: 'tabernacle' as const, label: 'The Tabernacle', params: { spot: null } }],
+    }
+    // Restore the setup file's desktop polyfill, which the shell needs.
+    const desktopMatchMedia = window.matchMedia
+    afterEach(() => {
+      window.matchMedia = desktopMatchMedia
+    })
+
+    it('opens the 3D view in the side panel once the new session is shown', async () => {
+      vi.spyOn(chatApi, 'fetchPassagesStatus').mockResolvedValue(false)
+      vi.spyOn(chatApi, 'postChat').mockResolvedValue(primer)
+      render(<App />)
+      await userEvent.click(screen.getByRole('button', { name: /walk the tabernacle/i }))
+      expect(await screen.findByText(primer.message)).toBeInTheDocument()
+      await waitFor(() => expect(useArtifactStore.getState().activeArtifact).toEqual(primer.artifacts[0]))
+      expect(document.querySelector('iframe[title="The Tabernacle, 3D view"]')).not.toBeNull()
+    })
+
+    it('leaves it to a tap at phone width, where it would open full screen over the intro', async () => {
+      window.matchMedia = vi.fn().mockImplementation((q: string) => ({
+        matches: q === '(max-width: 767px)', media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+        addListener: vi.fn(), removeListener: vi.fn(),
+      })) as unknown as typeof window.matchMedia
+      vi.spyOn(chatApi, 'fetchPassagesStatus').mockResolvedValue(false)
+      vi.spyOn(chatApi, 'postChat').mockResolvedValue(primer)
+      render(<App />)
+      await userEvent.click(screen.getByRole('button', { name: /walk the tabernacle/i }))
+      expect(await screen.findByText(primer.message)).toBeInTheDocument()
+      await new Promise((r) => setTimeout(r, 20))
+      expect(useArtifactStore.getState().activeArtifact).toBeNull()
+    })
+  })
+
   it('renders a mobile top bar with conversations and new-chat controls', () => {
     render(<App />)
     expect(screen.getByRole('button', { name: 'Conversations' })).toBeInTheDocument()
