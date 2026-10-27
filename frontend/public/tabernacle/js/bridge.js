@@ -18,9 +18,11 @@ export function parseHash(hash) {
   return Number.isInteger(n) && n >= 0 && n < STATION_COUNT ? { station: n } : null;
 }
 
-const NOOP = { notifySpotOpened() {} };
+const NOOP = { notifySpotOpened() {}, start() {} };
 
-// Returns { notifySpotOpened(id) }: main.js calls it after a panel's content is rendered.
+// Returns { notifySpotOpened(id), start() }. main.js calls notifySpotOpened after a panel's
+// content is rendered, and start() once it holds the returned object: start() posts ready and
+// applies the deep link, so a panel opened by the hash is wired through this same object.
 export function initBridge({ win, goToSpot, goToStation }) {
   if (!isEmbedded(win)) return NOOP;
   const origin = win.location.origin;
@@ -58,12 +60,13 @@ export function initBridge({ win, goToSpot, goToStation }) {
     }
   });
 
-  post({ type: 'tabernacle:ready' });
-  const start = parseHash(win.location.hash);
-  if (start && 'spot' in start) goToSpot(start.spot);
-  else if (start) goToStation(start.station);
-
   return {
+    start() {
+      post({ type: 'tabernacle:ready' });
+      const first = parseHash(win.location.hash);
+      if (first && 'spot' in first) goToSpot(first.spot);
+      else if (first) goToStation(first.station);
+    },
     notifySpotOpened(id) {
       post({ type: 'tabernacle:spot', spot: id });
       const body = doc.querySelector('.info-body');

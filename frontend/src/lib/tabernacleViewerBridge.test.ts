@@ -41,14 +41,19 @@ describe('initBridge', () => {
     const api = initBridge({ win, goToSpot: vi.fn(), goToStation: vi.fn() })
     expect(parent.postMessage).not.toHaveBeenCalled()
     expect(Object.keys(listeners)).toHaveLength(0)
+    api.start()
     api.notifySpotOpened('ark')
+    expect(parent.postMessage).not.toHaveBeenCalled()
     expect(doc.querySelector('.info-ask')).toBeNull()
   })
 
   it('posts ready, applies the hash, and obeys only the parent', () => {
     const { win, parent, listeners } = fakeWin('?embed=1', '#spot=ark')
     const goToSpot = vi.fn(), goToStation = vi.fn()
-    initBridge({ win, goToSpot, goToStation })
+    const api = initBridge({ win, goToSpot, goToStation })
+    expect(parent.postMessage).not.toHaveBeenCalled()
+    expect(goToSpot).not.toHaveBeenCalled()
+    api.start()
     expect(parent.postMessage).toHaveBeenCalledWith({ type: 'tabernacle:ready' }, ORIGIN)
     expect(goToSpot).toHaveBeenCalledWith('ark')
     goToSpot.mockClear()
@@ -61,6 +66,23 @@ describe('initBridge', () => {
     expect(goToSpot).toHaveBeenCalledTimes(1)
     send({ origin: ORIGIN, source: parent, data: { type: 'tabernacle:goto', station: 4 } })
     expect(goToStation).toHaveBeenCalledWith(4)
+  })
+
+  it('a deep link applied by start() reaches the returned notifySpotOpened (panel wired, spot posted after ready)', () => {
+    const { win, parent, doc } = fakeWin('?embed=1', '#spot=ark')
+    // like main.js: openInfo renders the panel, then calls bridge.notifySpotOpened
+    let bridge: ReturnType<typeof initBridge> = { notifySpotOpened() {}, start() {} }
+    const goToSpot = vi.fn((id: string) => {
+      doc.querySelector('.info-body')!.innerHTML = '<h2>Ark</h2>'
+      bridge.notifySpotOpened(id)
+    })
+    bridge = initBridge({ win, goToSpot, goToStation: vi.fn() })
+    bridge.start()
+    expect(goToSpot).toHaveBeenCalledWith('ark')
+    const types = parent.postMessage.mock.calls.map((c) => c[0].type)
+    expect(types).toEqual(['tabernacle:ready', 'tabernacle:spot'])
+    expect(parent.postMessage).toHaveBeenCalledWith({ type: 'tabernacle:spot', spot: 'ark' }, ORIGIN)
+    expect(doc.querySelector('.info-ask')).not.toBeNull()
   })
 
   it('posts spot, adds an Ask button, and posts ref clicks', () => {

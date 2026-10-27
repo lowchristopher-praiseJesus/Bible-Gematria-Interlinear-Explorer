@@ -5,4 +5,4 @@ export function initBridge(opts: {
   win: Window
   goToSpot: (id: string) => void
   goToStation: (n: number) => void
-}): { notifySpotOpened(id: string): void }
+}): { notifySpotOpened(id: string): void; start(): void }

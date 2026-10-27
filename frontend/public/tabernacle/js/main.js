@@ -366,7 +366,7 @@ const loadDone = new Promise((resolve) => {
 });
 
 (async () => {
-  const spotsReady = fetch('data/spots.json').then((r) => (r.ok ? r.json() : {})).then((d) => { SPOT_DATA = d; }).catch(() => {});
+  const spotsReady = fetch('data/spots.json').then((r) => (r.ok ? r.json() : {})).then((d) => { SPOT_DATA = d; }).catch((err) => console.warn('tabernacle: spot data failed to load', err));
   await Promise.all([
     spotsReady,
     document.fonts.load('600 40px "Barlow Condensed"'),
@@ -489,12 +489,14 @@ const loadDone = new Promise((resolve) => {
     el, id: el.dataset.spot, label: el.querySelector('.spot-label'), pos: new THREE.Vector3(...el.dataset.pos.split(',').map(Number)), seen: false,
   }));
   let openSpot = null;
-  let bridge = { notifySpotOpened() {} };  // replaced by initBridge when embedded
+  let bridge = { notifySpotOpened() {}, start() {} };  // replaced by initBridge below
   function openInfo(spot) {
     const data = SPOT_DATA[spot.id];
     if (!data) return; // spots.json missing or failed to load: stay clickable, open nothing
     if (openSpot) openSpot.el.setAttribute('aria-expanded', 'false');
     openSpot = spot;
+    // title/html are trusted, repo-shipped markup from spots.json (hence innerHTML); that file
+    // must never carry user input. Only the ref labels are escaped.
     const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     infoBody.innerHTML = `<p class="refs">${data.refs.map((r) => `<span class="ref">${esc(r.label)}</span>`).join('; ')}</p><h2 id="info-title">${data.title}</h2>${data.html}`;
     infoEl.hidden = false;
@@ -548,6 +550,7 @@ const loadDone = new Promise((resolve) => {
     progress = STATION_AT[n] / END;
   }
   bridge = initBridge({ win: window, goToSpot, goToStation });
+  bridge.start();  // after the assignment, so a deep-linked panel is wired through the real bridge
 
   // a point is offered only when it faces the visitor, unhidden by the model
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector3(), toSpot = new THREE.Vector3();
