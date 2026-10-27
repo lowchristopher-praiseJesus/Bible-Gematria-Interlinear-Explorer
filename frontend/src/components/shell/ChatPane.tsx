@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Pencil, RefreshCw, Share2, Tent, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
 import { listCharacters, listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
@@ -27,7 +27,7 @@ import { ReportIssueDialog } from './ReportIssueDialog'
 import { ShareDialog } from './ShareDialog'
 import { useVoiceMode, type UseVoiceModeResult } from './useVoiceMode'
 import { SUGGESTED_PROMPTS } from '@/lib/suggestedPrompts'
-import type { ArtifactLink, MessageChoice, Session, SessionMessage, PhaseResult } from '@/types/session'
+import type { ArtifactLink, MessageChoice, ModeParams, Session, SessionMessage, PhaseResult } from '@/types/session'
 
 interface Props {
   sessionId: string
@@ -332,14 +332,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   // Walk the Tabernacle bridge. The viewer-event subscription below is
   // registered once, so it reads the current session and busy state through
   // refs — a closure would keep writing to whichever session was shown when
-  // it subscribed (one <ChatPane> serves every session; see above).
+  // it subscribed (one <ChatPane> serves every session; see above). The refs
+  // are refreshed after each commit (the layout effect below sendMessage),
+  // never during render.
   const sessionRef = useRef(session)
-  sessionRef.current = session
   const isBusyRef = useRef(isBusy)
-  isBusyRef.current = isBusy
-  // An "Ask about this" question waiting for the re-render that carries the
-  // freshly saved spot into mode_params before it is sent.
-  const [pendingAsk, setPendingAsk] = useState<string | null>(null)
 
   // Only the devotional generation leg of `isBusy` runs long enough (~10s+)
   // that the plain dots read as frozen — narrow the rotating status text to
@@ -637,7 +634,10 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   )
 
   const sendMessage = useCallback(
-    async (text: string, editFromId?: string) => {
+    // `modeParamsOverride` is merged over the session's modeParams for this
+    // turn — for a caller that has just saved a param (Walk the Tabernacle's
+    // Ask) and can't wait for the render that would carry it in `session`.
+    async (text: string, editFromId?: string, modeParamsOverride?: Partial<ModeParams>) => {
       // Claim the voice-turn marker before ANY early return. It is set by
       // onTranscript just before this call, so a path that leaves it in
       // place would both strand the voice hook at 'thinking' (nothing ever
@@ -744,7 +744,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
             message: text,
             history,
             mode: session.mode,
-            mode_params: { ...session.modeParams },
+            mode_params: { ...session.modeParams, ...modeParamsOverride },
             ...(useOpenAiLlm && { use_openai_llm: true }),
           },
           useOpenAiLlm ? { openAiApiKey: openaiApiKey ?? undefined } : undefined
@@ -772,6 +772,15 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     [session, sessionId, loading, appendMessage, truncateMessagesFrom, streamAssistantReply, runDevotionalTurn, updateModeParams, submitStoryTheme, resolveCharacterByName]
   )
 
+  // The viewer-event subscription is registered once; give it the latest
+  // session, busy state and sendMessage after every commit.
+  const sendMessageRef = useRef(sendMessage)
+  useLayoutEffect(() => {
+    sessionRef.current = session
+    isBusyRef.current = isBusy
+    sendMessageRef.current = sendMessage
+  })
+
   // Viewer -> chat. Only a tabernacle session reacts; events are ignored
   // while another mode is shown.
   useEffect(() => {
@@ -792,19 +801,13 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
           if (!now || now.id !== sid || now.mode !== 'tabernacle' || isBusyRef.current) return
           const label = (labels[e.spot] ?? e.spot).replace(/^The /, 'the ')
           updateModeParams(sid, { tabernacleSpot: e.spot })
-          setPendingAsk(`Tell me about ${label}.`)
+          // The saved spot isn't in sendMessage's session snapshot until the
+          // next render, so pass it for this turn explicitly.
+          void sendMessageRef.current(`Tell me about ${label}.`, undefined, { tabernacleSpot: e.spot })
         })
       }
     })
   }, [updateModeParams, openArtifact])
-
-  // Sends a queued Ask once the render with the new spot has landed, so
-  // sendMessage's session snapshot carries mode_params.tabernacle_spot.
-  useEffect(() => {
-    if (pendingAsk === null || isBusy) return
-    setPendingAsk(null)
-    void sendMessage(pendingAsk)
-  }, [pendingAsk, isBusy, sendMessage])
 
   const voiceMode = useVoiceMode({
     onTranscript: (text, delegationId) => {
