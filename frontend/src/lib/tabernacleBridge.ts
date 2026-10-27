@@ -91,3 +91,29 @@ export function emitViewerEvent(e: ViewerEvent): void {
 export function firstVerse(ref: string): string {
   return ref.split(/[–—-]|,/)[0].trim()
 }
+
+let labelsPromise: Promise<Record<string, string>> | null = null
+
+/** Spot id -> display label, fetched once. A failure resolves to {} and is not cached. */
+export function loadSpotLabels(): Promise<Record<string, string>> {
+  if (!labelsPromise) {
+    const p = fetch('/tabernacle/data/spots.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: Record<string, { label?: string }>) => {
+        const out: Record<string, string> = {}
+        for (const [k, v] of Object.entries(d)) if (v && typeof v.label === 'string') out[k] = v.label
+        return out
+      })
+      .catch(() => {
+        if (labelsPromise === p) labelsPromise = null
+        return {} as Record<string, string>
+      })
+    labelsPromise = p
+  }
+  return labelsPromise
+}
+
+/** Test hook: forget the cached labels. */
+export function resetSpotLabels(): void {
+  labelsPromise = null
+}

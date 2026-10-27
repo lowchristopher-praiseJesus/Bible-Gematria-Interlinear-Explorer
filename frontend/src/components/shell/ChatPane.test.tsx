@@ -11,6 +11,7 @@ import * as chatApi from '@/lib/chatApi'
 import type { ChatApiResponse } from '@/lib/chatApi'
 import * as shareApi from '@/lib/shareApi'
 import * as voiceModule from './useVoiceMode'
+import * as bridge from '@/lib/tabernacleBridge'
 import type { PhaseResult } from '@/types/session'
 
 describe('ChatPane', () => {
@@ -1911,6 +1912,76 @@ describe('ChatPane', () => {
       const session = useSessionsStore.getState().createSession('hermeneutics', {})
       render(<ChatPane sessionId={session.id} />)
       expect(screen.getByPlaceholderText(/name a passage.*say 'go'/i)).toBeInTheDocument()
+    })
+  })
+
+  describe('Walk the Tabernacle bridge', () => {
+    const labels = { ark: 'The ark of the covenant', laver: 'The laver' }
+    beforeEach(() => {
+      vi.spyOn(bridge, 'loadSpotLabels').mockResolvedValue(labels)
+    })
+
+    it('a spot event saves the spot in modeParams', () => {
+      const session = useSessionsStore.getState().createSession('tabernacle', {})
+      render(<ChatPane sessionId={session.id} />)
+      act(() => bridge.emitViewerEvent({ type: 'tabernacle:spot', spot: 'ark' }))
+      expect(useSessionsStore.getState().sessions[session.id].modeParams.tabernacleSpot).toBe('ark')
+    })
+
+    it('an ask event sends "Tell me about ..." with the spot in mode_params', async () => {
+      const session = useSessionsStore.getState().createSession('tabernacle', {})
+      const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'It is gold.' })
+      render(<ChatPane sessionId={session.id} />)
+      act(() => bridge.emitViewerEvent({ type: 'tabernacle:ask', spot: 'ark' }))
+      expect(await screen.findByText('Tell me about the ark of the covenant.')).toBeInTheDocument()
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+      expect((spy.mock.calls[0][0] as { mode_params: { tabernacle_spot?: string; tabernacleSpot?: string } }).mode_params)
+        .toMatchObject({ tabernacleSpot: 'ark' })
+    })
+
+    it('an ask while a reply is pending sends nothing more', async () => {
+      const session = useSessionsStore.getState().createSession('tabernacle', {})
+      let resolve!: (v: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void
+      const spy = vi.spyOn(chatApi, 'postChatStream').mockReturnValue(new Promise((r) => { resolve = r }))
+      render(<ChatPane sessionId={session.id} />)
+      act(() => bridge.emitViewerEvent({ type: 'tabernacle:ask', spot: 'ark' }))
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+      act(() => bridge.emitViewerEvent({ type: 'tabernacle:ask', spot: 'laver' }))
+      await new Promise((r) => setTimeout(r, 20))
+      expect(spy).toHaveBeenCalledTimes(1)
+      await act(async () => resolve({ type: 'chat', message: 'ok' }))
+    })
+
+    it('a ref event opens the interlinear artifact for the first verse', () => {
+      const session = useSessionsStore.getState().createSession('tabernacle', {})
+      const open = vi.fn()
+      useArtifactStore.setState({ openArtifact: open } as never)
+      render(<ChatPane sessionId={session.id} />)
+      act(() => bridge.emitViewerEvent({ type: 'tabernacle:ref', ref: 'Exodus 30:18–19' }))
+      expect(open).toHaveBeenCalledWith({ type: 'interlinear', label: 'Exodus 30:18 ▸', params: { reference: 'Exodus 30:18' } })
+    })
+
+    it('a reply carrying tabernacle_spot moves the camera', async () => {
+      const session = useSessionsStore.getState().createSession('tabernacle', {})
+      vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'The laver.', data: { tabernacle_spot: 'laver' } })
+      const goto = vi.spyOn(bridge, 'sendGoto')
+      render(<ChatPane sessionId={session.id} />)
+      await userEvent.type(screen.getByRole('textbox'), 'Where do priests wash?')
+      await userEvent.click(screen.getByRole('button', { name: /send/i }))
+      await waitFor(() => expect(goto).toHaveBeenCalledWith({ spot: 'laver' }))
+    })
+
+    it('ignores viewer events when a non-tabernacle session is shown', async () => {
+      const session = useSessionsStore.getState().createSession('freeform', {})
+      const spy = vi.spyOn(chatApi, 'postChatStream')
+      render(<ChatPane sessionId={session.id} />)
+      act(() => {
+        bridge.emitViewerEvent({ type: 'tabernacle:spot', spot: 'ark' })
+        bridge.emitViewerEvent({ type: 'tabernacle:ask', spot: 'ark' })
+      })
+      await new Promise((r) => setTimeout(r, 20))
+      expect(useSessionsStore.getState().sessions[session.id].modeParams.tabernacleSpot).toBeUndefined()
+      expect(spy).not.toHaveBeenCalled()
     })
   })
 })

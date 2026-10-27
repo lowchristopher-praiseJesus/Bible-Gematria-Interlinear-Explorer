@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  firstVerse, markViewerReady, parseViewerMessage, registerViewer, sendGoto, viewerSrc,
+  firstVerse, loadSpotLabels, markViewerReady, resetSpotLabels, parseViewerMessage, registerViewer, sendGoto, viewerSrc,
 } from './tabernacleBridge'
 
 const msg = (data: unknown, init: Partial<MessageEventInit> = {}) =>
@@ -58,5 +58,25 @@ describe('tabernacleBridge', () => {
 
   it('sendGoto with no viewer is a no-op', () => {
     expect(() => sendGoto({ spot: 'ark' })).not.toThrow()
+  })
+
+  it('loadSpotLabels fetches once and maps ids to labels', async () => {
+    resetSpotLabels()
+    const f = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ark: { label: 'The ark of the covenant' } }) })
+    vi.stubGlobal('fetch', f)
+    expect(await loadSpotLabels()).toEqual({ ark: 'The ark of the covenant' })
+    await loadSpotLabels()
+    expect(f).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('loadSpotLabels resolves {} on failure and retries next time', async () => {
+    resetSpotLabels()
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('x')))
+    expect(await loadSpotLabels()).toEqual({})
+    const f = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ark: { label: 'A' } }) })
+    vi.stubGlobal('fetch', f)
+    expect(await loadSpotLabels()).toEqual({ ark: 'A' })
+    vi.unstubAllGlobals()
   })
 })

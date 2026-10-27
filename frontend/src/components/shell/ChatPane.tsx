@@ -5,6 +5,7 @@ import { listCharacters, listParables, listStudyWikis, type CharacterEntry } fro
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { toHistory } from '@/lib/history'
 import { startTellAStory, deriveStoryThemes, MAX_STORY_SOURCE_MESSAGES } from '@/lib/tellAStory'
+import { firstVerse, loadSpotLabels, onViewerEvent, sendGoto } from '@/lib/tabernacleBridge'
 import { ThemePicker, type StoryAgeRange } from './ThemePicker'
 import { StoryThemeStarter } from './StoryThemeStarter'
 import { CharacterPickerInline } from './CharacterPickerInline'
@@ -328,6 +329,18 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
   // until the new story session is ready) reads as the app hanging.
   const isBusy = loading || !!regeneratingId || !!resolvingChoiceId || markingComplete || tellingStory || !!pickingCharacterId
 
+  // Walk the Tabernacle bridge. The viewer-event subscription below is
+  // registered once, so it reads the current session and busy state through
+  // refs — a closure would keep writing to whichever session was shown when
+  // it subscribed (one <ChatPane> serves every session; see above).
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const isBusyRef = useRef(isBusy)
+  isBusyRef.current = isBusy
+  // An "Ask about this" question waiting for the re-render that carries the
+  // freshly saved spot into mode_params before it is sent.
+  const [pendingAsk, setPendingAsk] = useState<string | null>(null)
+
   // Only the devotional generation leg of `isBusy` runs long enough (~10s+)
   // that the plain dots read as frozen — narrow the rotating status text to
   // that case so a quick regenerate/mark-complete doesn't flash a phrase.
@@ -411,6 +424,12 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         const response = opts?.openAiApiKey
           ? await postChatStream(payload, handlers, opts.openAiApiKey)
           : await postChatStream(payload, handlers)
+        // Walk the Tabernacle: the answer carries a camera cue; follow it
+        // unless the user has since switched to another session.
+        const cue = response.data?.tabernacle_spot
+        if (typeof cue === 'string' && sessionRef.current?.id === sessionId && sessionRef.current.mode === 'tabernacle') {
+          sendGoto({ spot: cue })
+        }
         put({
           text: response.message,
           type: response.type,
@@ -741,6 +760,40 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     },
     [session, sessionId, loading, appendMessage, truncateMessagesFrom, streamAssistantReply, runDevotionalTurn, updateModeParams, submitStoryTheme, resolveCharacterByName]
   )
+
+  // Viewer -> chat. Only a tabernacle session reacts; events are ignored
+  // while another mode is shown.
+  useEffect(() => {
+    return onViewerEvent((e) => {
+      const cur = sessionRef.current
+      if (!cur || cur.mode !== 'tabernacle') return
+      if (e.type === 'tabernacle:spot') {
+        updateModeParams(cur.id, { tabernacleSpot: e.spot })
+      } else if (e.type === 'tabernacle:ref') {
+        const reference = firstVerse(e.ref)
+        openArtifact({ type: 'interlinear', label: `${reference} ▸`, params: { reference } })
+      } else if (e.type === 'tabernacle:ask') {
+        if (isBusyRef.current) return
+        const sid = cur.id
+        void loadSpotLabels().then((labels) => {
+          // Re-check after the await: the session or busy state may have changed.
+          const now = sessionRef.current
+          if (!now || now.id !== sid || now.mode !== 'tabernacle' || isBusyRef.current) return
+          const label = (labels[e.spot] ?? e.spot).replace(/^The /, 'the ')
+          updateModeParams(sid, { tabernacleSpot: e.spot })
+          setPendingAsk(`Tell me about ${label}.`)
+        })
+      }
+    })
+  }, [updateModeParams, openArtifact])
+
+  // Sends a queued Ask once the render with the new spot has landed, so
+  // sendMessage's session snapshot carries mode_params.tabernacle_spot.
+  useEffect(() => {
+    if (pendingAsk === null || isBusy) return
+    setPendingAsk(null)
+    void sendMessage(pendingAsk)
+  }, [pendingAsk, isBusy, sendMessage])
 
   const voiceMode = useVoiceMode({
     onTranscript: (text, delegationId) => {
