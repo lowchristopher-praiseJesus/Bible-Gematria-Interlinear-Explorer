@@ -1961,14 +1961,69 @@ describe('ChatPane', () => {
       expect(open).toHaveBeenCalledWith({ type: 'interlinear', label: 'Exodus 30:18 ▸', params: { reference: 'Exodus 30:18' } })
     })
 
-    it('a reply carrying tabernacle_spot moves the camera', async () => {
+    it('a reply carrying tabernacle_spot moves the camera of a showing viewer', async () => {
       const session = useSessionsStore.getState().createSession('tabernacle', {})
+      useArtifactStore.setState({ activeArtifact: { type: 'tabernacle', label: 'The Tabernacle', params: { spot: null } } })
       vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'The laver.', data: { tabernacle_spot: 'laver' } })
       const goto = vi.spyOn(bridge, 'sendGoto')
       render(<ChatPane sessionId={session.id} />)
       await userEvent.type(screen.getByRole('textbox'), 'Where do priests wash?')
       await userEvent.click(screen.getByRole('button', { name: /send/i }))
       await waitFor(() => expect(goto).toHaveBeenCalledWith({ spot: 'laver' }))
+    })
+
+    describe('camera cue when the 3D view is not showing', () => {
+      const viewerLink = { type: 'tabernacle' as const, label: 'The Tabernacle', params: { spot: null } }
+      const ask = async (sessionId: string) => {
+        vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'The laver.', data: { tabernacle_spot: 'laver' } })
+        render(<ChatPane sessionId={sessionId} />)
+        await userEvent.type(screen.getByRole('textbox'), 'What was the laver for?')
+        await userEvent.click(screen.getByRole('button', { name: /send/i }))
+      }
+      afterEach(() => {
+        delete (window as { matchMedia?: unknown }).matchMedia
+      })
+
+      it('saves the cue as the session spot even when the viewer is showing', async () => {
+        const session = useSessionsStore.getState().createSession('tabernacle', { tabernacleSpot: 'veil' })
+        const open = vi.fn()
+        useArtifactStore.setState({ activeArtifact: viewerLink, openArtifact: open } as never)
+        await ask(session.id)
+        await waitFor(() => expect(useSessionsStore.getState().sessions[session.id].modeParams.tabernacleSpot).toBe('laver'))
+        expect(open).not.toHaveBeenCalled()
+      })
+
+      it('opens the 3D view at the cued spot when no artifact is open', async () => {
+        const session = useSessionsStore.getState().createSession('tabernacle', { tabernacleSpot: 'veil' })
+        const open = vi.fn()
+        useArtifactStore.setState({ activeArtifact: null, openArtifact: open } as never)
+        await ask(session.id)
+        await waitFor(() => expect(open).toHaveBeenCalledWith({ type: 'tabernacle', label: 'The Tabernacle', params: { spot: 'laver' } }))
+        expect(useSessionsStore.getState().sessions[session.id].modeParams.tabernacleSpot).toBe('laver')
+      })
+
+      it('opens the 3D view over a verse that replaced it', async () => {
+        const session = useSessionsStore.getState().createSession('tabernacle', {})
+        const open = vi.fn()
+        useArtifactStore.setState({
+          activeArtifact: { type: 'interlinear', label: 'Exodus 30:18 ▸', params: { reference: 'Exodus 30:18' } },
+          openArtifact: open,
+        } as never)
+        await ask(session.id)
+        await waitFor(() => expect(open).toHaveBeenCalledWith({ type: 'tabernacle', label: 'The Tabernacle', params: { spot: 'laver' } }))
+      })
+
+      it('only saves the spot at phone width, so the full-screen view does not cover the answer', async () => {
+        window.matchMedia = vi.fn().mockImplementation((q: string) => ({
+          matches: q === '(max-width: 767px)', media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+        const session = useSessionsStore.getState().createSession('tabernacle', {})
+        const open = vi.fn()
+        useArtifactStore.setState({ activeArtifact: null, openArtifact: open } as never)
+        await ask(session.id)
+        await waitFor(() => expect(useSessionsStore.getState().sessions[session.id].modeParams.tabernacleSpot).toBe('laver'))
+        expect(open).not.toHaveBeenCalled()
+      })
     })
 
     it('ignores viewer events when a non-tabernacle session is shown', async () => {

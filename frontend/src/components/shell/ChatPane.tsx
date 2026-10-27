@@ -425,10 +425,21 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
           ? await postChatStream(payload, handlers, opts.openAiApiKey)
           : await postChatStream(payload, handlers)
         // Walk the Tabernacle: the answer carries a camera cue; follow it
-        // unless the user has since switched to another session.
+        // unless the user has since switched to another session. The cue is
+        // saved as the session's spot first, so a viewer opened (or
+        // reopened, or reloaded) later lands on it too. A showing viewer
+        // just moves; otherwise the 3D view is opened at the spot — except
+        // at phone width, where it opens full screen over the answer.
         const cue = response.data?.tabernacle_spot
         if (typeof cue === 'string' && sessionRef.current?.id === sessionId && sessionRef.current.mode === 'tabernacle') {
-          sendGoto({ spot: cue })
+          updateModeParams(sessionId, { tabernacleSpot: cue })
+          const artifacts = useArtifactStore.getState()
+          const narrow = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches
+          if (artifacts.activeArtifact?.type === 'tabernacle') {
+            sendGoto({ spot: cue })
+          } else if (!narrow) {
+            void artifacts.openArtifact({ type: 'tabernacle', label: 'The Tabernacle', params: { spot: cue } })
+          }
         }
         put({
           text: response.message,
@@ -444,7 +455,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         return null
       }
     },
-    [sessionId, appendMessage, updateMessage]
+    [sessionId, appendMessage, updateMessage, updateModeParams]
   )
 
   // The devotional generating turn. Used both by the auto-fire effect
