@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Tabernacle of Moses</title>
+  <meta name="description" content="A walk through the tabernacle of Moses, from the drawn pattern to the Holy of Holies, built from the measurements in Exodus.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Spectral:ital,wght@0,400;0,600;1,400&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="gl" aria-hidden="true"></canvas>
+
+  <div class="ui">
+    <header class="mark">
+      <p class="mark-title">The Tabernacle</p>
+      <p class="mark-sub">From the pattern to the presence</p>
+    </header>
+
+    <nav class="stations" aria-label="Stations of the walk">
+      <ol>
+        <li>The pattern</li>
+        <li>The gate</li>
+        <li>Altar of burnt offering</li>
+        <li>The laver</li>
+        <li>Door of the tent</li>
+        <li>Holy Place</li>
+        <li>The veil</li>
+        <li>Holy of Holies</li>
+      </ol>
+    </nav>
+
+    <figure class="note" data-from="0" data-to="1.0">
+      <figcaption class="ref">Exodus 25:9</figcaption>
+      <blockquote>According to all that I shew thee, after the pattern of the tabernacle&hellip; even so shall ye make it.</blockquote>
+    </figure>
+    <figure class="note" data-from="1.5" data-to="3.1">
+      <figcaption class="ref">Exodus 26:30</figcaption>
+      <blockquote>And thou shalt rear up the tabernacle according to the fashion thereof which was shewed thee in the mount.</blockquote>
+    </figure>
+    <figure class="note" data-from="3.5" data-to="5.0">
+      <figcaption class="ref">Exodus 27:18</figcaption>
+      <blockquote>The length of the court shall be an hundred cubits, and the breadth fifty every where, and the height five cubits of fine twined linen.</blockquote>
+      <p class="dim">52 × 26 m · hangings 2.6 m high</p>
+    </figure>
+    <figure class="note" data-from="5.6" data-to="7.3">
+      <figcaption class="ref">Exodus 27:16</figcaption>
+      <blockquote>And for the gate of the court shall be an hanging of twenty cubits, of blue, and purple, and scarlet, and fine twined linen, wrought with needlework.</blockquote>
+      <p class="dim">Gate 20 cubits · 10.4 m wide</p>
+    </figure>
+    <figure class="note" data-from="8.9" data-to="10.9">
+      <figcaption class="ref">Psalm 100:4</figcaption>
+      <blockquote>Enter into his gates with thanksgiving, and into his courts with praise.</blockquote>
+      <p class="dim">The outer court · ahead, the altar of burnt offering</p>
+    </figure>
+
+    <figure class="note" data-from="12.8" data-to="14.0">
+      <figcaption class="ref">Leviticus 6:13</figcaption>
+      <blockquote>The fire shall ever be burning upon the altar; it shall never go out.</blockquote>
+      <p class="dim">Altar of burnt offering · 5 × 5 × 3 cubits · acacia overlaid with brass</p>
+    </figure>
+    <figure class="note" data-from="15.4" data-to="16.6">
+      <figcaption class="ref">Exodus 30:18–19</figcaption>
+      <blockquote>Thou shalt also make a laver of brass, and his foot also of brass, to wash withal&hellip; for Aaron and his sons shall wash their hands and their feet thereat.</blockquote>
+      <p class="dim">The laver · made of the women&rsquo;s looking-glasses (Ex 38:8)</p>
+    </figure>
+    <figure class="note" data-from="17.1" data-to="18.3">
+      <figcaption class="ref">Exodus 26:36</figcaption>
+      <blockquote>And thou shalt make an hanging for the door of the tent, of blue, and purple, and scarlet, and fine twined linen, wrought with needlework.</blockquote>
+      <p class="dim">The door · five pillars of acacia overlaid with gold</p>
+    </figure>
+    <figure class="note" data-from="19.6" data-to="20.9">
+      <figcaption class="ref">Exodus 40:24–25</figcaption>
+      <blockquote>And he put the candlestick in the tent of the congregation, over against the table&hellip; And he lighted the lamps before the LORD.</blockquote>
+      <p class="dim">The Holy Place · 20 × 10 × 10 cubits · 10.4 × 5.2 × 5.2 m</p>
+    </figure>
+    <figure class="note" data-from="21.3" data-to="22.5">
+      <figcaption class="ref">Exodus 25:30</figcaption>
+      <blockquote>And thou shalt set upon the table shewbread before me alway.</blockquote>
+      <p class="dim">Table · 2 × 1 × 1½ cubits · twelve loaves in two rows (Lev 24:6)</p>
+    </figure>
+    <figure class="note" data-from="23.0" data-to="24.2">
+      <figcaption class="ref">Exodus 25:31, 37</figcaption>
+      <blockquote>And thou shalt make a candlestick of pure gold&hellip; and they shall light the lamps thereof, that they may give light over against it.</blockquote>
+      <p class="dim">Candlestick · a talent of pure gold · seven lamps</p>
+    </figure>
+    <figure class="note" data-from="24.7" data-to="25.9">
+      <figcaption class="ref">Exodus 30:7–8</figcaption>
+      <blockquote>And Aaron shall burn thereon sweet incense every morning&hellip; a perpetual incense before the LORD throughout your generations.</blockquote>
+      <p class="dim">Altar of incense · 1 × 1 × 2 cubits · overlaid with pure gold</p>
+    </figure>
+    <figure class="note" data-from="26.1" data-to="27.4">
+      <figcaption class="ref">Exodus 26:31, 33</figcaption>
+      <blockquote>And thou shalt make a vail of blue, and purple, and scarlet, and fine twined linen of cunning work: with cherubims shall it be made&hellip; and the vail shall divide unto you between the holy place and the most holy.</blockquote>
+    </figure>
+    <figure class="note" data-from="28.6" data-to="30.3">
+      <figcaption class="ref">Exodus 25:22</figcaption>
+      <blockquote>And there I will meet with thee, and I will commune with thee from above the mercy seat, from between the two cherubims which are upon the ark of the testimony.</blockquote>
+      <p class="dim">Holy of Holies · 10 × 10 × 10 cubits · the ark 2½ × 1½ × 1½</p>
+    </figure>
+    <figure class="note" data-from="32.6" data-to="99">
+      <figcaption class="ref">Exodus 40:33–34</figcaption>
+      <blockquote>So Moses finished the work. Then a cloud covered the tent of the congregation, and the glory of the LORD filled the tabernacle.</blockquote>
+    </figure>
+
+    <p class="hint">Scroll to raise the walls</p>
+
+    <!-- things in the model that can be clicked while looking around; data-pos is the point in metres (x, y, z) -->
+    <div class="spots">
+      <button type="button" class="spot" data-spot="boards" data-pos="-6.63,2.3,-2.585">
+        <span class="spot-label">The boards</span>
+      </button>
+      <button type="button" class="spot" data-spot="table" data-pos="-5.2,1.2,-1.56">
+        <span class="spot-label">The table of showbread</span>
+      </button>
+      <button type="button" class="spot" data-spot="menorah" data-pos="-5.2,1.8,1.56">
+        <span class="spot-label">The menorah</span>
+      </button>
+      <button type="button" class="spot" data-spot="incense" data-pos="-9.2,1.55,0">
+        <span class="spot-label">The altar of incense</span>
+      </button>
+      <button type="button" class="spot" data-spot="ark" data-pos="-13,1.65,0">
+        <span class="spot-label">The ark of the covenant</span>
+      </button>
+      <button type="button" class="spot" data-spot="laver" data-pos="6.5,1.35,0">
+        <span class="spot-label">The bronze laver</span>
+      </button>
+      <button type="button" class="spot" data-spot="altar" data-pos="13,1.7,-0.9">
+        <span class="spot-label">The altar of burnt offering</span>
+      </button>
+      <button type="button" class="spot" data-spot="gate" data-pos="26.2,1.7,1.7">
+        <span class="spot-label">The gate of the court</span>
+      </button>
+      <button type="button" class="spot" data-spot="door" data-pos="0.25,2.5,0.65">
+        <span class="spot-label">The door of the tent</span>
+      </button>
+      <button type="button" class="spot" data-spot="veil" data-pos="-10.25,2.5,1.0">
+        <span class="spot-label">The veil</span>
+      </button>
+    </div>
+
+    <aside class="info" role="dialog" data-lenis-prevent aria-labelledby="info-title" hidden>
+      <button type="button" class="info-close" aria-label="Close">&times;</button>
+      <div class="info-body"></div>
+    </aside>
+
+    <template id="info-boards">
+      <p class="ref">Exodus 26:15&ndash;29</p>
+      <h2 id="info-title">Acacia wood overlaid with gold</h2>
+      <p class="info-lede"><strong>Acacia (shittim) wood overlaid with gold</strong> carries a profound twofold typological meaning, pointing both to the <strong>Person of Jesus Christ</strong> and to the <strong>believer&rsquo;s standing in Christ</strong>.</p>
+      <h3>The typology of Jesus Christ</h3>
+      <ul>
+        <li><b>Acacia wood.</b> Acacia (or shittim) wood is an enduring, incorruptible wood that represents <strong>Jesus&rsquo; pure and sinless humanity</strong>.</li>
+        <li><b>Gold.</b> Gold in Scripture consistently speaks of <strong>divinity, God, and the divine nature</strong>.</li>
+        <li><b>Wood overlaid with gold.</b> Overlaying the wood with pure gold typifies Jesus as being <strong>fully human and fully divine</strong>, with His divinity completely covering His humanity.</li>
+      </ul>
+      <h3>The typology of the believer in Christ</h3>
+      <ul>
+        <li><b>Humanity covered by Christ.</b> Beyond Christ Himself, the standing wooden boards of the Tabernacle represent believers in their natural humanity, while the gold represents <strong>Christ&rsquo;s divine nature and righteousness covering them</strong>.</li>
+        <li><b>God&rsquo;s perspective.</b> Because believers are placed in Christ, when God looks at us, He does not focus on raw human flaws or imperfections (the wood); rather, He sees us <strong>hidden in Christ and covered by His gold</strong>.</li>
+        <li><b>Standing securely on redemption.</b> In the Tabernacle wall structure, 48 standing boards of acacia wood overlaid with gold rested upon <strong>silver sockets</strong>, symbolizing that believers stand securely on the foundation of redemption.</li>
+      </ul>
+    </template>
+
+    <template id="info-table">
+      <p class="ref">Exodus 25:23&ndash;30</p>
+      <h2 id="info-title">The table of showbread</h2>
+      <p class="info-lede">The <strong>Table of Showbread</strong> (constructed of acacia wood overlaid with pure gold and surrounded by a golden crown) carries several layers of spiritual typology.</p>
+      <h3>Jesus as the bread of life</h3>
+      <ul>
+        <li><b>The showbread.</b> The bread set upon the table typifies <strong>Jesus Christ</strong>, who stated, <i>&ldquo;I am the bread of life&rdquo;</i>. Feeding spiritually upon Christ provides true fulfillment and satisfaction that worldly pleasures cannot offer.</li>
+      </ul>
+      <h3>The 12 loaves: God&rsquo;s people and the Church</h3>
+      <ul>
+        <li><b>The twelve loaves.</b> The twelve loaves placed on the table every Sabbath represent <strong>God&rsquo;s people</strong> (the 12 tribes of Israel) and <strong>the Church</strong> as one body and one bread in Christ.</li>
+      </ul>
+      <h3>The golden crown: protection and eternal security</h3>
+      <ul>
+        <li><b>Christ&rsquo;s royalty and kingship.</b> Surrounding the table was a golden border or <strong>crown</strong>, speaking of Jesus&rsquo; <strong>majesty, glory, and kingship</strong>.</li>
+        <li><b>Kept from falling.</b> When Israel moved through the wilderness, the crown kept the loaves from sliding off the table. This symbolizes how Christ&rsquo;s kingship holds believers securely, guaranteeing their permanent standing and salvation.</li>
+      </ul>
+      <h3>Prepared by the temple singers</h3>
+      <ul>
+        <li><b>Role of the singers.</b> In the temple service, it was specifically the <strong>singers</strong> among the priests who baked and arranged the showbread every Sabbath. This points to how anointed music and worship present the manifested Christ in a way believers can tangibly feed upon.</li>
+      </ul>
+    </template>
+
+    <template id="info-menorah">
+      <p class="ref">Exodus 25:31&ndash;40</p>
+      <h2 id="info-title">The menorah</h2>
+      <p class="info-lede">The <strong>Menorah (Golden Lampstand)</strong> carries rich typological significance, representing <strong>Jesus Christ, the Holy Spirit, and the Church united as one</strong>.</p>
+      <h3>The seven branches: the seven spirits of God</h3>
+      <p>The Menorah features a main central stem with three branches extending on each side, totaling seven branches. These seven branches speak of the <strong>seven spirits (or sevenfold ministry) of God</strong>: the Spirit of the Lord, wisdom, understanding, counsel, might, knowledge, and the fear of the Lord. When a believer is filled with the Holy Spirit, these attributes are imparted to them.</p>
+      <h3>Hammered out of a single bar of pure gold</h3>
+      <p>Unlike the standing boards or the Ark, which were made of acacia wood overlaid with gold, the Menorah was hammered into shape out of <strong>one solid block of pure gold</strong>. This hammering and beating out of solid gold typifies how <strong>Jesus was beaten, tortured, and crucified</strong> on the cross so that the Church could come forth.</p>
+      <h3>Christ and the Church (the vine and the branches)</h3>
+      <p>In the Book of Revelation, golden lampstands represent the churches. The Menorah illustrates the organic unity between <strong>Christ and the believer</strong>:</p>
+      <ul>
+        <li><b>The main stem</b> represents <strong>Christ, the Vine</strong>.</li>
+        <li><b>The six side branches</b> represent <strong>believers abiding in Him</strong>.</li>
+      </ul>
+      <p>Because believers abide in Christ and are one with Him, the Vine and the branches form one single, unbroken piece of pure gold.</p>
+    </template>
+
+    <template id="info-incense">
+      <p class="ref">Exodus 30:1&ndash;10</p>
+      <h2 id="info-title">The altar of incense</h2>
+      <p class="info-lede">The <strong>Altar of Incense</strong> (positioned inside the Holy Place, directly in front of the veil) carries profound typological significance, representing <strong>Jesus Christ&rsquo;s present-day ministry at God&rsquo;s right hand</strong>, as well as <strong>true worship, prayer, and intercession</strong>.</p>
+      <h3>Two altars: the Cross vs. present-day ministry</h3>
+      <p>The Tabernacle contains two distinct altars, which picture two complementary phases of Christ&rsquo;s work:</p>
+      <ul>
+        <li><b>The Altar of Burnt Offering</b> (outside in the outer court): Made of bronze, this altar typifies the <strong>Cross</strong>&mdash;Jesus dying for our sins and paying the complete penalty once and for all.</li>
+        <li><b>The Altar of Incense</b> (inside the Holy Place): Made of acacia wood overlaid with pure gold, this altar typifies <strong>Jesus&rsquo; present-day ministry at the right hand of God</strong>.</li>
+        <li><b>Continuous representation.</b> While the Cross was on earth for all to see, Jesus now stands in heaven as our advocate and intercessor. His perfections, beauties, and excellencies ascend constantly before the Father on our behalf, so that God sees us wrapped in the sweet fragrance of His Son.</li>
+      </ul>
+      <h3>The fragrance of praise, prayer, and worship</h3>
+      <ul>
+        <li><b>Incense as prayer.</b> The sweet-smelling smoke rising from the burning incense symbolizes <strong>praise, prayer, and worship</strong> going up to God.</li>
+        <li><b>True worship.</b> True worship is defined not as human performance, but as a heart overflowing with appreciation for the <strong>person and finished work of Jesus Christ</strong>. When we present Christ to the Father, it ascends as a sweet aroma that delights God.</li>
+      </ul>
+      <h3>The four horns and golden crown</h3>
+      <ul>
+        <li><b>The crown.</b> Like the Ark of the Covenant and the Table of Showbread, the Altar of Incense features a golden crown around its top, speaking of <strong>Jesus&rsquo; majesty, glory, and kingship</strong>.</li>
+        <li><b>The four horns.</b> Horns in Scripture represent authority and power. The four golden horns on the corners of the altar represent the <strong>supreme power and authority of Christ&rsquo;s intercession</strong> on behalf of believers.</li>
+      </ul>
+      <h3>Coals of fire vs. &ldquo;strange fire&rdquo; (Nadab and Abihu)</h3>
+      <p>A key lesson from the Altar of Incense is how the incense was lit:</p>
+      <ul>
+        <li><b>Fire from the bronze altar.</b> God commanded that the coals used to burn the incense must come directly from the <strong>Altar of Burnt Offering</strong> outside.</li>
+        <li><b>The warning of &ldquo;strange fire&rdquo;.</b> Aaron&rsquo;s sons, Nadab and Abihu, brought &ldquo;strange fire&rdquo;&mdash;fire that did <i>not</i> originate from the bronze altar&mdash;and were struck dead before the Lord.</li>
+        <li><b>The typological meaning.</b> The coals from the bronze altar represent the <strong>finished work of the Cross</strong>. All our worship, prayer, praise, and service must be fueled by and rooted in what Jesus accomplished at Calvary. Approaching God or serving Him through self-effort, willpower, or human energy without the Cross is considered &ldquo;strange fire&rdquo;.</li>
+      </ul>
+      <h3>New covenant access</h3>
+      <p>Under the New Covenant, because Jesus&rsquo; blood tore the veil separating the Holy Place from the Holy of Holies, the Altar of Incense is directly linked to the very presence of God. Believers now have constant, bold access to the throne of grace, held securely in Christ&rsquo;s perpetual intercession.</p>
+    </template>
+
+    <template id="info-ark">
+      <p class="ref">Exodus 25:10&ndash;22</p>
+      <h2 id="info-title">The ark of the covenant</h2>
+      <p class="info-lede">The <strong>Ark of the Covenant</strong>&mdash;located in the Holy of Holies where God&rsquo;s presence dwelt&mdash;serves as a central type and shadow pointing directly to <strong>Jesus Christ</strong>, His divine-human nature, and His finished work.</p>
+      <h3>The materials: divinity and humanity</h3>
+      <ul>
+        <li><b>Acacia (shittim) wood.</b> Acacia wood is an incorruptible wood that typifies Jesus&rsquo; pure and sinless humanity.</li>
+        <li><b>Overlaid inside and out with pure gold.</b> Gold in Scripture speaks of divinity. Overlaying the incorruptible wood with gold signifies Jesus as fully human and fully divine, with divinity covering humanity.</li>
+      </ul>
+      <h3>The mercy seat and the cherubim</h3>
+      <ul>
+        <li><b>The mercy seat.</b> The lid covering the Ark was crafted out of a single bar of pure gold beaten into shape, surrounded by a golden crown. In the New Testament (1 John 2), the word translated as &ldquo;propitiation&rdquo; literally means <i>Mercy Seat</i>, presenting Jesus as our true Mercy Seat.</li>
+        <li><b>The cherubim.</b> The Cherubim fashioned on the Mercy Seat represent the executors of God&rsquo;s justice. When the high priest sprinkled blood on the Mercy Seat, the Cherubim looked down and saw the blood and mercy rather than human sin.</li>
+      </ul>
+      <h3>The three items inside (covering man&rsquo;s rebellion)</h3>
+      <p>Inside the Ark were three items that represented human sin and rebellion:</p>
+      <ul>
+        <li><b>The two tablets of the Law.</b> Represent man&rsquo;s rejection and failure to keep God&rsquo;s standards and demands.</li>
+        <li><b>The golden jar of manna.</b> Represents man&rsquo;s rejection and complaining against God&rsquo;s supernatural provision.</li>
+        <li><b>Aaron&rsquo;s rod that budded.</b> Represents man&rsquo;s rejection of God-appointed leadership.</li>
+      </ul>
+      <p>God commanded these three symbols of human rebellion to be placed inside the Ark beneath the Mercy Seat. Consequently, God&rsquo;s judicial eyes see the sprinkled blood and mercy covering man&rsquo;s sin rather than the rebellion beneath.</p>
+      <h3>New covenant significance</h3>
+      <p>Under the New Covenant, Jesus is our Ark and Mercy Seat. Rather than merely covering sin as under the Old Testament, Christ&rsquo;s blood takes away our sins entirely, allowing believers to stand before God covered in His righteousness and mercy.</p>
+    </template>
+
+    <template id="info-laver">
+      <p class="ref">Exodus 30:17&ndash;21</p>
+      <h2 id="info-title">The bronze laver</h2>
+      <p class="info-lede">The <strong>Bronze (Brazen) Laver</strong>&mdash;positioned in the outer court between the Altar of Burnt Offering and the entrance to the Tabernacle&mdash;carries deep typological significance regarding the believer&rsquo;s daily walk, the Word of God, and ongoing spiritual refreshment.</p>
+      <h3>The water vs. the blood (daily cleansing vs. eternal salvation)</h3>
+      <ul>
+        <li><b>The Altar of Burnt Offering (the blood).</b> Represents the once-and-for-all salvation and justification of the believer&mdash;being completely &ldquo;bathed&rdquo; in the blood of Christ.</li>
+        <li><b>The Bronze Laver (the water).</b> Represents <strong>daily cleansing and washing through the water of the Word of God</strong>.</li>
+        <li><b>Washing of the feet.</b> Believers are permanently justified and clean every whit through Christ&rsquo;s blood, so the blood never needs to be re-applied for salvation. However, as believers walk through the world every day, their daily walk (their &ldquo;feet&rdquo;) can experience contamination, weariness, and stumbling. The Laver typifies Jesus washing our feet through the Word to refresh, cleanse, and restore our walk.</li>
+      </ul>
+      <h3>Crafted from women&rsquo;s bronze mirrors</h3>
+      <ul>
+        <li><b>Exodus 38:8.</b> The Laver was constructed from the highly polished <strong>bronze mirrors (looking glasses)</strong> donated by the women of Israel.</li>
+        <li><b>Reflecting Christ.</b> Looking into the water over the polished bronze reflected the viewer&rsquo;s face. Spiritually, when believers open the Word of God (the Laver), they behold Jesus and are reminded of their true identity in Him&mdash;covered in His righteousness and accepted before God.</li>
+      </ul>
+      <h3>Preparation for priestly service and power</h3>
+      <ul>
+        <li>Priests were strictly commanded to wash their hands and feet at the Laver before entering the Holy Place to serve at the Golden Lampstand or the Altar of Incense.</li>
+        <li>This signifies that true effectiveness in New Covenant ministry&mdash;operating in spiritual power, ministering, and interceding&mdash;flows from continually sitting under the anointed teaching of the Word and being refreshed daily at the Laver.</li>
+      </ul>
+    </template>
+
+    <template id="info-altar">
+      <p class="ref">Exodus 27:1&ndash;8</p>
+      <h2 id="info-title">The altar of burnt offering</h2>
+      <p class="info-lede">The <strong>Altar of Burnt Offering</strong> (also known as the Bronze or Brazen Altar), situated in the outer court of the Tabernacle, carries deep typological meaning regarding <strong>Jesus Christ&rsquo;s sacrifice on the Cross</strong>.</p>
+      <h3>The Cross of Calvary</h3>
+      <p>Located outside in the outer court, the Altar of Burnt Offering represents the <strong>Cross of Jesus Christ</strong> where He gave His life as the ultimate sacrifice for humanity. Without the sacrifice on this altar, there was no access into the presence of God.</p>
+      <h3>Bronze and God&rsquo;s fiery judgment</h3>
+      <ul>
+        <li><b>Bronze material.</b> Unlike the indoor furniture made of gold, this altar was constructed of <strong>bronze</strong>, a metal that in Scripture speaks of <strong>judgment</strong> and is uniquely resilient against intense fire.</li>
+        <li><b>The consuming fire.</b> The continuous fire on the altar symbolizes God&rsquo;s holy, consuming judgment against sin.</li>
+        <li><b>Jesus as the burnt offering.</b> On the Cross, Jesus became our burnt offering and sin offering, bearing the full brunt of God&rsquo;s fiery judgment in our place. Because He was consumed by judgment on our behalf, believers are completely forgiven and will never face God&rsquo;s condemnation.</li>
+      </ul>
+      <h3>The four horns and four corners</h3>
+      <ul>
+        <li><b>Authority and salvation.</b> The altar featured four golden/bronze horns on its corners, which symbolize authority, power, and the &ldquo;horns of salvation&rdquo;.</li>
+        <li><b>Four corners of the earth.</b> Pointing to the four cardinal directions (north, south, east, and west), the four horns signify that Christ&rsquo;s finished work on the Cross is not limited to Israel, but extends to the entire world and all four winds of the earth.</li>
+      </ul>
+      <h3>Coals of fire: the foundation for worship</h3>
+      <ul>
+        <li><b>Fire from heaven.</b> The original fire on the altar was not kindled by man, but came directly down from heaven.</li>
+        <li><b>Coals of the finished work.</b> The coals taken from the bronze altar represent the <strong>finished redemption of Calvary</strong>. God commanded that all prayer, worship, and incense offered at the inner Altar of Incense must be lit using coals from the Bronze Altar. Approaching God through human self-effort or willpower without the Cross is considered &ldquo;strange fire&rdquo;.</li>
+      </ul>
+      <h3>The meaning of the ashes</h3>
+      <p>When the burnt offering was fully consumed, it fell through the grates into <strong>ashes</strong>. In Scripture, ashes represent life in its final, completed form after fire. Looking at the ashes reminded the offerer that their sin was completely dealt with, destroyed, and turned to ashes&mdash;having no remaining power or condemnation over them.</p>
+      <h3>Contrast with the altar of incense</h3>
+      <p>The Tabernacle features two distinct altars that picture two phases of Christ&rsquo;s work:</p>
+      <ul>
+        <li><b>Altar of Burnt Offering</b> (bronze, outer court): Represents Christ&rsquo;s once-and-for-all sacrifice on the Cross on earth.</li>
+        <li><b>Altar of Incense</b> (gold, Holy Place): Represents Christ&rsquo;s present-day ministry, intercession, and sweet fragrance before the Father at God&rsquo;s right hand in heaven.</li>
+      </ul>
+    </template>
+
+    <template id="info-gate">
+      <p class="ref">Exodus 27:16</p>
+      <h2 id="info-title">The gate of the court</h2>
+      <p class="info-lede">The <strong>entrance (or gate) to the outer court</strong> carries rich typological meaning pointing to <strong>Jesus Christ as the sole entrance into God&rsquo;s presence</strong>.</p>
+      <h3>&ldquo;The way&rdquo;</h3>
+      <p>In ancient Jewish tradition, the three main entrances of the Tabernacle had specific names:</p>
+      <ul>
+        <li><b>The outer court gate</b> was called <strong>&ldquo;the way&rdquo;</strong>.</li>
+        <li><b>The door to the Holy Place</b> was called <strong>&ldquo;the truth&rdquo;</strong>.</li>
+        <li><b>The inner veil</b> leading into the Holy of Holies was called <strong>&ldquo;the life&rdquo;</strong>.</li>
+      </ul>
+      <p>When Jesus declared, <i>&ldquo;I am the way, the truth, and the life&rdquo;</i> (John 14:6), He was directly referencing these three entryways of the Tabernacle, presenting Himself as the fulfillment of each gate.</p>
+      <h3>The four colors of the gate</h3>
+      <p>The entrance curtain was woven with <strong>four specific colors</strong>, each representing a different facet of Jesus Christ as revealed in the four Gospels:</p>
+      <ul class="info-colors">
+        <li style="--c: var(--blue)"><b>Blue.</b> Represents heaven, pointing to the <strong>Gospel of John</strong>, which depicts Jesus as the <strong>Son of God</strong> coming down from heaven.</li>
+        <li style="--c: var(--purple)"><b>Purple.</b> The color of royalty, pointing to the <strong>Gospel of Matthew</strong>, which presents Jesus as the <strong>King</strong>.</li>
+        <li style="--c: var(--scarlet)"><b>Scarlet thread (red).</b> Speaks of blood and sacrifice, pointing to the <strong>Gospel of Mark</strong>, which depicts Jesus as the <strong>Suffering Servant</strong>.</li>
+        <li style="--c: #f7f5ee"><b>Fine linen (white).</b> Represents purity and righteousness, pointing to the <strong>Gospel of Luke</strong>, depicting Jesus as the spotless <strong>Son of Man</strong>.</li>
+      </ul>
+      <h3>The only gate of access</h3>
+      <ul>
+        <li>The outer gate was the <strong>only entrance</strong> into the Tabernacle compound&mdash;there were no other doors or shortcuts into God&rsquo;s presence.</li>
+        <li>Anyone entering the gate immediately faced the <strong>Bronze Altar of Burnt Offering</strong>, signifying that access to God is made possible exclusively through the sacrifice of Christ on the Cross.</li>
+      </ul>
+    </template>
+
+    <template id="info-door">
+      <p class="ref">Exodus 26:36&ndash;37</p>
+      <h2 id="info-title">The door of the tent</h2>
+      <p class="info-lede">The <strong>door (or entrance) to the Holy Place</strong> carries deep spiritual and typological significance, pointing directly to <strong>Jesus Christ as the entrance into truth and divine communion</strong>.</p>
+      <h3>The Jewish name: &ldquo;the truth&rdquo;</h3>
+      <p>In ancient Jewish tradition, each of the three primary entrances of the Tabernacle bore a specific title:</p>
+      <ul>
+        <li><b>The outer gate</b> was called <strong>&ldquo;the way&rdquo;</strong>.</li>
+        <li><b>The door to the Holy Place</b> was called <strong>&ldquo;the truth&rdquo;</strong>.</li>
+        <li><b>The inner veil</b> (leading into the Holy of Holies) was called <strong>&ldquo;the life&rdquo;</strong>.</li>
+      </ul>
+      <p>When Jesus stated in John 14:6, <i>&ldquo;I am the way, the truth, and the life,&rdquo;</i> He was directly referencing these three entryways of the Tabernacle. Passing through the door to the Holy Place signifies stepping into <strong>&ldquo;the truth&rdquo;</strong> of who Christ is and what He has accomplished.</p>
+      <h3>The four colors of the door curtain</h3>
+      <p>The entrance curtain for the Holy Place was woven with <strong>four specific colors</strong>, each typifying a distinct facet of Jesus Christ as revealed across the four Gospels:</p>
+      <ul class="info-colors">
+        <li style="--c: var(--blue)"><b>Blue.</b> Represents heaven, pointing to the <strong>Gospel of John</strong>, which reveals Jesus as the <strong>Son of God</strong> who came down from heaven.</li>
+        <li style="--c: var(--purple)"><b>Purple.</b> The color of royalty, pointing to the <strong>Gospel of Matthew</strong>, which presents Jesus as the <strong>King</strong>.</li>
+        <li style="--c: var(--scarlet)"><b>Scarlet (red).</b> Speaks of blood and sacrifice, pointing to the <strong>Gospel of Mark</strong>, which depicts Jesus as the <strong>Suffering Servant</strong>.</li>
+        <li style="--c: #f7f5ee"><b>Fine linen (white).</b> Speaks of spotless purity and righteousness, pointing to the <strong>Gospel of Luke</strong>, depicting Jesus as the sinless <strong>Son of Man</strong>.</li>
+      </ul>
+      <h3>The five pillars at the doorway</h3>
+      <p>The door to the Holy Place was supported by <strong>five pillars</strong>:</p>
+      <ul>
+        <li><b>The number 5 (grace).</b> Throughout Scripture, the number five is the number of <strong>grace</strong>. This signifies that entry into the Holy Place is made possible entirely through God&rsquo;s unearned favor and grace rather than human performance or self-effort.</li>
+        <li><b>The five-fold ministry.</b> The five pillars also typify the <strong>five-fold ministry</strong> (apostles, prophets, evangelists, pastors, and teachers) set in place to proclaim the grace of God and lead believers into deeper spiritual communion.</li>
+      </ul>
+      <h3>Gateway into divine communion</h3>
+      <p>Passing through this door moves the believer out of the outer court and into the sanctuary of the Holy Place, granting access to three sacred items:</p>
+      <ul>
+        <li><b>The Table of Showbread.</b> Continually feeding upon Jesus as the <strong>Bread of Life</strong>.</li>
+        <li><b>The Golden Lampstand (Menorah).</b> Walking in the light of Christ and being filled with the <strong>sevenfold ministry of the Holy Spirit</strong>.</li>
+        <li><b>The Altar of Incense.</b> Standing in the sweet fragrance of <strong>Christ&rsquo;s present-day intercession</strong> at God&rsquo;s right hand.</li>
+      </ul>
+    </template>
+
+    <template id="info-veil">
+      <p class="ref">Exodus 26:31&ndash;33</p>
+      <h2 id="info-title">The veil</h2>
+      <p class="info-lede">The <strong>inner veil</strong>&mdash;which separated the Holy Place from the Holy of Holies where God&rsquo;s glory dwelt&mdash;carries profound typological significance, pointing directly to <strong>Jesus Christ, His physical body, and our open access to God</strong>.</p>
+      <h3>The Jewish name: &ldquo;the life&rdquo;</h3>
+      <p>In ancient Jewish tradition, the three entryways of the Tabernacle had specific titles:</p>
+      <ul>
+        <li><b>The outer gate</b> was called <strong>&ldquo;the way&rdquo;</strong>.</li>
+        <li><b>The door to the Holy Place</b> was called <strong>&ldquo;the truth&rdquo;</strong>.</li>
+        <li><b>The inner veil</b> was called <strong>&ldquo;the life&rdquo;</strong>.</li>
+      </ul>
+      <p>When Jesus declared in John 14:6, <i>&ldquo;I am the way, the truth, and the life,&rdquo;</i> He was directly referencing these three entryways. Passing through the inner veil represents entering into <strong>&ldquo;the life&rdquo;</strong>&mdash;unbroken, permanent fellowship in the presence of God.</p>
+      <h3>Typology of Christ&rsquo;s flesh</h3>
+      <p>Scripturally (as highlighted in Hebrews 10:20), the physical veil represents the <strong>flesh of Jesus Christ</strong>. Under the Old Covenant, the heavy veil stood as a barrier separating fallen humanity from the unapproachable holiness of God.</p>
+      <h3>The rent veil (torn from top to bottom)</h3>
+      <ul>
+        <li><b>The moment of crucifixion.</b> The moment Jesus cried <i>&ldquo;It is finished!&rdquo;</i> on the cross at Calvary, the veil in the temple was torn in two from top to bottom.</li>
+        <li><b>From top to bottom.</b> Tearing from top to bottom signifies that it was <strong>an act of God from heaven</strong>, not something accomplished by human effort, willpower, or religion from the bottom up.</li>
+        <li><b>Unrestricted access.</b> The torn veil opened the way into the Holy of Holies forever. Believers no longer stand far off in fear, but have <strong>boldness and freedom</strong> to enter directly into God&rsquo;s presence at any time through the blood of Jesus.</li>
+      </ul>
+      <h3>Colors and cherubim woven into the veil</h3>
+      <ul>
+        <li><b>The four colors.</b> Like the outer gate and the door to the Holy Place, the inner veil was woven with <strong>blue</strong> (Son of God in John), <strong>purple</strong> (King in Matthew), <strong>scarlet</strong> (Suffering Servant in Mark), and <strong>fine linen</strong> (spotless Son of Man in Luke).</li>
+        <li><b>Artistic designs of cherubim.</b> Cherubim&mdash;the executors of God&rsquo;s justice&mdash;were woven directly into the fabric of the veil. Through Christ&rsquo;s sacrifice, divine justice was fully satisfied, turning what was once a barrier of judgment into an open door of grace.</li>
+      </ul>
+    </template>
+    <div class="look" role="group" aria-label="Look around">
+      <p class="look-how"><span class="look-mouse">Drag to look around · scroll to walk on</span><span class="look-touch">Drag to look around</span></p>
+      <button type="button" class="look-next">Walk on</button>
+    </div>
+  </div>
+
+  <main id="track" aria-label="Scroll to walk through the tabernacle"></main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
