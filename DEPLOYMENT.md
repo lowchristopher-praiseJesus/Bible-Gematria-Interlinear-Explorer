@@ -279,6 +279,14 @@ empty — but every "Listen" request will then fail with a 502 until the
 credential is actually wired up. Nothing else surfaces this gap, so it's
 worth checking explicitly after a fresh deploy.
 
+### Walk the Tabernacle
+
+The 3D viewer is static, in `frontend/public/tabernacle/`, so it ships in
+`frontend/dist/` and is served at `/tabernacle/` with no nginx change. The
+chatbot image copies `spots.json` to `/app/data/tabernacle_spots.json`
+(`TABERNACLE_SPOTS_PATH`), so rebuild the SPA and the chatbot image after
+editing it. The viewer loads three.js, GSAP, Lenis and Google Fonts from CDNs.
+
 ### Tell a Story illustrations
 
 Each page's illustration is generated via an image-capable model

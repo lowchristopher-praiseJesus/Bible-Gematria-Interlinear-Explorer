@@ -299,6 +299,62 @@ chatbot after fixing them. The tile shows when the index loads
 `chatbot/data/passage_eval.py`. See
 `docs/superpowers/specs/2026-09-30-passage-search-design.md`.
 
+## Walk the Tabernacle mode (internal id `tabernacle`)
+
+A scroll-driven 3D walk of the tabernacle of Moses (drawn pattern, gate,
+court, Holy Place, Holy of Holies) opened from the `ModePickerScreen` tile as a
+`tabernacle` artifact, with a chat beside it. The user can stop at any of 10
+furnishings (`boards`, `table`, `menorah`, `incense`, `ark`, `laver`, `altar`,
+`gate`, `door`, `veil`), read its panel, press "Ask about this", and get an
+answer grounded on that panel plus KJV verses from `Complete.db`; when an
+answer moves on to another furnishing the 3D view follows.
+
+**The viewer has exactly one copy: `frontend/public/tabernacle/`**, served by
+nginx at `/tabernacle/` (Vite copies `public/` verbatim into `dist/`; no nginx
+or Docker change). Standalone it behaves as a plain page; embedded it is
+`/tabernacle/?embed=1[#spot=<id>|#station=<n>]`, which turns on
+`js/bridge.js` (types in `bridge.d.ts`). The old `~/Documents/floorplan_3d/Tabernacle`
+folder is not the source of truth any more. **Never commit `recordings/`**
+(209 MB of captures) or loose reference images there:
+`tests/chatbot/test_tabernacle_shipping.py` enforces a 10 MB budget for the
+folder and the absence of `recordings/`.
+
+**Panel text has exactly one copy: `frontend/public/tabernacle/data/spots.json`**
+(per spot: `label`, `station`, `aliases`, `refs[{usfm,label}]`, `title`,
+`html`). The viewer renders its panels from it, and `chatbot/tabernacle_mode.py`
+grounds answers on it, so **editing it changes the mode's doctrinal output**.
+`tests/chatbot/test_tabernacle_spots.py` checks that the ids match the viewer's
+`data-spot` buttons and that every ref resolves in `Complete.db`. The chatbot
+image has no `frontend/`, so `Dockerfile.chatbot` copies the file to
+`./data/tabernacle_spots.json` and sets `ENV TABERNACLE_SPOTS_PATH=/app/data/tabernacle_spots.json`;
+local runs read the repo path.
+
+Backend: `tabernacle_mode.primer` (no LLM call) opens the session with an
+intro and the artifact; `tabernacle_mode.answer` makes one LLM call, runs
+references through `wiki_refs.resolve_scripture_refs` (so they become explorer
+links, unlike character mode), takes follow-ups from `generate_llm_follow_ups`,
+and returns a camera cue in `data.tabernacle_spot`. `chatbot/api.py` routes
+`mode == "tabernacle"` in both `post_chat` and `_stream_chat_response`; the
+empty-message primer goes through `router.build_mode_primer`.
+
+Frontend: `TabernacleArtifact.tsx` renders one iframe that is never
+re-parented (re-parenting reloads an iframe); full screen restyles the same
+host to a fixed layer. A 15 s load timeout shows a fallback note with a
+new-tab link, and phone widths open full screen. `App.tsx`'s mobile detail
+sheet uses `translate-none` when open, because a transform would make it the
+containing block for fixed descendants. Messages between app and viewer are
+origin-checked `postMessage`s: `frontend/src/lib/tabernacleBridge.ts` (app side)
+and `frontend/public/tabernacle/js/bridge.js` (viewer side). `ChatPane` wiring:
+a clicked spot sets `modeParams.tabernacleSpot`; Ask posts a user message; a
+panel ref opens an `interlinear` artifact; a reply's camera cue sends the viewer
+to that spot. The spot is in `modeParams`, so reloads and share links restore
+the walk.
+
+The viewer loads three.js (jsDelivr), GSAP (cdnjs), Lenis (unpkg) and Google
+Fonts from CDNs. nginx sets no CSP today; a future CSP must allow those hosts
+or the viewer breaks silently. See
+`docs/superpowers/specs/2026-10-27-tabernacle-walk-design.md`.
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.
