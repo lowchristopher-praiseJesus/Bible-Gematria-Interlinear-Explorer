@@ -310,8 +310,9 @@ answer grounded on that panel plus KJV verses from `Complete.db`; when an
 answer moves on to another furnishing the 3D view follows.
 
 **The viewer has exactly one copy: `frontend/public/tabernacle/`**, served by
-nginx at `/tabernacle/` (Vite copies `public/` verbatim into `dist/`; no nginx
-or Docker change). Standalone it behaves as a plain page; embedded it is
+nginx at `/tabernacle/` (Vite copies `public/` verbatim into `dist/`, so no
+nginx change is needed to serve the viewer; the chatbot image does change, see
+below). Standalone it behaves as a plain page; embedded it is
 `/tabernacle/?embed=1[#spot=<id>|#station=<n>]`, which turns on
 `js/bridge.js` (types in `bridge.d.ts`). The old `~/Documents/floorplan_3d/Tabernacle`
 folder is not the source of truth any more. **Never commit `recordings/`**
@@ -333,7 +334,11 @@ Backend: `tabernacle_mode.primer` (no LLM call) opens the session with an
 intro and the artifact; `tabernacle_mode.answer` makes one LLM call, runs
 references through `wiki_refs.resolve_scripture_refs` (so they become explorer
 links, unlike character mode), takes follow-ups from `generate_llm_follow_ups`,
-and returns a camera cue in `data.tabernacle_spot`. `chatbot/api.py` routes
+and returns a camera cue in `data.tabernacle_spot`: the spot named in the
+user's message, else the spot named first in the reply
+(`tabernacle_mode.first_spot_in`), else none. The saved spot grounds the
+answer when the message names none, but is never the cue (the camera is
+already there). `chatbot/api.py` routes
 `mode == "tabernacle"` in both `post_chat` and `_stream_chat_response`; the
 empty-message primer goes through `router.build_mode_primer`.
 
@@ -347,8 +352,11 @@ origin-checked `postMessage`s: `frontend/src/lib/tabernacleBridge.ts` (app side)
 and `frontend/public/tabernacle/js/bridge.js` (viewer side). `ChatPane` wiring:
 a clicked spot sets `modeParams.tabernacleSpot`; Ask posts a user message; a
 panel ref opens an `interlinear` artifact; a reply's camera cue sends the viewer
-to that spot. The spot is in `modeParams`, so reloads and share links restore
-the walk.
+to that spot. The spot is in `modeParams`, and `TabernacleArtifact` opens the
+viewer at the shown session's saved spot (the `?session=` URL param, falling
+back to the artifact's own `spot`), so a reload, a share link or coming back
+from an interlinear artifact resumes the walk there. The iframe `src` is frozen
+at mount, so later spot updates never reload the viewer.
 
 The viewer loads three.js (jsDelivr), GSAP (cdnjs), Lenis (unpkg) and Google
 Fonts from CDNs. nginx sets no CSP today; a future CSP must allow those hosts
