@@ -416,6 +416,24 @@ const loadDone = new Promise((resolve) => {
   let held = null, heldT = 0, lastBeat = 0;
   let wheelAcc = 0, wheelT = 0, wheelFresh = false;
 
+  // A resize (going full screen in the app, a window drag) changes the track's
+  // pixel height (3600vh) but not the scroll offset, so the same offset would
+  // mean a different beat. Keep the beat: render it while the layout settles,
+  // then scroll back to where it now lies.
+  let keepBeat = null, keepRaf = 0;
+  addEventListener('resize', () => {
+    if (keepBeat === null) keepBeat = held ? held.b : progress * END;
+    cancelAnimationFrame(keepRaf);
+    keepRaf = requestAnimationFrame(() => {
+      lenis.resize();
+      ScrollTrigger.refresh();
+      lenis.scrollTo(pxAt(keepBeat), { immediate: true, force: true });
+      progress = keepBeat / END;
+      lastBeat = keepBeat;
+      keepBeat = null;
+    });
+  });
+
   function hold(stop) {
     held = stop; heldT = performance.now();
     wheelAcc = 0; wheelFresh = false;
@@ -585,8 +603,8 @@ const loadDone = new Promise((resolve) => {
   }
 
   gsap.ticker.add((time) => {
-    let beat = progress * END;
-    if (!held) {
+    let beat = keepBeat ?? progress * END;
+    if (!held && keepBeat === null) {
       // only a walk is caught at a stop; a jump (End key, the scrollbar) goes straight through
       const stop = beat - lastBeat < 1.2 && STOPS.find((s) => lastBeat < s.b && beat >= s.b);
       if (stop) { hold(stop); beat = stop.b; }
