@@ -10,9 +10,9 @@ describe('tabernacleBridge', () => {
   afterEach(() => registerViewer(null))
 
   it('viewerSrc', () => {
-    expect(viewerSrc(null)).toBe('/tabernacle/?embed=1')
-    expect(viewerSrc('ark')).toBe('/tabernacle/?embed=1#spot=ark')
-    expect(viewerSrc('nope')).toBe('/tabernacle/?embed=1')
+    expect(viewerSrc(null)).toBe('/tabernacle/index.html?embed=1')
+    expect(viewerSrc('ark')).toBe('/tabernacle/index.html?embed=1#spot=ark')
+    expect(viewerSrc('nope')).toBe('/tabernacle/index.html?embed=1')
   })
 
   it('parseViewerMessage validates origin, source, type and spot', () => {

@@ -14,9 +14,14 @@ export type ViewerEvent =
 
 export type GotoTarget = { spot: string } | { station: number }
 
+/** The viewer's page, named explicitly: the Vite dev server does not serve a
+ * public/ folder's index.html for a bare directory URL (its SPA fallback
+ * answers `/tabernacle/` with the app itself), while nginx serves either. */
+export const VIEWER_PAGE = '/tabernacle/index.html'
+
 /** iframe src for the viewer; an unknown spot yields no hash. */
 export function viewerSrc(spot: string | null): string {
-  const base = '/tabernacle/?embed=1'
+  const base = `${VIEWER_PAGE}?embed=1`
   return spot && SPOT_IDS.includes(spot) ? `${base}#spot=${spot}` : base
 }
 

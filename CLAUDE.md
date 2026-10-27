@@ -313,8 +313,11 @@ answer moves on to another furnishing the 3D view follows.
 nginx at `/tabernacle/` (Vite copies `public/` verbatim into `dist/`, so no
 nginx change is needed to serve the viewer; the chatbot image does change, see
 below). Standalone it behaves as a plain page; embedded it is
-`/tabernacle/?embed=1[#spot=<id>|#station=<n>]`, which turns on
-`js/bridge.js` (types in `bridge.d.ts`). The old `~/Documents/floorplan_3d/Tabernacle`
+`/tabernacle/index.html?embed=1[#spot=<id>|#station=<n>]`, which turns on
+`js/bridge.js` (types in `bridge.d.ts`). Always link the page by its full
+name (`VIEWER_PAGE` in `tabernacleBridge.ts`): the Vite dev server's SPA
+fallback answers a bare `/tabernacle/` with the app itself, so an iframe
+pointed there never loads the viewer. The old `~/Documents/floorplan_3d/Tabernacle`
 folder is not the source of truth any more. **Never commit `recordings/`**
 (209 MB of captures) or loose reference images there:
 `tests/chatbot/test_tabernacle_shipping.py` enforces a 10 MB budget for the

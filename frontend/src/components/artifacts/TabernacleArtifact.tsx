@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Maximize2, X } from 'lucide-react'
 import {
-  emitViewerEvent, markViewerReady, parseViewerMessage, registerViewer, viewerSrc,
+  emitViewerEvent, markViewerReady, parseViewerMessage, registerViewer, VIEWER_PAGE, viewerSrc,
 } from '@/lib/tabernacleBridge'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import type { TabernacleArtifactParams } from '@/types/session'
@@ -135,7 +135,7 @@ export function TabernacleArtifact({ spot }: TabernacleArtifactParams) {
           {status === 'failed' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[var(--color-surface-alt)] text-sm text-[var(--color-text-secondary)]">
               <span>The 3D view couldn't load.</span>
-              <a href="/tabernacle/" target="_blank" rel="noreferrer" className="underline">
+              <a href={VIEWER_PAGE} target="_blank" rel="noreferrer" className="underline">
                 Open it in a new tab
               </a>
             </div>

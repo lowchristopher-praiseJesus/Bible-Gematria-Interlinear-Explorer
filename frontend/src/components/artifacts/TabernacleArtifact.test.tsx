@@ -45,7 +45,7 @@ describe('TabernacleArtifact', () => {
   it("opens at the shown tabernacle session's saved spot, over the artifact's own spot", () => {
     showSession('tabernacle', 'ark')
     const { container } = render(<TabernacleArtifact spot={null} />)
-    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/tabernacle/?embed=1#spot=ark')
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/tabernacle/index.html?embed=1#spot=ark')
   })
 
   it('a later spot change in the session never changes the iframe src', () => {
@@ -54,7 +54,7 @@ describe('TabernacleArtifact', () => {
     act(() => {
       useSessionsStore.getState().updateModeParams('s1', { tabernacleSpot: 'laver' })
     })
-    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/tabernacle/?embed=1#spot=ark')
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/tabernacle/index.html?embed=1#spot=ark')
   })
 
   it("ignores another mode's session and uses the artifact's spot", () => {
@@ -76,7 +76,7 @@ describe('TabernacleArtifact', () => {
       vi.advanceTimersByTime(15000)
     })
     expect(screen.getByText(/3D view couldn't load/)).toBeInTheDocument()
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/tabernacle/')
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/tabernacle/index.html')
   })
 
   it('clears the loading skeleton on ready', () => {
