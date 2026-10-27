@@ -2,6 +2,18 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TabernacleArtifact } from './TabernacleArtifact'
 import { registerViewer, sendGoto, viewerSrc } from '@/lib/tabernacleBridge'
+import { useSessionsStore } from '@/store/useSessionsStore'
+import type { Session, SessionMode } from '@/types/session'
+
+// The app knows the shown session from the `?session=` URL param (App.tsx).
+function showSession(mode: SessionMode, tabernacleSpot?: string) {
+  const session: Session = {
+    id: 's1', createdAt: 0, updatedAt: 0, mode, title: 't', messages: [], notes: [],
+    modeParams: tabernacleSpot ? { tabernacleSpot } : {},
+  }
+  useSessionsStore.setState({ sessions: { s1: session } })
+  window.history.replaceState({}, '', '/?session=s1')
+}
 
 function mockMatchMedia(matches: boolean) {
   window.matchMedia = vi.fn().mockImplementation((q: string) => ({
@@ -24,7 +36,32 @@ function postReady(iframe: HTMLIFrameElement) {
 
 describe('TabernacleArtifact', () => {
   beforeEach(() => mockMatchMedia(false))
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    useSessionsStore.setState({ sessions: {}, activeSessionId: null })
+    window.history.replaceState({}, '', '/')
+  })
+
+  it("opens at the shown tabernacle session's saved spot, over the artifact's own spot", () => {
+    showSession('tabernacle', 'ark')
+    const { container } = render(<TabernacleArtifact spot={null} />)
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/tabernacle/?embed=1#spot=ark')
+  })
+
+  it('a later spot change in the session never changes the iframe src', () => {
+    showSession('tabernacle', 'ark')
+    const { container } = render(<TabernacleArtifact spot={null} />)
+    act(() => {
+      useSessionsStore.getState().updateModeParams('s1', { tabernacleSpot: 'laver' })
+    })
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/tabernacle/?embed=1#spot=ark')
+  })
+
+  it("ignores another mode's session and uses the artifact's spot", () => {
+    showSession('freeform', 'ark')
+    const { container } = render(<TabernacleArtifact spot="laver" />)
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe(viewerSrc('laver'))
+  })
 
   it('points the iframe at the viewer for the spot and shows the title while loading', () => {
     const { container } = render(<TabernacleArtifact spot="ark" />)

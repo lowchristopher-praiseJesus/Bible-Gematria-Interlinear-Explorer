@@ -3,15 +3,31 @@ import { Maximize2, X } from 'lucide-react'
 import {
   emitViewerEvent, markViewerReady, parseViewerMessage, registerViewer, viewerSrc,
 } from '@/lib/tabernacleBridge'
+import { useSessionsStore } from '@/store/useSessionsStore'
 import type { TabernacleArtifactParams } from '@/types/session'
 
 const LOAD_TIMEOUT_MS = 15000
+
+// Where the walk opens: the shown session's saved spot (ChatPane keeps
+// `modeParams.tabernacleSpot` current), so a reload, a share link or coming
+// back from an interlinear artifact resumes the walk. The app tracks the shown
+// session in the `?session=` URL param (App.tsx). Falls back to the
+// artifact's own spot.
+function initialSpot(fallback: string | null): string | null {
+  const id = new URLSearchParams(window.location.search).get('session')
+  const session = id ? useSessionsStore.getState().sessions[id] : undefined
+  if (session?.mode === 'tabernacle' && session.modeParams.tabernacleSpot) return session.modeParams.tabernacleSpot
+  return fallback
+}
 
 // The iframe sits at one fixed place in the React tree for the artifact's
 // lifetime. "Full screen" only swaps the classes of its ancestors (to a fixed
 // full-viewport layer), so the element is never moved or remounted and its
 // WebGL context and camera survive.
 export function TabernacleArtifact({ spot }: TabernacleArtifactParams) {
+  // Frozen at mount: later spot changes (the viewer reporting where it is)
+  // must never change `src`, which would reload the iframe.
+  const [src] = useState(() => viewerSrc(initialSpot(spot)))
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [fullscreen, setFullscreen] = useState(
     () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches
@@ -106,7 +122,7 @@ export function TabernacleArtifact({ spot }: TabernacleArtifactParams) {
         >
           <iframe
             ref={setIframe}
-            src={viewerSrc(spot)}
+            src={src}
             title="The Tabernacle, 3D view"
             className="h-full w-full border-0"
             allow="fullscreen"
