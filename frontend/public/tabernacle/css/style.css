@@ -186,3 +186,16 @@ body { margin: 0; background: var(--paper); font-family: var(--text); }
 }
 .is-capture *, .is-capture .ui { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { .spot::after { animation: none; opacity: 0; } }
+
+/* embedded in the chat app (bridge.js adds .is-embed): refs link into the chat, and panels offer a question */
+.refs { margin: 0 0 8px; font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase; }
+.is-embed .ref { pointer-events: auto; cursor: pointer; text-decoration: underline; text-decoration-color: var(--ink-soft); text-underline-offset: 3px; }
+.is-embed .ref:hover { color: var(--blue); text-decoration-color: var(--blue); }
+.is-embed .ref:focus-visible { outline: 2px solid var(--scarlet); outline-offset: 2px; }
+.info-ask {
+  margin: 0 0 14px; padding: 7px 14px; cursor: pointer;
+  font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--paper); background: var(--ink); border: 1px solid var(--ink);
+}
+.info-ask:hover { background: var(--blue); border-color: var(--blue); }
+.info-ask:focus-visible { outline: 2px solid var(--scarlet); outline-offset: 3px; }

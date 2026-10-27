@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { U, makeMaterials, lineMaterial, setAnisotropy, SHEET } from './materials.js';
 import { buildTabernacle, inkEdges, ownEdges, bakeStatic, SPOTS, COURT, MENORAH_LAMPS } from './model.js';
 import { drawSheet } from './sheet.js';
+import { initBridge } from './bridge.js';
 import { makeSky, makeParticles, makeGlow, SUN_DIR } from './world.js';
 
 const CAPTURE = new URLSearchParams(location.search).has('capture');
@@ -487,15 +488,17 @@ const loadDone = new Promise((resolve) => {
     el, id: el.dataset.spot, label: el.querySelector('.spot-label'), pos: new THREE.Vector3(...el.dataset.pos.split(',').map(Number)), seen: false,
   }));
   let openSpot = null;
+  let bridge = { notifySpotOpened() {} };  // replaced by initBridge when embedded
   function openInfo(spot) {
     const data = SPOT_DATA[spot.id];
     if (!data) return; // spots.json missing or failed to load: stay clickable, open nothing
     if (openSpot) openSpot.el.setAttribute('aria-expanded', 'false');
     openSpot = spot;
     const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    infoBody.innerHTML = `<p class="ref">${data.refs.map((r) => esc(r.label)).join('; ')}</p><h2 id="info-title">${data.title}</h2>${data.html}`;
+    infoBody.innerHTML = `<p class="refs">${data.refs.map((r) => `<span class="ref">${esc(r.label)}</span>`).join('; ')}</p><h2 id="info-title">${data.title}</h2>${data.html}`;
     infoEl.hidden = false;
     infoBody.scrollTop = 0;
+    bridge.notifySpotOpened(spot.id);
     spot.el.setAttribute('aria-expanded', 'true');
     infoEl.querySelector('.info-close').focus({ preventScroll: true });
   }
@@ -515,6 +518,35 @@ const loadDone = new Promise((resolve) => {
   addEventListener('keydown', (e) => { if (e.key === 'Escape') closeInfo(); });
   // the panel scrolls itself; keep the wheel from moving on along the walk
   infoEl.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+
+  // ---- driven from outside (the chat app, via bridge.js) ----
+  // Each spot is offered at the stop where the walk waits beside it.
+  const SPOT_STOP = {
+    gate: 6.1, altar: 13.7, laver: 16.2, door: 17.8, boards: 20.6,
+    table: 22.0, menorah: 23.8, incense: 25.5, veil: 26.8, ark: 29.6,
+  };
+  function letGo() {
+    held = null;
+    root.classList.remove('is-held');
+    closeInfo();
+    lenis.start();
+    look.yaw = look.pitch = 0;
+  }
+  function goToSpot(id) {
+    const spot = spots.find((s) => s.id === id);
+    const stop = STOPS.find((s) => s.b === SPOT_STOP[id]);
+    if (!spot || !stop) return;
+    letGo();
+    hold(stop);  // jumps there and waits, so the spot is offered
+    openInfo(spot);
+  }
+  function goToStation(n) {
+    if (!(n >= 0 && n < STATION_AT.length)) return;
+    letGo();
+    lenis.scrollTo(pxAt(STATION_AT[n]), { immediate: true, force: true });
+    progress = STATION_AT[n] / END;
+  }
+  bridge = initBridge({ win: window, goToSpot, goToStation });
 
   // a point is offered only when it faces the visitor, unhidden by the model
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector3(), toSpot = new THREE.Vector3();
