@@ -76,4 +76,21 @@ describe('initBridge', () => {
     ;(doc.querySelector('.ref') as HTMLElement).click()
     expect(parent.postMessage).toHaveBeenCalledWith({ type: 'tabernacle:ref', ref: 'Exodus 30:18–19' }, ORIGIN)
   })
+
+  it('Enter on a focused linked ref posts the ref once and stops propagation', () => {
+    const { win, parent, doc } = fakeWin('?embed=1')
+    const api = initBridge({ win, goToSpot: vi.fn(), goToStation: vi.fn() })
+    doc.querySelector('.info-body')!.innerHTML = '<p class="refs"><span class="ref">Exodus 30:18</span></p><h2>Laver</h2>'
+    api.notifySpotOpened('laver')
+    parent.postMessage.mockClear()
+    const ref = doc.querySelector('.ref') as HTMLElement
+    expect(ref.getAttribute('role')).toBe('link')
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    const stop = vi.spyOn(ev, 'stopPropagation')
+    ref.dispatchEvent(ev)
+    expect(parent.postMessage).toHaveBeenCalledTimes(1)
+    expect(parent.postMessage).toHaveBeenCalledWith({ type: 'tabernacle:ref', ref: 'Exodus 30:18' }, ORIGIN)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(stop).toHaveBeenCalled()
+  })
 })

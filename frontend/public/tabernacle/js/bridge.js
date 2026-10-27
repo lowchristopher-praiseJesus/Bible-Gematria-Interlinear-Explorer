@@ -46,11 +46,16 @@ export function initBridge({ win, goToSpot, goToStation }) {
   doc.querySelectorAll('figcaption.ref').forEach(markLink);
   doc.addEventListener('click', (e) => {
     const el = e.target.closest && e.target.closest('.ref');
-    if (el) { e.stopPropagation(); sendRef(el); }  // a ref click never closes the panel
+    // (a ref click does not close the panel: only the close button and Escape do)
+    if (el) sendRef(el);
   });
   doc.addEventListener('keydown', (e) => {
     const el = e.target.closest && e.target.closest('.ref');
-    if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); sendRef(el); }
+    if (el && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      e.stopPropagation();  // keep main.js's walk-on keys from releasing the stop
+      sendRef(el);
+    }
   });
 
   post({ type: 'tabernacle:ready' });

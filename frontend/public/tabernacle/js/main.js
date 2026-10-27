@@ -456,6 +456,7 @@ const loadDone = new Promise((resolve) => {
   }, { passive: true });
   addEventListener('keydown', (e) => {
     if (!held) return;
+    if (infoEl.contains(document.activeElement)) return;  // keys belong to the open panel's own controls
     if (['ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key) && document.activeElement !== lookNext) { e.preventDefault(); release(1); }
     else if (['ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); release(-1); }
     else if (e.key === 'ArrowLeft') look.yaw += D2R(6);
