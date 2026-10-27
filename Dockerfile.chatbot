@@ -47,6 +47,11 @@ COPY context.md ./
 # is empty.
 COPY characters/ ./characters/
 
+# Walk the Tabernacle: the spot panels/aliases/refs shared with the frontend
+# viewer, read by chatbot/tabernacle_mode.py via TABERNACLE_SPOTS_PATH.
+COPY frontend/public/tabernacle/data/spots.json ./data/tabernacle_spots.json
+ENV TABERNACLE_SPOTS_PATH=/app/data/tabernacle_spots.json
+
 # Vendored external package — produced by scripts/vendor-mybibletoolbox.sh.
 # Contains src/, .claude/skills/quote-bible/scripts/ (book_codes, biblehub_fetcher),
 # bible-study-tools/tool-registry.yaml, and EMPTY data/{commentary,strongs}/ dirs.

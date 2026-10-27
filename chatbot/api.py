@@ -49,7 +49,7 @@ from chatbot.story_illustrations import (
     synthesize_illustration,
 )
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader, passage_search
+from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader, passage_search, tabernacle_mode
 from chatbot.router import (
     build_mode_primer,
     route_deterministic,
@@ -392,6 +392,12 @@ async def post_chat(request: ChatRequest):
             result = await passage_search.search(request.message)
             return _with_trace(result)
 
+        # Every turn in a Walk the Tabernacle session is answered from the
+        # spot panels and their verses, never the generic path.
+        if request.mode == "tabernacle":
+            result = await tabernacle_mode.answer(request.message, history, request.mode_params)
+            return _with_trace(result)
+
         # Every turn in a Hermeneutics session needs the phase pipeline (or
         # its digest-backed follow-up path) — same special case Socratic
         # Study makes above.
@@ -619,6 +625,13 @@ async def _stream_chat_response(
         # Same special case as post_chat(): the result arrives whole.
         if request.mode == "passages":
             result = await passage_search.search(request.message)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        # Same special case: the reply arrives whole.
+        if request.mode == "tabernacle":
+            result = await tabernacle_mode.answer(request.message, history, request.mode_params)
             _note_outcome(result)
             yield await sse_event("final", {"result": result})
             return
