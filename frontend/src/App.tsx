@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookOpen, PanelLeft, Plus, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, PanelLeft, Plus, X } from 'lucide-react'
 import { ModePickerScreen } from '@/components/shell/ModePickerScreen'
 import { ChatPane } from '@/components/shell/ChatPane'
 import { ArtifactPane } from '@/components/shell/ArtifactPane'
@@ -253,6 +253,17 @@ export default function App() {
       )}
       {/* Mobile top bar — replaces the old bottom Sessions/Chat/Artifact tabs */}
       <header className="flex shrink-0 items-center gap-1 border-b border-[var(--color-theme-border)] px-1 py-1 pt-[max(0.25rem,env(safe-area-inset-top))] lg:hidden">
+        {activeSession && (
+          <button
+            type="button"
+            onClick={startNewChat}
+            aria-label="Back to start page"
+            title="Back to start page"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+        )}
         <button
           ref={menuBtnRef}
           type="button"
@@ -295,7 +306,20 @@ export default function App() {
         >
           <div className="flex items-center justify-between border-b border-[var(--color-theme-border)] px-3 py-2">
             <span className="flex items-center gap-1.5 text-sm font-semibold">
-              <BookOpen className="h-4 w-4 text-[var(--color-theme-accent)]" aria-hidden="true" />
+              {activeSession ? (
+                // In a mode: the logo becomes a way back to the start page.
+                <button
+                  type="button"
+                  onClick={startNewChat}
+                  aria-label="Back to start page"
+                  title="Back to start page"
+                  className="-m-1 flex h-6 w-6 items-center justify-center rounded-md text-[var(--color-theme-accent)] transition-colors hover:bg-[var(--color-surface-alt)]"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : (
+                <BookOpen className="h-4 w-4 text-[var(--color-theme-accent)]" aria-hidden="true" />
+              )}
               Bible Explorer
             </span>
             <div className="flex items-center gap-1">

@@ -100,6 +100,25 @@ describe('App', () => {
     expect(await screen.findByText(/start a guided study below/i)).toBeInTheDocument()
   })
 
+  it('shows no back arrow on the start page', () => {
+    render(<App />)
+    expect(screen.queryByRole('button', { name: 'Back to start page' })).not.toBeInTheDocument()
+  })
+
+  it('in a mode, the top-left back arrow returns to the start page', async () => {
+    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await screen.findByText('Ask me anything.')
+
+    const backs = screen.getAllByRole('button', { name: 'Back to start page', hidden: true })
+    expect(backs.length).toBeGreaterThan(0)
+    await userEvent.click(backs[0])
+
+    expect(await screen.findByText(/start a guided study below/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to start page', hidden: true })).not.toBeInTheDocument()
+  })
+
   it('opening an artifact link brings the detail sheet forward', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
