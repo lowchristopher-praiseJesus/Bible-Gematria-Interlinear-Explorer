@@ -4,7 +4,8 @@
 
 interface YTPlayer {
   loadVideoById(id: string): void
-  cueVideoById(id: string): void
+  getCurrentTime(): number
+  getDuration(): number
   destroy(): void
 }
 
@@ -18,7 +19,7 @@ interface YTApi {
       events: { onReady(): void; onStateChange(e: { data: number }): void; onError(): void }
     }
   ) => YTPlayer
-  PlayerState: { ENDED: number }
+  PlayerState: { ENDED: number; PLAYING: number }
 }
 
 declare global {
@@ -30,6 +31,12 @@ declare global {
 
 const API_SRC = 'https://www.youtube.com/iframe_api'
 const LOAD_TIMEOUT_MS = 10_000
+/** A short counts as watched once this share of it has actually played. */
+export const WATCHED_FRACTION = 0.9
+// Playback is sampled once a second; a bigger jump between samples is a seek
+// and doesn't count as watching.
+const SAMPLE_MS = 1000
+const MAX_STEP_S = 2.5
 
 let apiPromise: Promise<YTApi> | null = null
 
@@ -67,22 +74,54 @@ export function loadYouTubeApi(): Promise<YTApi> {
 export interface ShortPlayer {
   /** Switch to a video and play it (the user picked it). */
   load(videoId: string): void
-  /** Switch to a video without playing it (auto-advance). */
-  cue(videoId: string): void
   destroy(): void
 }
 
+/** A player on `el` that calls `on.watched()` once per video, when 90% of
+ * it has actually been played (seeking ahead doesn't count) or when it ends. */
 export async function createPlayer(
   el: HTMLElement,
   videoId: string,
-  on: { ended(): void; error(): void }
+  on: { watched(): void; error(): void }
 ): Promise<ShortPlayer> {
   const YT = await loadYouTubeApi()
-  // The player's methods (loadVideoById, cueVideoById) exist only after its
-  // iframe has finished loading, so resolve on onReady, not on construction.
-  // A player that never gets ready (iframe blocked or too slow) is an error.
+  // Watch-time tracking for the video currently loaded.
+  let played = 0
+  let lastTime: number | null = null
+  let reported = false
+  let sampler: number | null = null
+  const stopSampling = () => {
+    if (sampler !== null) window.clearInterval(sampler)
+    sampler = null
+    lastTime = null
+  }
+  const report = () => {
+    if (reported) return
+    reported = true
+    on.watched()
+  }
+  const resetTracking = () => {
+    stopSampling()
+    played = 0
+    reported = false
+  }
+
+  // The player's methods exist only after its iframe has finished loading,
+  // so resolve on onReady, not on construction. A player that never gets
+  // ready (iframe blocked or too slow) is an error.
   return new Promise<ShortPlayer>((resolve, reject) => {
     let player: YTPlayer | null = null
+    const sample = () => {
+      if (!player) return
+      const t = player.getCurrentTime()
+      if (lastTime !== null) {
+        const step = t - lastTime
+        if (step > 0 && step <= MAX_STEP_S) played += step
+      }
+      lastTime = t
+      const d = player.getDuration()
+      if (d > 0 && played >= WATCHED_FRACTION * d) report()
+    }
     const timer = window.setTimeout(() => {
       player?.destroy()
       reject(new Error('YouTube player never became ready'))
@@ -96,13 +135,26 @@ export async function createPlayer(
           window.clearTimeout(timer)
           const p = player!
           resolve({
-            load: (id) => p.loadVideoById(id),
-            cue: (id) => p.cueVideoById(id),
-            destroy: () => p.destroy(),
+            load: (id) => {
+              resetTracking()
+              p.loadVideoById(id)
+            },
+            destroy: () => {
+              stopSampling()
+              p.destroy()
+            },
           })
         },
         onStateChange: (e) => {
-          if (e.data === YT.PlayerState.ENDED) on.ended()
+          if (e.data === YT.PlayerState.PLAYING) {
+            if (sampler === null) {
+              lastTime = player!.getCurrentTime()
+              sampler = window.setInterval(sample, SAMPLE_MS)
+            }
+          } else {
+            stopSampling()
+          }
+          if (e.data === YT.PlayerState.ENDED) report()
         },
         onError: () => on.error(),
       },

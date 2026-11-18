@@ -7,15 +7,15 @@ import { useArtifactStore } from '@/store/useArtifactStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import type { ApologeticsTrack, ModeParams, Session } from '@/types/session'
 
-const player = { load: vi.fn(), cue: vi.fn(), destroy: vi.fn() }
-let callbacks: { ended(): void; error(): void } | null = null
+const player = { load: vi.fn(), destroy: vi.fn() }
+let callbacks: { watched(): void; error(): void } | null = null
 let createVideoId: string | null = null
 // 'now' resolves at once; 'held' waits for release(); 'fail' rejects.
 let creation: 'now' | 'held' | 'fail' = 'now'
 let release: (() => void) | null = null
 
 vi.mock('@/lib/youtubePlayer', () => ({
-  createPlayer: vi.fn((_el: HTMLElement, videoId: string, on: { ended(): void; error(): void }) => {
+  createPlayer: vi.fn((_el: HTMLElement, videoId: string, on: { watched(): void; error(): void }) => {
     callbacks = on
     createVideoId = videoId
     if (creation === 'fail') return Promise.reject(new Error('blocked'))
@@ -60,7 +60,6 @@ describe('ApologeticsTrackArtifact', () => {
     release = null
     player.load.mockClear()
     player.destroy.mockClear()
-    player.cue.mockClear()
     showSession({ trackId: 'jesus-rose', watchedShorts: [] })
   })
   afterEach(() => {
@@ -77,15 +76,16 @@ describe('ApologeticsTrackArtifact', () => {
     await waitFor(() => expect(createVideoId).toBe('yt5'))
   })
 
-  it('marks watched on ended and advances without autoplay', async () => {
+  it('marks watched when the player reports it and stays on that short, ready to ask', async () => {
     render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
     await waitFor(() => expect(callbacks).not.toBeNull())
-    act(() => callbacks!.ended())
+    act(() => callbacks!.watched())
     expect(params().watchedShorts).toEqual([5])
-    expect(params().currentShort).toBe(6)
-    await waitFor(() => expect(player.cue).toHaveBeenCalledWith('yt6'))
-    expect(player.load).not.toHaveBeenCalled()
     expect(await screen.findByText('1 / 2')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Did Jesus Really Die on the Cross?' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ask about this' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Mark watched' })).toBeNull()
+    expect(player.load).not.toHaveBeenCalled()
   })
 
   it('clicking a row plays that short', async () => {
@@ -103,6 +103,7 @@ describe('ApologeticsTrackArtifact', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Mark watched' }))
     expect(params().watchedShorts).toEqual([5])
     expect(completes).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: /Name One Witness To Jesus Resurrection/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Mark watched' }))
     expect(params().watchedShorts).toEqual([5, 6])
     expect(completes).toEqual(['s1:Did Jesus rise?'])
@@ -117,8 +118,6 @@ describe('ApologeticsTrackArtifact', () => {
     const ask = await screen.findByRole('button', { name: 'Ask about this' })
     expect(ask).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Mark watched' }))
-    // marking advanced to #6; go back to #5, which is now watched
-    fireEvent.click(screen.getByRole('button', { name: /Did Jesus Really Die on the Cross\?/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Ask about this' }))
     expect(asks).toEqual([{ sessionId: 's1', shortNumber: 5, title: 'Did Jesus Really Die on the Cross?' }])
     off()

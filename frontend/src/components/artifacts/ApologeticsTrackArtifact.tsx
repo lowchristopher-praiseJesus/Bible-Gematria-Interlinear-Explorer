@@ -56,7 +56,6 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
   const hostRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<ShortPlayer | null>(null)
   const shownIdRef = useRef<string | null>(null)
-  const nextActionRef = useRef<'load' | 'cue'>('cue')
   const [errorFor, setErrorFor] = useState<number | null>(null)
   // The player could not be created at all (API or iframe blocked): every
   // short gets the "Watch on YouTube" fallback, not just the first.
@@ -71,11 +70,11 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
     currentId,
   })
 
-  // Show `id` in a ready player with the pending action (cue after an
-  // auto-advance, load after the user picked a row).
+  // Show `id` in a ready player. The selection changes only when the user
+  // picks a row, so the new short plays.
   function show(player: ShortPlayer, id: string) {
     if (shownIdRef.current === id) return
-    player[nextActionRef.current](id)
+    player.load(id)
     shownIdRef.current = id
   }
 
@@ -88,7 +87,8 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
     if (shownIdRef.current) return // creation already in flight
     shownIdRef.current = currentId
     createPlayer(hostRef.current, currentId, {
-      ended: () => {
+      // 90% actually played, or the end: the short counts as watched.
+      watched: () => {
         const n = latest.current.currentNumber
         if (n !== null) latest.current.markWatched(n)
       },
@@ -122,11 +122,9 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
   function markWatched(n: number) {
     if (watched.includes(n)) return
     const nowWatched = [...watched, n]
-    const order = uploaded.map((s) => s.number)
-    const after = order.slice(order.indexOf(n) + 1).concat(order.slice(0, order.indexOf(n)))
-    const next = after.find((m) => !nowWatched.includes(m))
-    nextActionRef.current = 'cue'
-    patch({ watchedShorts: nowWatched, currentShort: next ?? n })
+    // Stay on the short just watched, so "Ask about this" is right there;
+    // the user moves on by picking the next short in the list.
+    patch({ watchedShorts: nowWatched, currentShort: n })
     if (track && sessionId && nowWatched.length === uploaded.length) {
       emitTrackComplete({ sessionId, trackTitle: track.title })
     }
@@ -136,7 +134,6 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
   })
 
   function select(s: ApologeticsShort) {
-    nextActionRef.current = 'load'
     patch({ currentShort: s.number })
   }
 

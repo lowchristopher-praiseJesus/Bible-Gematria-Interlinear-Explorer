@@ -416,9 +416,11 @@ real. References become explorer links via `wiki_refs.resolve_scripture_refs`.
 in `lib/modeData.ts`); picking one fetches the primer and opens the playlist
 (not at phone width; the chat shows an "Open the playlist" card).
 `ApologeticsTrackArtifact.tsx` plays shorts with the YouTube IFrame API
-(`lib/youtubePlayer.ts`; `youtube-nocookie.com`, `rel=0`; auto-advance cues the
-next short and never autoplays it), marks watched on end or "Mark watched",
-falls back to a "Watch on YouTube" link when a video can't play, and opens
+(`lib/youtubePlayer.ts`; `youtube-nocookie.com`, `rel=0`). A short counts as
+watched once 90% of it has actually played (`WATCHED_FRACTION`; playback is
+sampled each second and seeking ahead doesn't count) or when it ends, or via
+"Mark watched"; the panel then **stays on that short** so "Ask about this" is
+right there — it never moves on by itself. It falls back to a "Watch on YouTube" link when a video can't play, and opens
 further-reading refs as `interlinear` artifacts. Progress lives in the
 session's `modeParams` (`trackId`, `watchedShorts`, `currentShort`,
 `trackCompletePrompted`), so reloads and share links keep it. The panel talks
