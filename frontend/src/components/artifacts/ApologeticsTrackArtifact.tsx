@@ -159,7 +159,7 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
         <span className="shrink-0 text-sm text-[var(--color-text-secondary)]">{`${watched.length} / ${uploaded.length}`}</span>
       </div>
 
-      <div className="relative mx-auto aspect-[9/16] h-[55vh] max-w-full overflow-hidden rounded-lg bg-black">
+      <div className="relative mx-auto aspect-[9/16] h-[min(42vh,400px)] max-w-full shrink-0 overflow-hidden rounded-lg bg-black">
         <div className="h-full w-full [&>iframe]:h-full [&>iframe]:w-full">
           <div ref={hostRef} />
         </div>
@@ -197,34 +197,6 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
             </button>
           )}
         </div>
-        {current.further_reading.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
-            <span>Further reading:</span>
-            {current.further_reading.map((item, i) =>
-              item.refs.length > 0 ? (
-                item.refs.map((ref, j) => (
-                  <button
-                    key={`${i}-${j}`}
-                    className={CHIP}
-                    onClick={() => void openArtifact({ type: 'interlinear', label: `${ref} ▸`, params: { reference: ref } })}
-                  >
-                    {item.refs.length > 1 ? `${item.text} (${j + 1})` : item.text}
-                  </button>
-                ))
-              ) : (
-                // Plain items have no chip border, so a dot keeps neighbours apart.
-                [
-                  i > 0 && current.further_reading[i - 1].refs.length === 0 && (
-                    <span key={`${i}-sep`} aria-hidden="true">
-                      ·
-                    </span>
-                  ),
-                  <span key={i}>{item.text}</span>,
-                ]
-              )
-            )}
-          </div>
-        )}
       </div>
 
       <ul className="flex flex-col divide-y divide-[var(--color-theme-border)] border-t border-[var(--color-theme-border)]">
@@ -241,7 +213,7 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
           const body = (
             <>
               {icon}
-              <img src={s.thumbnail} alt="" className="h-10 w-[22px] shrink-0 rounded object-cover" loading="lazy" />
+              <img src={s.thumbnail} alt="" className="h-8 w-[18px] shrink-0 rounded object-cover" loading="lazy" />
               <span className="min-w-0 flex-1 truncate">{s.title}</span>
             </>
           )
@@ -249,14 +221,14 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
             <li key={s.number}>
               {s.youtube_id ? (
                 <button
-                  className={`flex w-full items-center gap-2 px-1 py-2 text-left text-sm hover:bg-[var(--color-surface-alt)] ${here ? 'font-semibold' : ''}`}
+                  className={`flex w-full items-center gap-2 px-1 py-1.5 text-left text-sm hover:bg-[var(--color-surface-alt)] ${here ? 'font-semibold' : ''}`}
                   aria-current={here ? 'true' : undefined}
                   onClick={() => select(s)}
                 >
                   {body}
                 </button>
               ) : (
-                <div className="flex items-center gap-2 px-1 py-2 text-sm opacity-50">
+                <div className="flex items-center gap-2 px-1 py-1.5 text-sm opacity-50">
                   {body}
                   <span className="shrink-0 text-xs">Coming soon</span>
                 </div>
@@ -265,6 +237,32 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
           )
         })}
       </ul>
+
+      {current.further_reading.length > 0 && (
+        <div className="flex flex-col gap-1.5 border-t border-[var(--color-theme-border)] pt-2 text-xs text-[var(--color-text-secondary)]">
+          <span>Further reading:</span>
+          {current.further_reading.some((item) => item.refs.length > 0) && (
+            <div className="flex flex-wrap gap-1.5">
+              {current.further_reading.flatMap((item, i) =>
+                item.refs.map((ref, j) => (
+                  <button
+                    key={`${i}-${j}`}
+                    className={CHIP}
+                    onClick={() => void openArtifact({ type: 'interlinear', label: `${ref} ▸`, params: { reference: ref } })}
+                  >
+                    {item.refs.length > 1 ? `${item.text} (${j + 1})` : item.text}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+          {current.further_reading.some((item) => item.refs.length === 0) && (
+            <ul className="list-disc space-y-0.5 pl-4">
+              {current.further_reading.map((item, i) => (item.refs.length === 0 ? <li key={i}>{item.text}</li> : null))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }

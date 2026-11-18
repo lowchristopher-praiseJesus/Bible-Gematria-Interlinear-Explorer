@@ -135,11 +135,17 @@ describe('ApologeticsTrackArtifact', () => {
     expect(screen.getByText('JAMA (1986)').tagName).not.toBe('BUTTON')
   })
 
-  it('separates neighbouring plain-text reading items', async () => {
+  it('lists plain-text reading items as separate list items', async () => {
     render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
-    const first = await screen.findByText('JAMA (1986)')
-    expect(first.nextElementSibling?.textContent).toBe('·')
-    expect(first.nextElementSibling?.nextElementSibling?.textContent).toBe('Strauss (1864)')
+    expect((await screen.findByText('JAMA (1986)')).tagName).toBe('LI')
+    expect(screen.getByText('Strauss (1864)').tagName).toBe('LI')
+  })
+
+  it('puts the playlist before further reading', async () => {
+    render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    const row = await screen.findByRole('button', { name: /Name One Witness To Jesus Resurrection/ })
+    const reading = screen.getByText('Further reading:')
+    expect(row.compareDocumentPosition(reading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('falls back when the player errors', async () => {
