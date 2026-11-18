@@ -15,7 +15,7 @@ interface YTApi {
       videoId: string
       host: string
       playerVars: Record<string, number>
-      events: { onStateChange(e: { data: number }): void; onError(): void }
+      events: { onReady(): void; onStateChange(e: { data: number }): void; onError(): void }
     }
   ) => YTPlayer
   PlayerState: { ENDED: number }
@@ -78,20 +78,34 @@ export async function createPlayer(
   on: { ended(): void; error(): void }
 ): Promise<ShortPlayer> {
   const YT = await loadYouTubeApi()
-  const player = new YT.Player(el, {
-    videoId,
-    host: 'https://www.youtube-nocookie.com',
-    playerVars: { rel: 0, playsinline: 1 },
-    events: {
-      onStateChange: (e) => {
-        if (e.data === YT.PlayerState.ENDED) on.ended()
+  // The player's methods (loadVideoById, cueVideoById) exist only after its
+  // iframe has finished loading, so resolve on onReady, not on construction.
+  // A player that never gets ready (iframe blocked or too slow) is an error.
+  return new Promise<ShortPlayer>((resolve, reject) => {
+    let player: YTPlayer | null = null
+    const timer = window.setTimeout(() => {
+      player?.destroy()
+      reject(new Error('YouTube player never became ready'))
+    }, LOAD_TIMEOUT_MS)
+    player = new YT.Player(el, {
+      videoId,
+      host: 'https://www.youtube-nocookie.com',
+      playerVars: { rel: 0, playsinline: 1 },
+      events: {
+        onReady: () => {
+          window.clearTimeout(timer)
+          const p = player!
+          resolve({
+            load: (id) => p.loadVideoById(id),
+            cue: (id) => p.cueVideoById(id),
+            destroy: () => p.destroy(),
+          })
+        },
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.ENDED) on.ended()
+        },
+        onError: () => on.error(),
       },
-      onError: () => on.error(),
-    },
+    })
   })
-  return {
-    load: (id) => player.loadVideoById(id),
-    cue: (id) => player.cueVideoById(id),
-    destroy: () => player.destroy(),
-  }
 }

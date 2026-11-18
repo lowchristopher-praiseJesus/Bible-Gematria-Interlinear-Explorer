@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApologeticsTrackArtifact } from './ApologeticsTrackArtifact'
 import { onAsk, onTrackComplete } from '@/lib/apologeticsEvents'
@@ -9,12 +10,17 @@ import type { ApologeticsTrack, ModeParams, Session } from '@/types/session'
 const player = { load: vi.fn(), cue: vi.fn(), destroy: vi.fn() }
 let callbacks: { ended(): void; error(): void } | null = null
 let createVideoId: string | null = null
+// 'now' resolves at once; 'held' waits for release(); 'fail' rejects.
+let creation: 'now' | 'held' | 'fail' = 'now'
+let release: (() => void) | null = null
 
 vi.mock('@/lib/youtubePlayer', () => ({
-  createPlayer: vi.fn(async (_el: HTMLElement, videoId: string, on: { ended(): void; error(): void }) => {
+  createPlayer: vi.fn((_el: HTMLElement, videoId: string, on: { ended(): void; error(): void }) => {
     callbacks = on
     createVideoId = videoId
-    return player
+    if (creation === 'fail') return Promise.reject(new Error('blocked'))
+    if (creation === 'held') return new Promise((r) => { release = () => r(player) })
+    return Promise.resolve(player)
   }),
 }))
 
@@ -50,7 +56,10 @@ describe('ApologeticsTrackArtifact', () => {
   beforeEach(() => {
     callbacks = null
     createVideoId = null
+    creation = 'now'
+    release = null
     player.load.mockClear()
+    player.destroy.mockClear()
     player.cue.mockClear()
     showSession({ trackId: 'jesus-rose', watchedShorts: [] })
   })
@@ -147,6 +156,47 @@ describe('ApologeticsTrackArtifact', () => {
     render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
     expect(await screen.findByText('1 / 2')).toBeInTheDocument()
     await waitFor(() => expect(createVideoId).toBe('yt6'))
+  })
+
+  it('shows a short picked while the player was still loading', async () => {
+    creation = 'held'
+    render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    await waitFor(() => expect(createVideoId).toBe('yt5'))
+    fireEvent.click(screen.getByRole('button', { name: /Name One Witness To Jesus Resurrection/ }))
+    await act(async () => release!())
+    expect(player.load).toHaveBeenCalledWith('yt6')
+  })
+
+  it('destroys a player that finishes loading after the panel closed', async () => {
+    creation = 'held'
+    const { unmount } = render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    await waitFor(() => expect(createVideoId).toBe('yt5'))
+    unmount()
+    await act(async () => release!())
+    expect(player.destroy).toHaveBeenCalled()
+  })
+
+  it('offers YouTube for every short when the player cannot load at all', async () => {
+    creation = 'fail'
+    render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    expect(await screen.findByRole('link', { name: 'Watch on YouTube' })).toHaveAttribute('href', 'https://www.youtube.com/shorts/yt5')
+    fireEvent.click(screen.getByRole('button', { name: /Name One Witness To Jesus Resurrection/ }))
+    expect(screen.getByRole('link', { name: 'Watch on YouTube' })).toHaveAttribute('href', 'https://www.youtube.com/shorts/yt6')
+    fireEvent.click(screen.getByRole('button', { name: 'Mark watched' }))
+    expect(params().watchedShorts).toEqual([6])
+  })
+
+  it('creates one usable player under StrictMode', async () => {
+    creation = 'held'
+    const { createPlayer } = await import('@/lib/youtubePlayer')
+    vi.mocked(createPlayer).mockClear()
+    render(<StrictMode><ApologeticsTrackArtifact trackId="jesus-rose" /></StrictMode>)
+    await waitFor(() => expect(createVideoId).toBe('yt5'))
+    await act(async () => release!())
+    expect(createPlayer).toHaveBeenCalledTimes(1)
+    expect(player.destroy).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /Name One Witness To Jesus Resurrection/ }))
+    expect(player.load).toHaveBeenCalledWith('yt6')
   })
 
   it('renders unavailable track', async () => {

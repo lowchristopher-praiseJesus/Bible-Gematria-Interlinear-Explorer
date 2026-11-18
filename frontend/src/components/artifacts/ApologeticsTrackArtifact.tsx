@@ -58,26 +58,35 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
   const shownIdRef = useRef<string | null>(null)
   const nextActionRef = useRef<'load' | 'cue'>('cue')
   const [errorFor, setErrorFor] = useState<number | null>(null)
+  // The player could not be created at all (API or iframe blocked): every
+  // short gets the "Watch on YouTube" fallback, not just the first.
+  const [playerUnavailable, setPlayerUnavailable] = useState(false)
+  const unmountedRef = useRef(false)
   const currentId = current?.youtube_id ?? null
   const currentNumber = current?.number ?? null
   // Callbacks registered with the player read the latest render through this.
-  const latest = useRef<{ markWatched: (n: number) => void; currentNumber: number | null }>({
+  const latest = useRef<{ markWatched: (n: number) => void; currentNumber: number | null; currentId: string | null }>({
     markWatched: () => {},
     currentNumber,
+    currentId,
   })
+
+  // Show `id` in a ready player with the pending action (cue after an
+  // auto-advance, load after the user picked a row).
+  function show(player: ShortPlayer, id: string) {
+    if (shownIdRef.current === id) return
+    player[nextActionRef.current](id)
+    shownIdRef.current = id
+  }
 
   useEffect(() => {
     if (!currentId || !hostRef.current) return
     if (playerRef.current) {
-      if (shownIdRef.current !== currentId) {
-        playerRef.current[nextActionRef.current](currentId)
-        shownIdRef.current = currentId
-      }
+      show(playerRef.current, currentId)
       return
     }
     if (shownIdRef.current) return // creation already in flight
     shownIdRef.current = currentId
-    const created = currentNumber
     createPlayer(hostRef.current, currentId, {
       ended: () => {
         const n = latest.current.currentNumber
@@ -86,13 +95,28 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
       error: () => setErrorFor(latest.current.currentNumber),
     }).then(
       (p) => {
+        if (unmountedRef.current) {
+          p.destroy()
+          return
+        }
         playerRef.current = p
+        // The user may have picked another short while it was loading.
+        if (latest.current.currentId) show(p, latest.current.currentId)
       },
-      () => setErrorFor(created)
+      () => {
+        if (!unmountedRef.current) setPlayerUnavailable(true)
+      }
     )
   }, [currentId, currentNumber])
 
-  useEffect(() => () => playerRef.current?.destroy(), [])
+  useEffect(() => {
+    // Reset on (re)mount: StrictMode runs this cleanup once in development.
+    unmountedRef.current = false
+    return () => {
+      unmountedRef.current = true
+      playerRef.current?.destroy()
+    }
+  }, [])
 
   // --- actions ------------------------------------------------------------
   function markWatched(n: number) {
@@ -108,7 +132,7 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
     }
   }
   useEffect(() => {
-    latest.current = { markWatched, currentNumber }
+    latest.current = { markWatched, currentNumber, currentId }
   })
 
   function select(s: ApologeticsShort) {
@@ -139,7 +163,7 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
         <div className="h-full w-full [&>iframe]:h-full [&>iframe]:w-full">
           <div ref={hostRef} />
         </div>
-        {errorFor === current.number && (
+        {(playerUnavailable || errorFor === current.number) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/90 p-4 text-center text-sm text-white">
             <p>This short can't play here.</p>
             <a
