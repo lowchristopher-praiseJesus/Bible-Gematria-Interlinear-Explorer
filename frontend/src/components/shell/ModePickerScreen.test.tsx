@@ -27,26 +27,15 @@ describe('ModePickerScreen', () => {
     return Object.values(useSessionsStore.getState().sessions)[0]
   }
 
-  it('shows all four mode cards plus Ask Anything', () => {
+  it('shows the mode cards, and no Ask Anything button (the chat box does that)', () => {
     render(<ModePickerScreen onSessionStarted={() => {}} />)
     expect(screen.getByRole('button', { name: /bible in a year/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /parable study/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /verse of the day/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /topical study/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /socratic study/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /ask anything/i })).toBeInTheDocument()
-  })
-
-  it('selecting Ask Anything posts it as the user turn and starts a freeform session immediately', async () => {
-    vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
-    const onSessionStarted = vi.fn()
-    render(<ModePickerScreen onSessionStarted={onSessionStarted} />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
-    expect(onSessionStarted).toHaveBeenCalled()
-    const session = firstSession()
-    expect(session.mode).toBe('freeform')
-    expect(session.messages[0]).toMatchObject({ role: 'user', text: '💬 Ask Anything' })
-    expect(session.messages[1]).toMatchObject({ role: 'assistant', text: 'Ask me anything.' })
+    expect(screen.queryByRole('button', { name: /ask anything/i })).toBeNull()
+    expect(screen.getByRole('textbox')).toBeInTheDocument()
   })
 
   it('selecting Bible in a Year posts it as the user turn and offers the plan choice inline', async () => {

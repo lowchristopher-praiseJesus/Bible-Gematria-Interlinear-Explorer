@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowUp, BookHeart, BookMarked, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Shield, Sparkles, Sprout, Tent, UserRound, Wand2 } from 'lucide-react'
+import { ArrowUp, BookHeart, BookMarked, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, Search, Shield, Sparkles, Sprout, Tent, UserRound, Wand2 } from 'lucide-react'
 import { fetchPassagesStatus, postChat, postChatStream } from '@/lib/chatApi'
 import { apologeticsTrackChoice, listApologeticsTracks, listParables, listStudyWikis } from '@/lib/modeData'
 import { useArtifactStore } from '@/store/useArtifactStore'
@@ -359,9 +359,6 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
             onClick={() => startSession('tabernacle', '⛺ Walk the Tabernacle', {})}
           >
             <Tent className="h-4 w-4 shrink-0" aria-hidden="true" /> Walk the Tabernacle
-          </button>
-          <button className={STARTER_BUBBLE} onClick={() => startSession('freeform', '💬 Ask Anything', {})}>
-            <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Ask Anything
           </button>
         </div>
       </div>
