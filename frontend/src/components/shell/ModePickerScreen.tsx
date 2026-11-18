@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ArrowUp, BookHeart, BookMarked, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Sparkles, Sprout, Tent, UserRound, Wand2 } from 'lucide-react'
+import { ArrowUp, BookHeart, BookMarked, BookOpen, CalendarDays, HelpCircle, Layers, Loader2, MessageCircle, Search, Shield, Sparkles, Sprout, Tent, UserRound, Wand2 } from 'lucide-react'
 import { fetchPassagesStatus, postChat, postChatStream } from '@/lib/chatApi'
-import { listParables, listStudyWikis } from '@/lib/modeData'
+import { apologeticsTrackChoice, listApologeticsTracks, listParables, listStudyWikis } from '@/lib/modeData'
 import { useArtifactStore } from '@/store/useArtifactStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
@@ -340,6 +340,20 @@ export function ModePickerScreen({ onSessionStarted }: Props) {
               <BookMarked className="h-4 w-4 shrink-0" aria-hidden="true" /> Find passages
             </button>
           )}
+          <button
+            className={STARTER_BUBBLE}
+            title="Be ready always to give an answer — 1 Peter 3:15"
+            onClick={() =>
+              startWithFetchedChoices(
+                'apologetics',
+                '🛡️ Defend the Faith',
+                'Be ready always to give an answer (1 Peter 3:15). Which question would you like to work through?',
+                async () => (await listApologeticsTracks()).map(apologeticsTrackChoice)
+              )
+            }
+          >
+            <Shield className="h-4 w-4 shrink-0" aria-hidden="true" /> Defend the Faith
+          </button>
           <button
             className={STARTER_BUBBLE}
             onClick={() => startSession('tabernacle', '⛺ Walk the Tabernacle', {})}
