@@ -188,7 +188,15 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
                   </button>
                 ))
               ) : (
-                <span key={i}>{item.text}</span>
+                // Plain items have no chip border, so a dot keeps neighbours apart.
+                [
+                  i > 0 && current.further_reading[i - 1].refs.length === 0 && (
+                    <span key={`${i}-sep`} aria-hidden="true">
+                      ·
+                    </span>
+                  ),
+                  <span key={i}>{item.text}</span>,
+                ]
               )
             )}
           </div>

@@ -25,7 +25,7 @@ const TRACKS: ApologeticsTrack[] = [
     blurb: 'b',
     shorts: [
       { number: 5, title: 'Did Jesus Really Die on the Cross?', youtube_id: 'yt5', thumbnail: '/t/05.jpg',
-        further_reading: [{ text: 'John 19:31–37', refs: ['JHN 19:31-37'] }, { text: 'JAMA (1986)', refs: [] }] },
+        further_reading: [{ text: 'John 19:31–37', refs: ['JHN 19:31-37'] }, { text: 'JAMA (1986)', refs: [] }, { text: 'Strauss (1864)', refs: [] }] },
       { number: 6, title: 'Name One Witness To Jesus Resurrection', youtube_id: 'yt6', thumbnail: '/t/06.jpg', further_reading: [] },
       { number: 50, title: 'Subject 50', youtube_id: null, thumbnail: '/t/50.jpg', further_reading: [] },
     ],
@@ -124,6 +124,13 @@ describe('ApologeticsTrackArtifact', () => {
       type: 'interlinear', label: 'JHN 19:31-37 ▸', params: { reference: 'JHN 19:31-37' },
     })
     expect(screen.getByText('JAMA (1986)').tagName).not.toBe('BUTTON')
+  })
+
+  it('separates neighbouring plain-text reading items', async () => {
+    render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    const first = await screen.findByText('JAMA (1986)')
+    expect(first.nextElementSibling?.textContent).toBe('·')
+    expect(first.nextElementSibling?.nextElementSibling?.textContent).toBe('Strauss (1864)')
   })
 
   it('falls back when the player errors', async () => {
