@@ -20,15 +20,24 @@ describe('App', () => {
     vi.restoreAllMocks()
   })
 
+  // Starts a freeform conversation the way users do: a question typed into
+  // the start page's chat box (there is no Ask Anything button).
+  async function askFromStartPage() {
+    vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
+    await userEvent.type(screen.getByPlaceholderText(/ask about a verse, word, or theme/i), 'What is grace?')
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+  }
+
   it('shows the mode picker when there is no active session', () => {
     render(<App />)
-    expect(screen.getByRole('button', { name: /ask anything/i })).toBeInTheDocument()
+    expect(screen.getByText(/start a guided study below/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/ask about a verse, word, or theme/i)).toBeInTheDocument()
   })
 
   it('starting a session shows the chat plus the (empty) detail panel', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     expect(await screen.findByText('Ask me anything.')).toBeInTheDocument()
     expect(screen.getByText(/click a link in the chat/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new session/i })).toBeInTheDocument()
@@ -92,7 +101,7 @@ describe('App', () => {
   it('the top-bar New chat button returns to the mode picker', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
 
     await userEvent.click(screen.getByRole('button', { name: 'New chat' }))
@@ -108,7 +117,7 @@ describe('App', () => {
   it('in a mode, the top-left back arrow returns to the start page', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
 
     const backs = screen.getAllByRole('button', { name: 'Back to start page', hidden: true })
@@ -123,7 +132,7 @@ describe('App', () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
 
     useArtifactStore.getState().openArtifact({ type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } })
@@ -138,7 +147,7 @@ describe('App', () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     vi.spyOn(chatApi, 'fetchStrongsEntry').mockResolvedValue({ definition: null, verses: [], resultSummary: '' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
     useArtifactStore.getState().openArtifact({ type: 'strongs', label: "Strong's ▸", params: { id: 'G26' } })
 
@@ -151,7 +160,7 @@ describe('App', () => {
   it('selecting a session from the drawer closes the drawer', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
 
     // A second session, created directly on the store, gives the list a
@@ -172,7 +181,7 @@ describe('App', () => {
   it('opening a note brings the detail sheet forward', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
     const sid = useSessionsStore.getState().activeSessionId!
     const note = useSessionsStore.getState().addNote(sid, 'a note')!
@@ -188,7 +197,7 @@ describe('App', () => {
   it('a note belonging to the newly selected session survives the switch', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
     const other = useSessionsStore.getState().createSession('topic', { conceptSlug: 'grace' })
     const note = useSessionsStore.getState().addNote(other.id, 'carry me over')!
@@ -208,7 +217,7 @@ describe('App', () => {
   it('switching the active session resets the artifact store to idle', async () => {
     vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Ask me anything.' })
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /ask anything/i }))
+    await askFromStartPage()
     await screen.findByText('Ask me anything.')
 
     useArtifactStore.setState({
