@@ -170,6 +170,12 @@ describe('chatApi', () => {
     await expect(postChat({ message: 'hi' })).rejects.toThrow(/500/)
   })
 
+  it('toWireModeParams maps the Defend the Faith params', () => {
+    expect(
+      toWireModeParams({ trackId: 'jesus-rose', watchedShorts: [3, 4], currentShort: 5, trackCompletePrompted: true })
+    ).toEqual({ track_id: 'jesus-rose', watched_shorts: [3, 4], current_short: 5, track_complete_prompted: true })
+  })
+
   it('toWireModeParams maps tabernacleSpot to tabernacle_spot', () => {
     expect(toWireModeParams({ tabernacleSpot: 'ark' })).toEqual({ tabernacle_spot: 'ark' })
   })

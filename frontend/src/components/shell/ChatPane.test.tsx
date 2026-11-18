@@ -12,7 +12,8 @@ import type { ChatApiResponse } from '@/lib/chatApi'
 import * as shareApi from '@/lib/shareApi'
 import * as voiceModule from './useVoiceMode'
 import * as bridge from '@/lib/tabernacleBridge'
-import type { PhaseResult } from '@/types/session'
+import { emitAsk, emitTrackComplete } from '@/lib/apologeticsEvents'
+import type { ModeParams, PhaseResult } from '@/types/session'
 
 describe('ChatPane', () => {
   beforeEach(() => {
@@ -2052,6 +2053,81 @@ describe('ChatPane', () => {
       await new Promise((r) => setTimeout(r, 20))
       expect(useSessionsStore.getState().sessions[session.id].modeParams.tabernacleSpot).toBeUndefined()
       expect(spy).not.toHaveBeenCalled()
+    })
+  })
+  describe('Defend the Faith', () => {
+    const trackLink = { type: 'apologetics_track' as const, label: 'Did Jesus rise?', params: { trackId: 'jesus-rose' } }
+
+    it('picking a track fetches the primer and opens the playlist', async () => {
+      const session = useSessionsStore.getState().createSession('apologetics', {})
+      useSessionsStore.getState().appendMessage(session.id, {
+        id: 'p1', role: 'assistant', text: 'Which question?', choicesStatus: 'ready',
+        choices: [{ label: 'Did Jesus rise? — 4 shorts', modeParams: { trackId: 'jesus-rose', watchedShorts: [] } }],
+      })
+      const postChat = vi.spyOn(chatApi, 'postChat').mockResolvedValue({ type: 'chat', message: 'Watch each short…', artifacts: [trackLink] })
+      const open = vi.fn()
+      useArtifactStore.setState({ openArtifact: open } as never)
+      render(<ChatPane sessionId={session.id} />)
+      await userEvent.click(screen.getByRole('button', { name: 'Did Jesus rise? — 4 shorts' }))
+      await waitFor(() => expect(open).toHaveBeenCalledWith(trackLink))
+      expect(postChat).toHaveBeenCalledWith({ message: '', mode: 'apologetics', mode_params: { trackId: 'jesus-rose', watchedShorts: [] } })
+    })
+
+    it('shows the playlist artifact as an "Open the playlist" card', async () => {
+      const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose' })
+      useSessionsStore.getState().appendMessage(session.id, { id: 'm1', role: 'assistant', text: 'Intro', artifacts: [trackLink] })
+      const open = vi.fn()
+      useArtifactStore.setState({ openArtifact: open } as never)
+      render(<ChatPane sessionId={session.id} />)
+      await userEvent.click(screen.getByRole('button', { name: /open the playlist/i }))
+      expect(open).toHaveBeenCalledWith(trackLink)
+    })
+
+    it('ask event sends the titled question with currentShort', async () => {
+      const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose', watchedShorts: [5] })
+      const spy = vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'He died.' })
+      render(<ChatPane sessionId={session.id} />)
+      act(() => emitAsk({ sessionId: session.id, shortNumber: 5, title: 'Did Jesus Really Die on the Cross?' }))
+      expect(await screen.findByText('Tell me more about "Did Jesus Really Die on the Cross?".')).toBeInTheDocument()
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+      expect((spy.mock.calls[0][0] as { mode_params: ModeParams }).mode_params)
+        .toMatchObject({ trackId: 'jesus-rose', currentShort: 5, watchedShorts: [5] })
+    })
+
+    it('ignores ask while busy, and asks for another session', async () => {
+      const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose' })
+      let resolve!: (v: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void
+      const spy = vi.spyOn(chatApi, 'postChatStream').mockReturnValue(new Promise((r) => { resolve = r }))
+      render(<ChatPane sessionId={session.id} />)
+      act(() => emitAsk({ sessionId: 'other', shortNumber: 5, title: 'X' }))
+      act(() => emitAsk({ sessionId: session.id, shortNumber: 5, title: 'X' }))
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+      act(() => emitAsk({ sessionId: session.id, shortNumber: 6, title: 'Y' }))
+      await new Promise((r) => setTimeout(r, 20))
+      expect(spy).toHaveBeenCalledTimes(1)
+      await act(async () => resolve({ type: 'chat', message: 'ok' }))
+    })
+
+    it('track complete posts the prompt once', async () => {
+      const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose' })
+      render(<ChatPane sessionId={session.id} />)
+      act(() => emitTrackComplete({ sessionId: session.id, trackTitle: 'Did Jesus rise?' }))
+      act(() => emitTrackComplete({ sessionId: session.id, trackTitle: 'Did Jesus rise?' }))
+      const s = useSessionsStore.getState().sessions[session.id]
+      expect(s.modeParams.trackCompletePrompted).toBe(true)
+      const prompts = s.messages.filter((m) => m.text.startsWith("You've finished"))
+      expect(prompts).toHaveLength(1)
+      expect(prompts[0].text).toBe("You've finished **Did Jesus rise?**. Want to talk through the whole track?")
+      expect(prompts[0].followUpQuestions).toEqual([
+        'Discuss the whole track', 'How do these arguments fit together?', 'Which objection is hardest to answer?',
+      ])
+    })
+
+    it('does not prompt twice', () => {
+      const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose', trackCompletePrompted: true })
+      render(<ChatPane sessionId={session.id} />)
+      act(() => emitTrackComplete({ sessionId: session.id, trackTitle: 'Did Jesus rise?' }))
+      expect(useSessionsStore.getState().sessions[session.id].messages).toHaveLength(0)
     })
   })
 })

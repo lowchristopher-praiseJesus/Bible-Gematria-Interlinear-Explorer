@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Optional conversation ID for context")
     history: Optional[List["HistoryMessage"]] = Field(None, description="Recent conversation turns for context")
     page_context: Optional[str] = Field(None, description="Verse reference currently displayed on the Explorer page (e.g. 'John 3:16')")
-    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, socratic, hermeneutics, character, freeform, passages")
+    mode: Optional[str] = Field(None, description="Study mode: reading_plan, parable, verse, topic, devotional, socratic, hermeneutics, character, freeform, passages, tabernacle, apologetics")
     mode_params: Optional[Dict[str, Any]] = Field(None, description="Mode-specific parameters, e.g. {'plan': 'chronological', 'day_index': 0} or, for character mode, {'character_id': 'david'}")
     use_openai_llm: Optional[bool] = Field(
         None,
@@ -109,6 +109,30 @@ class CharacterEntry(BaseModel):
 
 class CharactersResponse(BaseModel):
     characters: List[CharacterEntry] = Field(..., description="Characters available for Chat with a Character mode")
+
+
+class ApologeticsReading(BaseModel):
+    text: str = Field(..., description="The further-reading item as written, e.g. '1 Corinthians 15:3–7'")
+    refs: List[str] = Field(..., description="USFM refs it opens, e.g. ['1CO 15:3-7']; [] for a non-Scripture item")
+
+
+class ApologeticsShort(BaseModel):
+    number: int = Field(..., description="Series number (internal; never shown)")
+    title: str = Field(..., description="The short's title on YouTube")
+    youtube_id: Optional[str] = Field(None, description="YouTube video id; null = not uploaded yet")
+    thumbnail: str = Field(..., description="Thumbnail path under the web root")
+    further_reading: List[ApologeticsReading]
+
+
+class ApologeticsTrack(BaseModel):
+    id: str
+    title: str
+    blurb: str
+    shorts: List[ApologeticsShort]
+
+
+class ApologeticsTracksResponse(BaseModel):
+    tracks: List[ApologeticsTrack] = Field(..., description="Defend the Faith tracks with at least one uploaded short")
 
 
 class SSEChunk(BaseModel):

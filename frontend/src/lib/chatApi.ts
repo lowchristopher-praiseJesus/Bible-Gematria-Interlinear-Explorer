@@ -36,7 +36,8 @@ interface ChatPayload {
  *  explainPhases -> explain_phases, characterId -> character_id,
  *  storyThemes -> story_themes, storyDigest -> story_digest, storySelectedThemeIds -> story_selected_theme_ids,
  *  storyAgeRange -> story_age_range, storySourceMessages -> source_messages,
- *  tabernacleSpot -> tabernacle_spot).
+ *  tabernacleSpot -> tabernacle_spot, trackId -> track_id, watchedShorts -> watched_shorts,
+ *  currentShort -> current_short, trackCompletePrompted -> track_complete_prompted).
  * Unknown keys pass through unchanged so the mapper stays forward-compatible.
  */
 export function toWireModeParams(params: ModeParams): Record<string, unknown> {
@@ -94,6 +95,18 @@ export function toWireModeParams(params: ModeParams): Record<string, unknown> {
         break
       case 'tabernacleSpot':
         out.tabernacle_spot = value
+        break
+      case 'trackId':
+        out.track_id = value
+        break
+      case 'watchedShorts':
+        out.watched_shorts = value
+        break
+      case 'currentShort':
+        out.current_short = value
+        break
+      case 'trackCompletePrompted':
+        out.track_complete_prompted = value
         break
       case 'storySourceMessages':
         out.source_messages = value

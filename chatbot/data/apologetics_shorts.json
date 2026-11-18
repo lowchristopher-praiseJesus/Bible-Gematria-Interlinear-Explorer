@@ -1,0 +1,499 @@
+{
+  "tracks": [
+    {
+      "id": "bible-reliable",
+      "title": "Is the Bible reliable?",
+      "blurb": "How we know the Gospels are early, faithfully copied, grounded in real places, and honest eyewitness accounts.",
+      "shorts": [
+        1,
+        2,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "jesus-rose",
+      "title": "Did Jesus rise?",
+      "blurb": "Why the disciples' transformation, the death on the cross, and the eyewitnesses point to a real resurrection.",
+      "shorts": [
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": "morality",
+      "title": "Where does morality come from?",
+      "blurb": "Why right and wrong can't be decided by vote, contract or chemistry, and what that says about God.",
+      "shorts": [
+        9,
+        10,
+        11,
+        12,
+        13
+      ]
+    }
+  ],
+  "shorts": {
+    "1": {
+      "number": 1,
+      "subject": "Historical Reliability",
+      "title": "Historical Reliability Of the Bible",
+      "youtube_id": "3hl-YcJKQkk",
+      "summary": "A professor calls the Gospels \"legends\" because they were written decades after Jesus… then holds up his favorite biography of Alexander the Great as \"real history.\"\n\nOne student checked the dates. 👀\n\n🏛️ Alexander the Great died in 323 BC. Our earliest surviving history of him (Diodorus) came nearly 300 years later, and the one historians trust most (Arrian) came 400+ years later.\n✝️ Paul's letters were written within 20–30 years of the cross, quoting a resurrection creed many scholars date to within a few years of the events. Mark followed within about 40 years, and all four Gospels within a single lifetime, while eyewitnesses were still alive.\n\nIf 400 years is good enough for Alexander… 40 is good enough for Jesus.\n\nWould you hold both books to the same standard? Tell me below 👇",
+      "fiction_note": null,
+      "script": "A professor told his class the Gospels can't be trusted. Too late, he said. Written decades after Jesus died. Basically legends.\n\nThen he held up his favorite book: a biography of Alexander the Great. He tapped the cover. \"This is real history.\"\n\nAlexander died in 323 BC. And the whole lecture hall nodded along.\n\nOne student raised her hand. \"Sir, when was that written?\" He laughed. \"Doesn't matter.\" And the class laughed with him.\n\nThat night, she checked.\n\nThe earliest surviving history of Alexander was written nearly three hundred years after he died. The one historians trust most, by Arrian, came more than four hundred years later.\n\nNow, Jesus. Paul's letters were written within twenty to thirty years of the cross. He even quotes a resurrection creed many scholars date to within a few years. Mark's Gospel follows within about forty years. All four, within one lifetime.\n\nYou see, that early, the eyewitnesses were still alive. Fishermen. Neighbors. Enemies. Invent a miracle, and someone would stand up and say: that never happened.\n\nNext morning, she put both books on his desk. Four hundred years. Forty.\n\nIf four hundred years is good enough for Alexander... forty is good enough for Jesus.\n",
+      "further_reading": [
+        {
+          "text": "1 Corinthians 15:3–7",
+          "refs": [
+            "1CO 15:3-7"
+          ]
+        },
+        {
+          "text": "Arrian, \"Anabasis of Alexander\"",
+          "refs": []
+        },
+        {
+          "text": "Diodorus Siculus, \"Library of History\" Book 17",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/01.jpg"
+    },
+    "2": {
+      "number": 2,
+      "subject": "Manuscript Integrity",
+      "title": "Why The Bible Is Accurately Translated",
+      "youtube_id": "TIFHMjGjXA4",
+      "summary": "A TV host lines up ten people to prove the Bible is just a game of telephone. \"Jesus rose from the dead\" comes out the other end as \"Cheese grows on a red bed.\" 😂\n\nThen a stagehand asks to try it her way…\n\nTelephone only works with ONE line, one whisper at a time, and no way to check the original. But the New Testament spread in every direction at once, to Egypt, Syria, Rome and Greece, copied by different hands in different lands.\n\n📜 Today scholars have over 5,000 Greek manuscripts of the New Testament, some fragments within a century or two of the originals.\n🔍 Line them up and the copying slips (spelling, swapped words) stand out and cancel each other out.\n📖 Modern Bibles aren't translated English → Latin → German. They go straight back to the Greek.\n\nHis game had one line. The Bible has thousands.\n\nDid you think the Bible was a game of telephone? Comment below 👇",
+      "fiction_note": null,
+      "script": "A TV host lined up ten people to prove the Bible is just a game of telephone.\n\nHe whispered, \"Jesus rose from the dead.\" By the tenth person, it came out: \"Cheese grows on a red bed.\"\n\nThe audience howled. \"Two thousand years of whispers,\" he said. \"That's your Bible.\"\n\nThen a stagehand raised her hand. \"Can I try it my way?\" He laughed and handed her the mic.\n\nShe split the room into five separate lines. Same message, whispered down all five at once.\n\nEvery line garbled something. But never the same thing. Put the five endings side by side, and the original sentence falls right out.\n\nYou see, telephone only works with one line, one whisper at a time, and no way to check. The New Testament spread in every direction at once. Egypt. Syria. Rome. Greece. Copies in different hands, in different lands.\n\nToday scholars hold over five thousand Greek manuscripts. Some fragments date within a century or two of the originals. Line them up, and the slips stand out. Spelling. Swapped words. They cancel each other out.\n\nAnd modern Bibles don't go English to Latin to German. They go straight back to the Greek.\n\nThe host looked at her five lines. Then at his one.\n\nHis game had one line. The Bible has thousands.\n",
+      "further_reading": [
+        {
+          "text": "textual criticism of the New Testament",
+          "refs": []
+        },
+        {
+          "text": "the Greek manuscript tradition (papyri, uncials, minuscules)",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/02.jpg"
+    },
+    "3": {
+      "number": 3,
+      "subject": "The Resurrection",
+      "title": "Nobody Dies for a Lie They Invented",
+      "youtube_id": "a4ASuGSh-Ek",
+      "summary": "A Roman magistrate brags he can make any liar confess before sundown. A counterfeiter takes one look at the whip and spills everything. 💰\n\nThen they drag in a group of fishermen who claim their executed teacher is ALIVE: that they touched him and ate breakfast with him on the shore.\n\n\"Fanatics,\" he smirks. \"People die for crazy beliefs all the time.\"\n\nBut there's a difference:\n🔥 A fanatic dies for something someone else told him. He sincerely believes it.\n👁️ The apostles weren't repeating a rumor. They claimed they saw it with their own eyes. If it was a lie, they'd KNOW, because they'd be the ones who made it up.\n\nOffered freedom if they'd just say \"it never happened,\" they were beaten, jailed… and sang in their chains.\n⚔️ James, by the sword. Peter, in Rome. James, the brother of Jesus, stoned in Jerusalem. Not one of them is ever recorded taking it back.\n\nPeople will die for a lie they believe. Nobody dies for a lie they invented.\n\nCould you hold out if you knew it was a lie? 👇",
+      "fiction_note": "(The magistrate is a fictional character representing the Roman authorities.)",
+      "script": "A Roman magistrate bragged he could make any liar confess before sundown.\n\nHe'd seen it a hundred times. A counterfeiter took one look at the whip and spilled everything. The guards laughed. \"Liars lie for money,\" he said. \"For power. The moment it costs them, they fold.\"\n\nThen they dragged in a group of fishermen.\n\nTheir crime? They kept saying their executed teacher was alive. That they'd touched him. Eaten breakfast with him on the shore.\n\nThe magistrate smirked. \"Fanatics. People die for crazy beliefs all the time.\"\n\nYou see, there's a difference.\n\nA fanatic dies for something someone else told him. He sincerely believes it.\n\nThese men weren't repeating a rumor. They claimed they saw it with their own eyes. If it was a lie, they'd know it. Because they'd be the ones who made it up.\n\nSo he offered the deal every liar takes. \"Just say it never happened, and you walk free.\"\n\nThey were beaten. Jailed. And that night, in chains, they sang.\n\nJames, by the sword. Peter, in Rome. James, the brother of Jesus, stoned in Jerusalem. Not one of them is ever recorded taking it back.\n\nThe magistrate stared at his list of confessions. Every name on it had cracked. Except these.\n\nPeople will die for a lie they believe.\n\nNobody dies for a lie they invented.\n",
+      "further_reading": [
+        {
+          "text": "Acts 5 & 12",
+          "refs": [
+            "ACT 5:1",
+            "ACT 12:1"
+          ]
+        },
+        {
+          "text": "Acts 16:25",
+          "refs": [
+            "ACT 16:25"
+          ]
+        },
+        {
+          "text": "1 Clement 5",
+          "refs": []
+        },
+        {
+          "text": "Josephus, Antiquities 20.9.1",
+          "refs": []
+        },
+        {
+          "text": "John 21",
+          "refs": [
+            "JHN 21:1"
+          ]
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/03.jpg"
+    },
+    "4": {
+      "number": 4,
+      "subject": "Psychological Transformation",
+      "title": "Evidence that Jesus Has Indeed Resurrected",
+      "youtube_id": "o1-JjQA-TbQ",
+      "summary": "A psychiatrist closes the case in five seconds: \"Grief hallucination. Next.\" 🗂️\n\nHis intern isn't so sure, so he opens the file.\n\nFriday night, the disciples are finished:\n🐓 Peter, the boldest of them, denies even knowing Jesus. Three times. The first time, to a servant girl.\n🏃 The rest scatter.\n🔒 They lock themselves in a room, terrified they're next.\n\nFifty days later, those same men walk into the public square of Jerusalem, the city that had just executed their teacher, and announce he's alive. Thousands hear it, a short walk from the tomb.\n⚖️ Arrested, Peter tells the very council that condemned Jesus: \"We must obey God rather than men.\"\n🩸 They're flogged, and they keep preaching.\n\nGrief visions are real, but they're private: one mind, one moment, comfort in your own room.\n👥 They don't appear to eleven men at once, or to five hundred.\n🐟 They don't eat fish.\n🚪 And they don't march frightened men out the door to face the people who killed their friend.\n\nSomething happened in Jerusalem that broke their fear.\n\nGrief makes mourners. Not martyrs.\n\nWhat do you think turned them around? 👇",
+      "fiction_note": "(The psychiatrist and the intern are fictional characters.)",
+      "script": "A psychiatrist closed the case in five seconds. \"Grief hallucination. Next.\"\n\nHis intern wasn't so sure. He opened the file.\n\nFriday night. Peter, the boldest disciple, denied even knowing Jesus. Three times. The first time, to a servant girl. The rest scattered. Then they locked themselves in a room, terrified they were next.\n\nDefeated. Hiding. Done.\n\nFifty days later, those same men walked into the public square of Jerusalem, the city that executed their teacher, and announced he was alive. Thousands heard it. Right there, a short walk from the tomb.\n\nArrested, Peter stood before the very council that condemned Jesus and said: we must obey God rather than you. Flogged. They kept preaching.\n\nThe psychiatrist shrugged. \"Grief does strange things.\"\n\nYou see, grief visions are real. But they're private. One mind, one moment, comfort in your own room. They don't appear to eleven men at once. Or to five hundred. They don't eat fish. And they don't march frightened men out the door to face the people who killed their friend.\n\nSomething happened in Jerusalem that broke their fear.\n\nThe intern slid the file back. \"Grief makes mourners. Not martyrs.\"\n\nThe psychiatrist looked at the clock. Then at the file. And for once, he didn't say next.\n",
+      "further_reading": [
+        {
+          "text": "Mark 14:66–72",
+          "refs": [
+            "MRK 14:66-72"
+          ]
+        },
+        {
+          "text": "John 20:19",
+          "refs": [
+            "JHN 20:19"
+          ]
+        },
+        {
+          "text": "Acts 2",
+          "refs": [
+            "ACT 2:1"
+          ]
+        },
+        {
+          "text": "Acts 5:27–42",
+          "refs": [
+            "ACT 5:27-42"
+          ]
+        },
+        {
+          "text": "Luke 24:36–43",
+          "refs": [
+            "LUK 24:36-43"
+          ]
+        },
+        {
+          "text": "1 Corinthians 15:3–8",
+          "refs": [
+            "1CO 15:3-8"
+          ]
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/04.jpg"
+    },
+    "5": {
+      "number": 5,
+      "subject": "Historical Evidence",
+      "title": "Did Jesus Really Die on the Cross?",
+      "youtube_id": "TK0yn3cjhCY",
+      "summary": "A podcaster with two million followers says Jesus never died: \"He fainted on the cross. Woke up in a cool tomb. Walked out. Easy.\" 🎙️\n\nThen a night-shift nurse calls in. \"You've never met a Roman execution squad.\"\n\n⚔️ These men killed for a living, and a guard who lost a prisoner could pay with his own life.\n✅ They didn't guess. They checked. Jesus was already dead, so they didn't bother breaking his legs.\n🗡️ One soldier drove a spear into his side anyway, and out came blood and water.\n📜 Even Pilate double-checked with the centurion before he'd release the body.\n\n\"Blood and water? That's poetry,\" says the podcaster.\n\nBut John had no idea what that meant, and doctors do. 🫀 Severe shock and trauma can make fluid collect around the heart and lungs. Pierce the side and you'd expect blood, then a clear, watery fluid. John wasn't writing poetry. He was describing a corpse.\n\nAnd even if Jesus had somehow survived (shredded back, pierced hands and feet, a hole in his side), a half-dead man doesn't convince anyone he's conquered death.\n\nRomans didn't do \"almost dead.\" And almost dead doesn't start a church.\n\nHave you heard the swoon theory before? 👇",
+      "fiction_note": "(The podcaster and the nurse are fictional characters.)",
+      "script": "A podcaster with two million followers said Jesus never died. \"He fainted on the cross,\" he laughed. \"Woke up in a cool tomb. Walked out. Easy.\"\n\nA night-shift nurse called in. \"You've never met a Roman execution squad.\"\n\nThese men killed for a living. And a guard who lost a prisoner could pay with his own life.\n\nSo when they reached Jesus, they didn't guess. They checked. He was already dead, so they didn't bother breaking his legs. One soldier drove a spear into his side anyway, and out came blood and water.\n\nEven the governor double-checked. Pilate questioned the officer in charge before he'd release the body.\n\nThe podcaster rolled his eyes. \"Blood and water? That's poetry.\"\n\nYou see, John had no idea what that meant. But doctors do. Severe shock makes fluid pool around the heart and lungs. Pierce the side, and out comes blood, then something clear, like water. John wasn't writing poetry. He was describing a corpse.\n\nAnd even if he'd survived? Shredded back. Pierced hands and feet. A hole in his side. A half-dead man doesn't convince anyone he conquered death.\n\n\"Romans didn't do almost dead,\" she said. \"And almost dead doesn't start a church.\"\n\nFor the first time in two hundred episodes: dead air.\n",
+      "further_reading": [
+        {
+          "text": "John 19:31–37",
+          "refs": [
+            "JHN 19:31-37"
+          ]
+        },
+        {
+          "text": "Mark 15:42–45",
+          "refs": [
+            "MRK 15:42-45"
+          ]
+        },
+        {
+          "text": "Acts 12:19",
+          "refs": [
+            "ACT 12:19"
+          ]
+        },
+        {
+          "text": "Edwards, Gabel & Hosmer, \"On the Physical Death of Jesus Christ,\" JAMA (1986)",
+          "refs": []
+        },
+        {
+          "text": "D. F. Strauss, A New Life of Jesus (1864)",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/05.jpg"
+    },
+    "6": {
+      "number": 6,
+      "subject": "Eyewitness Testimony",
+      "title": "Name One Witness To Jesus Resurrection",
+      "youtube_id": "qeiqu1FdTEs",
+      "summary": "A defense attorney leans back and smirks: \"Five hundred witnesses? Name one. No independent witnesses. Case dismissed.\" ⚖️\n\nThen the court clerk raises her hand. \"Your Honor, can I read something?\"\n\n📜 Around AD 55, Paul wrote a letter to the church in Corinth listing who saw Jesus alive after his execution: Peter, the Twelve, more than five hundred people at once, then James, Jesus's own brother, who hadn't believed in him.\n\n\"Easy to say,\" laughs the attorney. \"Anyone can invent a crowd.\"\n\nBut Paul added one tiny detail: most of them are still alive (1 Corinthians 15:6).\n⏳ Not \"once upon a time.\" Still alive, right now.\n📣 The letter was read aloud in a city full of skeptics.\n⛵ Anyone could sail east, knock on doors, grill the witnesses and compare their stories.\n🧱 If even a handful said \"never happened,\" the whole thing would collapse.\n\nLiars hide their witnesses. Paul handed out the guest list.\n\nWould you name 500 witnesses if you were making it up? 👇",
+      "fiction_note": "(The attorney and the clerk are fictional characters. The queue around the courthouse is a visual metaphor.)",
+      "script": "A defense attorney leaned back in his chair and smirked. \"Five hundred witnesses? Name one. No independent witnesses. Case dismissed.\" The jury nodded.\n\nThe court clerk raised her hand. \"Your Honor, can I read something?\"\n\nAround 55 AD, a man named Paul wrote a letter to the church in Corinth. In it, he listed the people who saw Jesus alive after his execution. Peter. The twelve. Then more than five hundred people, all at once. Then James, his own skeptical brother, who hadn't believed in him.\n\nThe attorney laughed. \"Easy to say. Anyone can invent a crowd.\"\n\nYou see, Paul added one tiny detail. Most of them, he wrote, are still alive. Not once upon a time. Still alive. Right now.\n\nThat's not poetry. That's a dare. This letter was read out loud in a city full of skeptics. Anyone could get on a ship, sail east, and start knocking on doors. Ask them. Grill them. Compare their stories. If even a handful said \"never happened,\" the whole thing collapses.\n\nLiars hide their witnesses. Paul handed out the guest list.\n\nThe clerk set the letter down. \"You asked where they were. He told everyone.\"\n\nThe attorney looked at the jury. The jury looked at the door. Someone was knocking.\n\nOutside, the line went all the way around the block.\n",
+      "further_reading": [
+        {
+          "text": "1 Corinthians 15:3–8",
+          "refs": [
+            "1CO 15:3-8"
+          ]
+        },
+        {
+          "text": "John 7:5",
+          "refs": [
+            "JHN 7:5"
+          ]
+        },
+        {
+          "text": "Acts 1:14",
+          "refs": [
+            "ACT 1:14"
+          ]
+        },
+        {
+          "text": "Gary Habermas & Michael Licona, The Case for the Resurrection of Jesus (2004)",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/06.jpg"
+    },
+    "7": {
+      "number": 7,
+      "subject": "Archaeological Grounding",
+      "title": "The Gospel Is True History Not Merely Fictional Stories",
+      "youtube_id": "k4lcPyvCWVo",
+      "summary": "A literature professor tosses the Gospels onto his pile of fairy tales: \"Same genre. Myths. Once upon a time, in a land far, far away.\" 🐉\n\nA muddy archaeology student in the back row raises her trowel: \"Which page?\"\n\nHe opens Luke chapter 3: \"In the fifteenth year of the reign of Tiberius Caesar, when Pontius Pilate was governor of Judea, Herod ruled Galilee, and Annas and Caiaphas were high priests…\" Then he stops reading.\n\nFairy tales don't give you coordinates. This does: five rulers, an exact year, real places. Every detail could be checked, and critics doubted several of them for a long time. Then the shovels came out:\n🪨 1961: a stone at Caesarea with Pontius Pilate's name and title carved into it\n⚱️ 1990: an ornate bone box (ossuary) inscribed with the name Caiaphas\n🏛️ The Pool of Bethesda, excavated right where John put it, colonnades and all (John 5:2)\n🚧 2004: the Pool of Siloam, found by a crew repairing a sewer pipe (John 9:7)\n\nDragons never leave fossils. Wizards never leave receipts. But Pilate left a stone.\n\nWhat archaeological find surprised you most? 👇",
+      "fiction_note": "(The professor and the student are fictional characters.)",
+      "script": "A literature professor tossed the Gospels onto his pile of fairy tales. \"Same genre,\" he said. \"Myths. Once upon a time, in a land far, far away.\"\n\nIn the back row, a muddy archaeology student raised her trowel. \"Which page?\"\n\nHe opened Luke, chapter three. \"In the fifteenth year of the reign of Tiberius Caesar, when Pontius Pilate was governor of Judea, Herod ruled Galilee, and Annas and Caiaphas were high priests...\"\n\nHe stopped reading. The room went quiet.\n\n\"Fine,\" he shrugged. \"So they borrowed a few real names.\"\n\nYou see, fairy tales don't give you coordinates. This does. Five rulers. Not once upon a time, an exact year. Real places. Every detail could be checked. And critics doubted several of them for a very long time.\n\nThen the shovels came out.\n\nA stone in Caesarea with Pilate's name carved into it.\nA bone box inscribed with the name Caiaphas.\nThe pool of Bethesda, exactly where John put it, porticoes and all.\nThe pool of Siloam, found in 2004 by a crew fixing a sewer pipe.\n\nDragons never leave fossils. Wizards never leave receipts. But Pilate left a stone.\n\nThe student dropped a dusty photo on his desk. \"Your fairy tale has a dig schedule.\"\n\nThe professor slowly moved the Gospels to a different shelf. The one marked history.\n",
+      "further_reading": [
+        {
+          "text": "Luke 3:1–2",
+          "refs": [
+            "LUK 3:1-2"
+          ]
+        },
+        {
+          "text": "John 5:2",
+          "refs": [
+            "JHN 5:2"
+          ]
+        },
+        {
+          "text": "John 9:7",
+          "refs": [
+            "JHN 9:7"
+          ]
+        },
+        {
+          "text": "The Pilate Stone (Israel Museum)",
+          "refs": []
+        },
+        {
+          "text": "The Caiaphas Ossuary (Israel Museum)",
+          "refs": []
+        },
+        {
+          "text": "Craig Blomberg, The Historical Reliability of the Gospels",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/07.jpg"
+    },
+    "8": {
+      "number": 8,
+      "subject": "Biblical Harmonization",
+      "title": "Four Witnesses, Four Different Stories",
+      "youtube_id": "7HygRgAhW6g",
+      "summary": "A slick lawyer waves the Gospels at the jury: \"They can't even count the angels!\" 😇 Matthew has one angel sitting on the stone. Mark has a young man inside. Luke has two men standing. John has two angels sitting. \"Somebody made this up.\"\n\nOn the witness stand, an old detective sips his coffee ☕ and tells him about last week's fender bender at Fifth and Main. Four witnesses. One saw the driver's face, one got the license plate, one only noticed the dog, and one was buying a hot dog. 🌭\n\n\"You know what I do when four stories match word for word? I go looking for whoever wrote the script.\"\n\nIdentical testimony means somebody rehearsed. Real witnesses stand on different corners. And look at what all four Gospels agree on:\n🌅 Early on the first day of the week (Matthew 28:1 · Mark 16:2 · Luke 24:1 · John 20:1)\n👣 Women find the tomb first\n🙋‍♀️ Mary Magdalene is named in every account\n🪨 The stone is rolled away\n⚰️ The body is gone\n\nThe angel details? Matthew 28:2 · Mark 16:5 · Luke 24:4 · John 20:12. If there were two angels, there was at least one. The details wobble. The core never moves. And if you were inventing a religion, you'd fix the angel count before publishing.\n\nFake stories match. Real witnesses don't.\n\nWhich Gospel detail do you think shows an eyewitness angle best? 👇",
+      "fiction_note": "(The lawyer, the detective and the witnesses are fictional characters.)",
+      "script": "Four witnesses. Four different stories. The lawyer grinned at the jury. \"They can't even count the angels!\"\n\nHe waved the Gospels. \"Matthew: one angel, sitting on the stone. Mark: a young man, inside. Luke: two men, standing. John: two angels, sitting. Somebody made this up.\"\n\nOn the witness stand, an old detective sipped his coffee. \"Last week. Fender bender. Fifth and Main. Four witnesses.\"\n\nOne saw the driver's face. One got the license plate. One only noticed the dog. One was buying a hot dog.\n\n\"Four different stories,\" the detective said. \"You know what I do when four stories match word for word?\"\n\nThe lawyer blinked. Twice.\n\n\"I go looking for whoever wrote the script.\"\n\nYou see, identical testimony means somebody rehearsed. Real witnesses stand on different corners.\n\nNow look at what all four Gospels agree on. Early on the first day of the week. Women find the tomb first. Mary Magdalene is in every account. The stone is rolled away. The body is gone.\n\nThe details wobble. The core never moves.\n\nAnd if you were inventing a religion, you would fix the angel count before publishing.\n\nThe detective set down his cup. \"Two angels? Then there was at least one.\"\n\nThe jury nodded. The lawyer sat down.\n\nFake stories match. Real witnesses don't.\n",
+      "further_reading": [
+        {
+          "text": "Matthew 28",
+          "refs": [
+            "MAT 28:1"
+          ]
+        },
+        {
+          "text": "Mark 16",
+          "refs": [
+            "MRK 16:1"
+          ]
+        },
+        {
+          "text": "Luke 24",
+          "refs": [
+            "LUK 24:1"
+          ]
+        },
+        {
+          "text": "John 20",
+          "refs": [
+            "JHN 20:1"
+          ]
+        },
+        {
+          "text": "Simon Greenleaf, The Testimony of the Evangelists (1846)",
+          "refs": []
+        },
+        {
+          "text": "Craig Blomberg, The Historical Reliability of the Gospels",
+          "refs": []
+        },
+        {
+          "text": "J. Warner Wallace, Cold-Case Christianity",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/08.jpg"
+    },
+    "9": {
+      "number": 9,
+      "subject": "Moral Relativism",
+      "title": "Whatever The Majority Decides Is Right",
+      "youtube_id": "QoH_J7BUFkc",
+      "summary": "A professor tells his class that morality is just a vote: \"Whatever the majority decides is right.\" 🎓\n\nA quiet student raises her hand. \"Can we test that?\" She holds up a cardboard ballot box. \"Motion: the professor's car now belongs to the class.\" 🚗 Forty hands go up. One doesn't. \"Motion carries,\" she says, and dangles his keys.\n\n\"That's theft!\" \"Says who? We voted.\"\n\nYou see, in 1945 men sat in a courtroom in Nuremberg, and their defense was simple:\n⚖️ \"We broke no German law.\"\n🪖 \"We followed orders.\"\n🏛️ \"Our nation decided.\"\n\nThe judges didn't answer, \"Well, that's your culture.\" The tribunal's charter defined crimes against humanity as crimes \"whether or not in violation of the domestic law of the country where perpetrated.\" In other words, there is a law above every law.\n\nIf morality is just a vote, those judges were wrong, and Germany simply had different preferences. If they had won the war, no one could ever call it evil. Just different.\n\n🏖️ Rights written by a vote are written in sand. The next tide takes them.\n\nNobody actually lives like that. Not even professors. Especially when it's their car. 🔑\n\nWhat's one thing you believe would be wrong even if 99% of people voted for it? 👇",
+      "fiction_note": "(The professor and the student are fictional characters.)",
+      "script": "A professor told his class that morality is just a vote. \"Whatever the majority decides is right. That's all right and wrong ever were.\"\n\nA quiet student raised her hand. \"Can we test that?\"\n\nHe smirked. \"Please.\"\n\nShe held up a cardboard ballot box. \"Motion: the professor's car now belongs to the class.\"\n\nForty hands went up. One didn't.\n\n\"Motion carries,\" she said, and dangled his keys.\n\n\"That's theft!\" he shouted.\n\n\"Says who? We voted.\"\n\nThe room went very quiet.\n\nYou see, in 1945, men sat in a courtroom in Nuremberg. Their defense? We broke no German law. We followed orders. Our nation decided.\n\nThe judges didn't say, \"Well, that's your culture.\" They called it crimes against humanity, whether or not it was legal at home. A law above every law.\n\nBut if morality is just a vote, the judges were wrong. Germany simply had different preferences. And if they had won the war, no one could ever call it evil. Just different.\n\nRights written by a vote are written in sand. The next tide takes them.\n\nNobody lives like that. Not even professors. Especially when it's their car.\n\nShe tossed back the keys. \"Turns out some things aren't up for a vote.\"\n\nHe caught them. And for the first time all semester, he took notes.\n",
+      "further_reading": [
+        {
+          "text": "Charter of the International Military Tribunal (1945), Art. 6(c)",
+          "refs": []
+        },
+        {
+          "text": "Robert H. Jackson's opening statement at Nuremberg (1945)",
+          "refs": []
+        },
+        {
+          "text": "Nuremberg Principles (1950), Principle IV",
+          "refs": []
+        },
+        {
+          "text": "C.S. Lewis, Mere Christianity, Book 1",
+          "refs": []
+        },
+        {
+          "text": "Paul Copan, \"True for You, But Not for Me\"",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/09.jpg"
+    },
+    "10": {
+      "number": 10,
+      "subject": "Divine Lawgiver",
+      "title": "There Is a Higher Law",
+      "youtube_id": "sMTCMBsxYY8",
+      "summary": "A city councilman cuts the ribbon on a new civil rights museum. \"We don't need God to know what's right,\" he tells the cameras. \"We have laws.\" 🎤\n\nThe old night guard clears his throat. \"In 1963, segregation was the law.\"\n\nHe leads him to a jail cell exhibit. On the bunk lies a newspaper, its margins crammed with handwriting. 📰\n\n✍️ April 1963: Martin Luther King Jr. sits in a Birmingham jail.\n⛪ Eight local clergymen publish a statement calling the demonstrations \"unwise and untimely.\" Wait for the courts. Respect law and order.\n📝 King begins his reply in the margins of that newspaper: the Letter from Birmingham Jail.\n📜 \"There are two types of laws: just and unjust… I would agree with St. Augustine that 'an unjust law is no law at all.'\"\n⚖️ \"A just law is a man-made code that squares with the moral law or the law of God.\"\n\nTake that away, and Alabama's segregation laws were just… the laws. Legally passed. Enforced by police. Nothing higher to appeal to.\n\n\"So the law isn't the top,\" the councilman says quietly.\n\"Never was.\"\n\nHuman rights need a court above the courthouse. 🏛️\n\nCan human rights exist without something higher than government? 👇",
+      "fiction_note": "(The councilman and the night guard are fictional characters. Dr. King is not depicted.)",
+      "script": "A city councilman cut the ribbon on a brand-new civil rights museum. \"We don't need God to know what's right,\" he told the cameras. \"We have laws.\"\n\nThe old night guard cleared his throat. \"In 1963, segregation was the law.\"\n\nThe councilman's smile froze.\n\nThe guard led him to a jail cell. On the bunk lay a newspaper, its margins crammed with handwriting.\n\nIn April 1963, Martin Luther King Jr. sat in a Birmingham jail. Eight local clergymen published a letter calling his protests unwise and untimely. Wait for the courts, they said. Respect law and order.\n\nHe began his answer in the margins of that newspaper. There are two kinds of laws, he wrote. Just and unjust. And with Augustine: an unjust law is no law at all.\n\nYou see, how do you tell the difference? King said it plainly. A just law squares with the moral law, the law of God.\n\nTake that away, and Alabama's laws were just... the laws. Legally passed. Enforced by police. Nothing higher to appeal to.\n\nThe councilman read the margins twice.\n\n\"So the law isn't the top,\" he said quietly.\n\n\"Never was,\" said the guard. \"That's how they knew they were right.\"\n\nHuman rights need a court above the courthouse.\n\nThe councilman walked back to the microphone. And crossed out his speech.\n",
+      "further_reading": [
+        {
+          "text": "Martin Luther King Jr., \"Letter from Birmingham Jail\" (April 16, 1963)",
+          "refs": []
+        },
+        {
+          "text": "\"A Call for Unity\" (statement by eight Alabama clergymen, April 12, 1963)",
+          "refs": []
+        },
+        {
+          "text": "Augustine, On Free Choice of the Will, Book I",
+          "refs": []
+        },
+        {
+          "text": "Thomas Aquinas, Summa Theologiae I–II, Q. 95–96",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/10.jpg"
+    },
+    "11": {
+      "number": 11,
+      "subject": "Moral Ontology",
+      "title": "Can You Keep the Fruit and Cut the Roots",
+      "youtube_id": "Sx14sr3m_6M",
+      "summary": "An influencer films himself in an apple orchard: \"Kindness. Equality. Every human has dignity. No God required. It's just natural.\" 🍎📱\n\nThe old orchard keeper leans on his shovel. \"Natural? Says who?\"\n\"Everybody knows that.\"\n\"Everybody didn't.\"\n\n📜 In Roman Egypt (1 BC), a worker named Hilarion wrote to his pregnant wife: \"If it is a boy, keep it; if it is a girl, cast it out.\" The letter was dug out of an ancient rubbish heap at Oxyrhynchus (P.Oxy. 744).\n⛰️ In Sparta, Plutarch says, elders inspected every newborn, and the weak were left to die in a ravine at the foot of Mount Taygetus. Nature favors the strong.\n🏮 Then a strange group started picking those abandoned babies up and taking them home: Christians. Every child, they said, bears the image of God.\n⚖️ By 374, Roman law under Emperor Valentinian had made killing an infant a crime.\n\nEven Nietzsche, who despised Christianity, admitted it. Give up the Christian faith, and you lose the right to Christian morality (Twilight of the Idols, 1888).\n\nEquality. Compassion. Dignity for the weak. Those apples grew on a tree. You can cut the roots, and the apples will hang there a while. 🪚\n\nWhere do you think human equality comes from? 👇",
+      "fiction_note": "(The influencer and the orchard keeper are fictional characters.)",
+      "script": "An influencer filmed himself in an apple orchard. \"Kindness. Equality. Every human has dignity,\" he said, biting an apple. \"No God required. It's just natural.\"\n\nThe old orchard keeper leaned on his shovel. \"Natural? Says who?\"\n\n\"Everybody knows that.\"\n\n\"Everybody didn't.\"\n\nIn Roman Egypt, a worker named Hilarion wrote to his pregnant wife. If it's a boy, keep it. If it's a girl, throw it out. Archaeologists dug that letter out of an ancient trash heap.\n\nAbandoning unwanted babies was normal. In Sparta, says Plutarch, elders inspected every newborn. The weak ones were left to die in a ravine. Nature favors the strong.\n\nThen a strange group started picking those babies up and taking them home. Christians. Every child, they said, bears the image of God. By 374, Roman law had banned killing infants.\n\nYou see, even Nietzsche, who despised Christianity, admitted it. Give up the Christian faith, and you lose the right to Christian morality.\n\nEquality. Compassion. Dignity for the weak. Those apples grew on a tree.\n\nThe keeper held out a saw. \"Go ahead. Cut the roots. The apples will hang there a while.\"\n\nThe influencer looked at the apple in his hand.\n\nThen he stopped recording.\n",
+      "further_reading": [
+        {
+          "text": "Oxyrhynchus Papyrus 744",
+          "refs": []
+        },
+        {
+          "text": "Plutarch, Life of Lycurgus 16",
+          "refs": []
+        },
+        {
+          "text": "Codex Theodosianus 9.14.1 (374)",
+          "refs": []
+        },
+        {
+          "text": "Friedrich Nietzsche, Twilight of the Idols, \"Skirmishes of an Untimely Man\" §5",
+          "refs": []
+        },
+        {
+          "text": "Tom Holland, Dominion",
+          "refs": []
+        },
+        {
+          "text": "Rodney Stark, The Rise of Christianity",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/11.jpg"
+    },
+    "12": {
+      "number": 12,
+      "subject": "Human Worth",
+      "title": "Human Worth",
+      "youtube_id": "HLcfmGJ5EhQ",
+      "summary": "A science-show host pours a human being into six jars: water, carbon, calcium, a pinch of iron. \"That's you. Total value? About five bucks.\" 🧪 The crowd laughs. \"No soul. No Creator. Just chemistry that got lucky.\"\n\nAn old custodian leans on his mop. \"Then where do your rights come from?\"\n\"Evolution. Obviously.\"\n\"Funny. A rock has no rights. A puddle has no dignity. Why would a lucky puddle?\" 🪨\n\n📜 History has run this math before. Aristotle called a slave \"a living tool\" (Nicomachean Ethics 8.11).\n🏛️ Ancient markets priced people by the head, and buyers inspected them like livestock.\n⛪ Then, around 379 AD, Bishop Gregory of Nyssa stood up in church and asked the slave owners: \"How many obols did you reckon the image of God was worth?\" It is one of history's first voices against slavery itself.\n⚖️ Chemistry can add up your atoms. It can't add up your worth. Pile every coin on Earth on one side of the scale. A person made in God's image still outweighs it.\n\nThe custodian slides five dollars across the counter. \"I'll take you, then.\"\n\"I'm not for sale!\"\n\"Then you're not five bucks. And neither is anyone else.\" 💵\n\nIf humans are only atoms, where does human worth come from? 👇",
+      "fiction_note": "(The science-show host and the custodian are fictional characters.)",
+      "script": "He poured a human being into six jars. Water. Carbon. Calcium. A pinch of iron. \"That's you,\" the science host told the crowd. \"Total value? About five bucks.\"\nEveryone laughed. \"No soul. No Creator. Just chemistry that got lucky.\" He even rang it up on a brass cash register.\nIn the aisle, an old custodian leaned on his mop. \"Then where do your rights come from?\"\n\"Evolution,\" the host said. \"Obviously.\"\n\"Funny,\" said the custodian. \"A rock has no rights. A puddle has no dignity. Why would a lucky puddle?\"\nHistory has run this math before. Aristotle called a slave \"a living tool.\" Markets priced people by the head. Buyers checked their teeth like horses.\nThen, in the year 379, a bishop named Gregory stood up in a crowded church and asked the slave owners, \"How many coins did you pay for the image of God?\" It's one of history's first voices against slavery itself.\nYou see, chemistry can add up your atoms. It can't add up your worth. Pile every coin on Earth on one side of the scale. A person made in God's image still outweighs it.\nThe custodian slid five dollars over. \"I'll take you, then.\"\nThe host stepped back. \"I'm not for sale!\"\n\"Then you're not five bucks,\" said the custodian. \"And neither is anyone else.\"\n",
+      "further_reading": [
+        {
+          "text": "Genesis 1:27",
+          "refs": [
+            "GEN 1:27"
+          ]
+        },
+        {
+          "text": "Aristotle, Nicomachean Ethics 8.11 and Politics 1.4",
+          "refs": []
+        },
+        {
+          "text": "Gregory of Nyssa, Homilies on Ecclesiastes, Homily 4",
+          "refs": []
+        },
+        {
+          "text": "Kyle Harper, Slavery in the Late Roman World",
+          "refs": []
+        },
+        {
+          "text": "Tom Holland, Dominion",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/12.jpg"
+    },
+    "13": {
+      "number": 13,
+      "subject": "Social Contracts",
+      "title": "Is Morality Just a Contract We All Signed",
+      "youtube_id": "GJtSSePCZt4",
+      "summary": "The HOA president bangs his gavel and tapes a contract to the wall. \"Morality is just a deal. We all agree not to hurt each other. Society signs it. Done.\" 📜\n\nIn the front row, an old stonemason pulls a string with a weight on the end out of her pocket.\n\"So whatever the contract says is right?\"\n\"By definition.\"\n\nHistory has signed some contracts:\n🏛️ 1787: America's founding contract counted each enslaved person as three fifths and promised to return anyone who escaped.\n📕 1935: Germany's Reich Citizenship Law stripped Jewish citizens of their citizenship.\n🚉 Apartheid South Africa made Black citizens carry passbooks just to move through their own country.\nEvery one of them was legal. Signed. Stamped. Agreed. Enforced by the police.\n\n\"Well, those were wrong.\"\n\"Wrong by which contract?\"\n\n📏 You can't check a wall with the wall. A mason hangs a plumb line from above. The string doesn't lean with the bricks, and that's how you find the crooked ones. Every contract needs a standard above it.\n\nThen she slides a paper across the table: \"New clause. Your house now belongs to the association. Everyone signed.\"\n\"That's not right!\"\n\"Exactly. Some things are wrong even when everybody signs.\" ✍️\n\nIf morality is only an agreement, how could a whole society ever be wrong? 👇",
+      "fiction_note": "(The HOA president and the stonemason are fictional characters.)",
+      "script": "Gary banged his gavel and taped a contract to the wall. \"Morality,\" the HOA president announced, \"is just a deal. We all agree not to hurt each other. Society signs it. Done.\"\nThe neighbors nodded. In the front row, an old stonemason pulled something from her pocket. A string with a weight on the end.\n\"So whatever the contract says is right?\" she asked.\n\"By definition.\"\nHistory has signed some contracts. In 1787, America's founding contract counted each enslaved person as three fifths, and promised to return anyone who escaped. In 1935, Germany's new laws stripped Jewish citizens of their citizenship. Apartheid South Africa made Black citizens carry passbooks just to walk through their own country.\nEvery one of them was legal. Signed. Stamped. Agreed. Enforced by the police.\n\"Well, those were wrong,\" Gary said.\n\"Wrong by which contract?\"\nYou see, you can't check a wall with the wall. A mason hangs a plumb line from above. The string doesn't lean with the bricks. That's how you find the crooked ones. Every contract needs a standard above it.\nShe slid a paper across the table. \"New clause. Your house now belongs to the association. Everyone signed.\"\nGary stared at the paper. \"That's not right!\"\n\"Exactly,\" she said. \"Some things are wrong even when everybody signs.\"\n",
+      "further_reading": [
+        {
+          "text": "U.S. Constitution, Art. I §2 and Art. IV §2 (1787)",
+          "refs": []
+        },
+        {
+          "text": "Reich Citizenship Law (Reichsbürgergesetz), 15 Sept. 1935",
+          "refs": []
+        },
+        {
+          "text": "Natives (Abolition of Passes and Co-ordination of Documents) Act, 1952",
+          "refs": []
+        },
+        {
+          "text": "Amos 7:7–8 (the plumb line)",
+          "refs": [
+            "AMO 7:7-8"
+          ]
+        },
+        {
+          "text": "C. S. Lewis, Mere Christianity, Book 1",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/13.jpg"
+    }
+  }
+}

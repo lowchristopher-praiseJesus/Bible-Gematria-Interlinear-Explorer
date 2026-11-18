@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Pencil, RefreshCw, Share2, Tent, Wand2 } from 'lucide-react'
+import { ArrowUp, AudioLines, CalendarDays, Check, Copy, Flag, Loader2, Mic, Pencil, RefreshCw, Share2, Shield, Tent, Wand2 } from 'lucide-react'
 import { postChat, postChatStream } from '@/lib/chatApi'
-import { listCharacters, listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
+import { apologeticsTrackChoice, listApologeticsTracks, listCharacters, listParables, listStudyWikis, type CharacterEntry } from '@/lib/modeData'
 import { renderMarkdown } from '@/lib/renderMarkdown'
 import { toHistory } from '@/lib/history'
 import { startTellAStory, deriveStoryThemes, MAX_STORY_SOURCE_MESSAGES } from '@/lib/tellAStory'
 import { firstVerse, loadSpotLabels, onViewerEvent, sendGoto } from '@/lib/tabernacleBridge'
+import { onAsk, onTrackComplete } from '@/lib/apologeticsEvents'
 import { ThemePicker, type StoryAgeRange } from './ThemePicker'
 import { StoryThemeStarter } from './StoryThemeStarter'
 import { CharacterPickerInline } from './CharacterPickerInline'
@@ -809,6 +810,35 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     })
   }, [updateModeParams, openArtifact])
 
+  // Defend the Faith playlist -> chat: "Ask about this" and the one-time
+  // "you've finished the track" prompt, for the shown session only.
+  useEffect(() => {
+    const offAsk = onAsk((e) => {
+      const cur = sessionRef.current
+      if (!cur || cur.id !== e.sessionId || cur.mode !== 'apologetics' || isBusyRef.current) return
+      // The selected short isn't in sendMessage's session snapshot until the
+      // next render, so pass it for this turn explicitly.
+      void sendMessageRef.current(`Tell me more about "${e.title}".`, undefined, { currentShort: e.shortNumber })
+    })
+    const offComplete = onTrackComplete((e) => {
+      const cur = sessionRef.current
+      if (!cur || cur.id !== e.sessionId || cur.mode !== 'apologetics') return
+      const fresh = useSessionsStore.getState().sessions[cur.id]
+      if (!fresh || fresh.modeParams.trackCompletePrompted) return
+      updateModeParams(cur.id, { trackCompletePrompted: true })
+      appendMessage(cur.id, {
+        id: genId(),
+        role: 'assistant',
+        text: `You've finished **${e.trackTitle}**. Want to talk through the whole track?`,
+        followUpQuestions: ['Discuss the whole track', 'How do these arguments fit together?', 'Which objection is hardest to answer?'],
+      })
+    })
+    return () => {
+      offAsk()
+      offComplete()
+    }
+  }, [updateModeParams, appendMessage])
+
   const voiceMode = useVoiceMode({
     onTranscript: (text, delegationId) => {
       pendingVoiceTurnRef.current = { delegationId }
@@ -948,6 +978,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
           if (session.mode === 'hermeneutics') {
             updateModeParams(sessionId, hermeneuticsParams(response.data, { fromPrimer: true }))
           }
+          // Defend the Faith: land with the playlist open beside the chat —
+          // except at phone width, where it would cover the intro full screen.
+          const playlist = session.mode === 'apologetics' ? response.artifacts?.find((a) => a.type === 'apologetics_track') : undefined
+          const narrow = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches
+          if (playlist && !narrow) void openArtifact(playlist)
         }
       } catch (err) {
         appendMessage(sessionId, {
@@ -959,7 +994,7 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         setResolvingChoiceId(null)
       }
     },
-    [session, sessionId, resolvingChoiceId, updateMessage, updateModeParams, appendMessage, setReadingPlanProgress]
+    [session, sessionId, resolvingChoiceId, updateMessage, updateModeParams, appendMessage, setReadingPlanProgress, openArtifact]
   )
 
   const handleTellAStory = useCallback(async () => {
@@ -1073,8 +1108,8 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
     [session, sessionId, storyThemesRetrying, updateMessage, updateModeParams]
   )
 
-  // Only Parable Study and Topical Study fetch their choices, so only
-  // those two know how to reload after a failed fetch.
+  // Only Parable Study, Topical Study and Defend the Faith fetch their
+  // choices, so only those know how to reload after a failed fetch.
   const retryChoices = useCallback(
     async (promptMessageId: string) => {
       if (!session) return
@@ -1083,7 +1118,9 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
         const choices: MessageChoice[] =
           session.mode === 'parable'
             ? (await listParables()).map((p) => ({ label: `${p.name} (${p.reference})`, modeParams: { parableId: p.id } }))
-            : (await listStudyWikis()).map((s) => ({ label: `${s.title} — ${s.speaker}`, modeParams: { seriesId: s.id } }))
+            : session.mode === 'apologetics'
+              ? (await listApologeticsTracks()).map(apologeticsTrackChoice)
+              : (await listStudyWikis()).map((s) => ({ label: `${s.title} — ${s.speaker}`, modeParams: { seriesId: s.id } }))
         updateMessage(sessionId, promptMessageId, { choicesStatus: 'ready', choices })
       } catch (err) {
         updateMessage(sessionId, promptMessageId, { choicesStatus: 'error', choicesError: errorMessage(err) })
@@ -1277,6 +1314,20 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
                               </button>
                             )}
                           </div>
+                        ) : group.primary.type === 'apologetics_track' ? (
+                          <button
+                            key={i}
+                            onClick={() => openArtifact(group.primary)}
+                            className="flex w-full max-w-sm items-center gap-3 rounded-lg border border-[var(--color-theme-border)] bg-[var(--color-surface)] px-3 py-2.5 text-left transition-colors hover:border-[var(--color-theme-accent)] hover:bg-[var(--color-surface-alt)]"
+                          >
+                            <Shield className="h-5 w-5 shrink-0 text-[var(--color-theme-accent)]" aria-hidden="true" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold">Open the playlist</span>
+                              <span className="block text-xs text-[var(--color-text-secondary)]">
+                                Watch the shorts in this track and track your progress
+                              </span>
+                            </span>
+                          </button>
                         ) : group.primary.type === 'tabernacle' ? (
                           // The 3D walk is the point of the mode, so it gets a
                           // card that says what it opens, not a bare pill.

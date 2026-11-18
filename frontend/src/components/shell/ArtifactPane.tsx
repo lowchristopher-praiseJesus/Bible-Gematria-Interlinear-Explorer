@@ -7,6 +7,7 @@ import { GematriaArtifact } from '@/components/artifacts/GematriaArtifact'
 import { HermeneuticsArtifact } from '@/components/artifacts/HermeneuticsArtifact'
 import { InterlinearArtifact } from '@/components/artifacts/InterlinearArtifact'
 import { TabernacleArtifact } from '@/components/artifacts/TabernacleArtifact'
+import { ApologeticsTrackArtifact } from '@/components/artifacts/ApologeticsTrackArtifact'
 import { PassageSearchArtifact } from '@/components/artifacts/PassageSearchArtifact'
 import { StoryArtifact } from '@/components/artifacts/StoryArtifact'
 import { StrongsArtifact } from '@/components/artifacts/StrongsArtifact'
@@ -23,6 +24,7 @@ import type {
   HermeneuticsArtifactParams,
   PassageSearchArtifactParams,
   TabernacleArtifactParams,
+  ApologeticsTrackArtifactParams,
   StoryArtifactParams,
 } from '@/types/session'
 
@@ -100,6 +102,9 @@ export function ArtifactPane({ onClose }: Props) {
                 )}
                 {activeArtifact.type === 'tabernacle' && (
                   <TabernacleArtifact {...(data as TabernacleArtifactParams)} />
+                )}
+                {activeArtifact.type === 'apologetics_track' && (
+                  <ApologeticsTrackArtifact {...(data as ApologeticsTrackArtifactParams)} />
                 )}
               </>
             )}

@@ -57,6 +57,7 @@ export const MODE_LABELS: Record<SessionMode, string> = {
   story: 'Tell a Story',
   passages: 'Find passages',
   tabernacle: 'Walk the Tabernacle',
+  apologetics: 'Defend the Faith',
 }
 
 function deriveTitle(mode: SessionMode, modeParams: ModeParams): string {

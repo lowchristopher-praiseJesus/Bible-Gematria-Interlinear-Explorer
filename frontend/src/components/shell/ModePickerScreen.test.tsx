@@ -5,11 +5,11 @@ import { ModePickerScreen } from './ModePickerScreen'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import { useReadingPlanStore } from '@/store/useReadingPlanStore'
 import * as chatApi from '@/lib/chatApi'
-import { listStudyWikis } from '@/lib/modeData'
+import { listApologeticsTracks, listStudyWikis } from '@/lib/modeData'
 
 vi.mock('@/lib/modeData', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/modeData')>()
-  return { ...actual, listStudyWikis: vi.fn(), listCharacters: vi.fn() }
+  return { ...actual, listStudyWikis: vi.fn(), listCharacters: vi.fn(), listApologeticsTracks: vi.fn() }
 })
 
 describe('ModePickerScreen', () => {
@@ -102,6 +102,28 @@ describe('ModePickerScreen', () => {
     expect(session.mode).toBe('verse')
     expect(session.messages[0]).toMatchObject({ role: 'user', text: '✨ Verse of the Day' })
     expect(session.messages[1].choices).toEqual([{ label: 'Surprise me', modeParams: {} }])
+  })
+
+  it('Defend the Faith tile posts track choices', async () => {
+    vi.mocked(listApologeticsTracks).mockResolvedValue([
+      {
+        id: 'jesus-rose', title: 'Did Jesus rise?', blurb: 'b',
+        shorts: [
+          { number: 3, title: 'A', youtube_id: 'a', thumbnail: '', further_reading: [] },
+          { number: 50, title: 'B', youtube_id: null, thumbnail: '', further_reading: [] },
+        ],
+      },
+    ])
+    render(<ModePickerScreen onSessionStarted={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /defend the faith/i }))
+    await waitFor(() => expect(firstSession().messages[1].choicesStatus).toBe('ready'))
+    expect(firstSession().mode).toBe('apologetics')
+    expect(firstSession().messages[1].text).toBe(
+      'Be ready always to give an answer (1 Peter 3:15). Which question would you like to work through?'
+    )
+    expect(firstSession().messages[1].choices).toEqual([
+      { label: 'Did Jesus rise? — 1 short', modeParams: { trackId: 'jesus-rose', watchedShorts: [] } },
+    ])
   })
 
   it('selecting Parable Study fetches curated parables into the choice prompt', async () => {
