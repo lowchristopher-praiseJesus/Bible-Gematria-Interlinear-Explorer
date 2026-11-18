@@ -71,6 +71,9 @@ async function fetchForLink(link: ArtifactLink): Promise<unknown> {
     case 'tabernacle':
       // Just the opening spot; travels inline on the link params.
       return link.params
+    case 'apologetics_track':
+      // Just the track id; the panel fetches the track list itself.
+      return link.params
     default:
       throw new Error(`Unknown artifact type: ${link.type}`)
   }

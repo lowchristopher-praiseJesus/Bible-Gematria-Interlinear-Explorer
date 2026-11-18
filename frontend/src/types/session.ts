@@ -1,9 +1,17 @@
 import type { ChatMessage } from '@/components/chatbot/types'
 import type { Trace } from '@/types/trace'
 
-export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story' | 'passages' | 'tabernacle'
+export type SessionMode = 'reading_plan' | 'parable' | 'verse' | 'topic' | 'freeform' | 'devotional' | 'socratic' | 'hermeneutics' | 'character' | 'story' | 'passages' | 'tabernacle' | 'apologetics'
 
 export interface ModeParams {
+  /** Defend the Faith: the track this session works through. */
+  trackId?: string
+  /** Defend the Faith: series numbers of the shorts watched in this session. */
+  watchedShorts?: number[]
+  /** Defend the Faith: the short selected in the playlist. */
+  currentShort?: number
+  /** Defend the Faith: the "you've finished the track" prompt was shown. */
+  trackCompletePrompted?: boolean
   /** Tabernacle mode: the last spot the viewer's camera was at. */
   tabernacleSpot?: string
   plan?: 'chronological' | 'canonical'
@@ -64,7 +72,7 @@ export interface ModeParams {
 }
 
 export interface ArtifactLink {
-  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story' | 'passage_search' | 'tabernacle'
+  type: 'interlinear' | 'chapter' | 'strongs' | 'book_context' | 'gematria' | 'english_search' | 'devotional' | 'hermeneutics_report' | 'story' | 'passage_search' | 'tabernacle' | 'apologetics_track'
   label: string
   params: Record<string, unknown>
 }
@@ -143,6 +151,29 @@ export interface PassageResult {
   text: string
   reason: string
   sources: Array<'embedding' | 'keyword' | 'cross_reference'>
+}
+
+/** Params for an `apologetics_track`-type ArtifactLink: the track to show. */
+export interface ApologeticsTrackArtifactParams {
+  trackId: string
+}
+
+/** One short in a Defend the Faith track (GET /apologetics/tracks). */
+export interface ApologeticsShort {
+  number: number
+  /** The short's title on YouTube — how it is named everywhere. */
+  title: string
+  /** null = not uploaded yet ("Coming soon"). */
+  youtube_id: string | null
+  thumbnail: string
+  further_reading: { text: string; refs: string[] }[]
+}
+
+export interface ApologeticsTrack {
+  id: string
+  title: string
+  blurb: string
+  shorts: ApologeticsShort[]
 }
 
 /** Params for a `tabernacle`-type ArtifactLink: the spot the viewer opens at. */
