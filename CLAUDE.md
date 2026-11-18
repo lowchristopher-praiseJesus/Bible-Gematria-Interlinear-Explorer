@@ -420,7 +420,10 @@ in `lib/modeData.ts`); picking one fetches the primer and opens the playlist
 watched once 90% of it has actually played (`WATCHED_FRACTION`; playback is
 sampled each second and seeking ahead doesn't count) or when it ends, or via
 "Mark watched"; the panel then **stays on that short** so "Ask about this" is
-right there — it never moves on by itself. It falls back to a "Watch on YouTube" link when a video can't play, and opens
+right there — it never moves on by itself. YouTube's Shorts player loops on
+its own (often with no ENDED event), so a jump from the last ~2 s back to
+0:00, or ENDED, is treated as the end: the player is cued back to the cover
+instead of replaying. It falls back to a "Watch on YouTube" link when a video can't play, and opens
 further-reading refs as `interlinear` artifacts. Progress lives in the
 session's `modeParams` (`trackId`, `watchedShorts`, `currentShort`,
 `trackCompletePrompted`), so reloads and share links keep it. The panel talks

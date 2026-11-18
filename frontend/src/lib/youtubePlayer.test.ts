@@ -5,12 +5,14 @@ type Events = { onReady(): void; onStateChange(e: { data: number }): void; onErr
 
 const PLAYING = 1
 const ENDED = 0
+const BUFFERING = 3
 
 let events: Events | null = null
 let time = 0
 let duration = 60
 const instance = {
   loadVideoById: vi.fn(),
+  cueVideoById: vi.fn(),
   destroy: vi.fn(),
   getCurrentTime: () => time,
   getDuration: () => duration,
@@ -21,6 +23,7 @@ beforeEach(() => {
   time = 0
   duration = 60
   instance.loadVideoById.mockClear()
+  instance.cueVideoById.mockClear()
   instance.destroy.mockClear()
   window.YT = {
     Player: vi.fn(function (_el: HTMLElement, opts: { events: Events }) {
@@ -116,6 +119,44 @@ describe('createPlayer', () => {
     events!.onStateChange({ data: PLAYING })
     await play(55)
     expect(on.watched).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops instead of looping when the short wraps back to the start', async () => {
+    vi.useFakeTimers()
+    const { on } = await readyPlayer()
+    events!.onStateChange({ data: PLAYING })
+    await play(59)
+    // YouTube's Shorts player loops on its own, with no ENDED event.
+    events!.onStateChange({ data: BUFFERING })
+    time = 0
+    events!.onStateChange({ data: PLAYING })
+    expect(instance.cueVideoById).toHaveBeenCalledWith('abc')
+    expect(on.watched).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops at the end instead of replaying when the player reports ended', async () => {
+    const { on } = await readyPlayer()
+    events!.onStateChange({ data: ENDED })
+    expect(instance.cueVideoById).toHaveBeenCalledWith('abc')
+    expect(on.watched).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops the newly loaded short, not the first one', async () => {
+    const { player } = await readyPlayer()
+    player.load('def')
+    events!.onStateChange({ data: ENDED })
+    expect(instance.cueVideoById).toHaveBeenCalledWith('def')
+  })
+
+  it('lets the user rewind to the start mid-video', async () => {
+    vi.useFakeTimers()
+    await readyPlayer()
+    events!.onStateChange({ data: PLAYING })
+    await play(20)
+    events!.onStateChange({ data: BUFFERING })
+    time = 0
+    events!.onStateChange({ data: PLAYING })
+    expect(instance.cueVideoById).not.toHaveBeenCalled()
   })
 
   it('reports errors', async () => {
