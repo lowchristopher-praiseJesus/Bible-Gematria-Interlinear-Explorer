@@ -13,6 +13,7 @@ let duration = 60
 const instance = {
   loadVideoById: vi.fn(),
   cueVideoById: vi.fn(),
+  playVideo: vi.fn(),
   destroy: vi.fn(),
   getCurrentTime: () => time,
   getDuration: () => duration,
@@ -24,6 +25,7 @@ beforeEach(() => {
   duration = 60
   instance.loadVideoById.mockClear()
   instance.cueVideoById.mockClear()
+  instance.playVideo.mockClear()
   instance.destroy.mockClear()
   window.YT = {
     Player: vi.fn(function (_el: HTMLElement, opts: { events: Events }) {
@@ -157,6 +159,12 @@ describe('createPlayer', () => {
     time = 0
     events!.onStateChange({ data: PLAYING })
     expect(instance.cueVideoById).not.toHaveBeenCalled()
+  })
+
+  it('play starts the current video', async () => {
+    const { player } = await readyPlayer()
+    player.play()
+    expect(instance.playVideo).toHaveBeenCalledTimes(1)
   })
 
   it('reports errors', async () => {

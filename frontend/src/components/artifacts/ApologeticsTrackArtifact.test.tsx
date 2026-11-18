@@ -7,7 +7,7 @@ import { useArtifactStore } from '@/store/useArtifactStore'
 import { useSessionsStore } from '@/store/useSessionsStore'
 import type { ApologeticsTrack, ModeParams, Session } from '@/types/session'
 
-const player = { load: vi.fn(), destroy: vi.fn() }
+const player = { load: vi.fn(), play: vi.fn(), destroy: vi.fn() }
 let callbacks: { watched(): void; error(): void } | null = null
 let createVideoId: string | null = null
 // 'now' resolves at once; 'held' waits for release(); 'fail' rejects.
@@ -59,6 +59,7 @@ describe('ApologeticsTrackArtifact', () => {
     creation = 'now'
     release = null
     player.load.mockClear()
+    player.play.mockClear()
     player.destroy.mockClear()
     showSession({ trackId: 'jesus-rose', watchedShorts: [] })
   })
@@ -94,6 +95,24 @@ describe('ApologeticsTrackArtifact', () => {
     fireEvent.click(screen.getByRole('button', { name: /Name One Witness To Jesus Resurrection/ }))
     expect(params().currentShort).toBe(6)
     await waitFor(() => expect(player.load).toHaveBeenCalledWith('yt6'))
+  })
+
+  it('clicking the selected short starts it', async () => {
+    render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    await waitFor(() => expect(callbacks).not.toBeNull())
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: /Did Jesus Really Die on the Cross\?/ }))
+    expect(player.play).toHaveBeenCalledTimes(1)
+    expect(player.load).not.toHaveBeenCalled()
+  })
+
+  it('clicking the selected short while the player loads starts it once ready', async () => {
+    creation = 'held'
+    render(<ApologeticsTrackArtifact trackId="jesus-rose" />)
+    await waitFor(() => expect(createVideoId).toBe('yt5'))
+    fireEvent.click(screen.getByRole('button', { name: /Did Jesus Really Die on the Cross\?/ }))
+    await act(async () => release!())
+    expect(player.play).toHaveBeenCalledTimes(1)
   })
 
   it('mark watched button works and emits track complete once all are watched', async () => {

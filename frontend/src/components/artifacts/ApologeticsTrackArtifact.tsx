@@ -61,6 +61,8 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
   // short gets the "Watch on YouTube" fallback, not just the first.
   const [playerUnavailable, setPlayerUnavailable] = useState(false)
   const unmountedRef = useRef(false)
+  // The user asked to play the selected short before the player was ready.
+  const playWhenReadyRef = useRef(false)
   const currentId = current?.youtube_id ?? null
   const currentNumber = current?.number ?? null
   // Callbacks registered with the player read the latest render through this.
@@ -101,7 +103,12 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
         }
         playerRef.current = p
         // The user may have picked another short while it was loading.
-        if (latest.current.currentId) show(p, latest.current.currentId)
+        if (latest.current.currentId && latest.current.currentId !== shownIdRef.current) {
+          show(p, latest.current.currentId)
+        } else if (playWhenReadyRef.current) {
+          p.play()
+        }
+        playWhenReadyRef.current = false
       },
       () => {
         if (!unmountedRef.current) setPlayerUnavailable(true)
@@ -134,6 +141,12 @@ export function ApologeticsTrackArtifact({ trackId }: ApologeticsTrackArtifactPa
   })
 
   function select(s: ApologeticsShort) {
+    // The selected short's row is a play button too: selection alone wouldn't
+    // change anything, so start it (or start it as soon as the player is ready).
+    if (s.number === current?.number) {
+      if (playerRef.current) playerRef.current.play()
+      else playWhenReadyRef.current = true
+    }
     patch({ currentShort: s.number })
   }
 

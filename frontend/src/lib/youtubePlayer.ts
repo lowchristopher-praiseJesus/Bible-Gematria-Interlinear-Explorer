@@ -5,6 +5,7 @@
 interface YTPlayer {
   loadVideoById(id: string): void
   cueVideoById(id: string): void
+  playVideo(): void
   getCurrentTime(): number
   getDuration(): number
   destroy(): void
@@ -79,6 +80,8 @@ export function loadYouTubeApi(): Promise<YTApi> {
 export interface ShortPlayer {
   /** Switch to a video and play it (the user picked it). */
   load(videoId: string): void
+  /** Start or resume the current video. */
+  play(): void
   destroy(): void
 }
 
@@ -160,6 +163,7 @@ export async function createPlayer(
               currentVideo = id
               p.loadVideoById(id)
             },
+            play: () => p.playVideo(),
             destroy: () => {
               stopSampling()
               p.destroy()
