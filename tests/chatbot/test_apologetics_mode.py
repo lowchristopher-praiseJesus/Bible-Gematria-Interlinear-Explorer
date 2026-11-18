@@ -169,3 +169,21 @@ def test_chat_stream_routes_apologetics(client, monkeypatch):
               if c.strip().startswith("data: ")]
     finals = [e for e in events if e["type"] == "final"]
     assert len(finals) == 1 and finals[0]["result"]["message"] == "[apol]"
+
+
+def test_system_prompt_points_to_catalogue_and_limits_real_people():
+    p = apologetics_mode.SYSTEM_PROMPT
+    assert "OTHER SHORTS IN THE SERIES" in p
+    assert "only for what the material says about them" in p
+
+
+def test_chatbot_image_ships_the_manifest():
+    root = Path(__file__).resolve().parents[2]
+    import re
+    dockerfile = (root / "Dockerfile.chatbot").read_text(encoding="utf-8")
+    assert re.search(r"^COPY\s+chatbot/\s+\./chatbot/", dockerfile, flags=re.MULTILINE)
+    ignore = root / ".dockerignore"
+    if ignore.exists():
+        patterns = [l.strip() for l in ignore.read_text().splitlines() if l.strip() and not l.startswith("#")]
+        assert not any(p in ("chatbot/data", "chatbot/data/", "*.json", "chatbot/data/*.json") or "apologetics" in p for p in patterns)
+    assert (root / "chatbot" / "data" / "apologetics_shorts.json").is_file()
