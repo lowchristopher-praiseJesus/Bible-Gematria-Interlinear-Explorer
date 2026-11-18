@@ -375,6 +375,59 @@ Fonts from CDNs. nginx sets no CSP today; a future CSP must allow those hosts
 or the viewer breaks silently. See
 `docs/superpowers/specs/2026-10-27-tabernacle-walk-design.md`.
 
+## Defend the Faith mode (internal id `apologetics`)
+
+The user's apologetics YouTube Shorts (a planned 50-part series, one objection
+each, list in `~/Documents/Apologetics/Arguments`) presented as **tracks**:
+playlists of related shorts, worked through beside a chat that discusses each
+short and, once every uploaded short in the track is watched, the whole track.
+
+**Data.** The source files live outside the repo in
+`~/Documents/Apologetics/Shorts/` (`NN <Subject> - script.txt` — the narration
+as recorded — `- description.txt`, `- thumbnail.jpg`). The only hand-edited
+file is `chatbot/data/apologetics_tracks.json` (tracks: id, title, blurb,
+ordered short numbers; `youtube_ids`: number → YouTube id).
+`python scripts/import_apologetics_shorts.py` builds the committed manifest
+`chatbot/data/apologetics_shorts.json` (parsing in `chatbot/apologetics_import.py`)
+and thumbnails under `frontend/public/apologetics/thumbs/`. **Titles come from
+YouTube oEmbed**, never the description's `TITLE:` line, so re-run the import
+after renaming a video; a failed fetch fails the import. To add a short: save
+its files, add its YouTube id and its number to a track (or a new track),
+re-run the import, then `pytest tests/chatbot/test_apologetics_*`. A short may
+be in several tracks or none; a short with no YouTube id shows as "Coming
+soon"; a track with nothing uploaded is hidden. The manifest is under
+`chatbot/`, so the chatbot image ships it with no Dockerfile change
+(`APOLOGETICS_SHORTS_PATH` overrides the path, for tests).
+
+**Backend** `chatbot/apologetics_mode.py`: `GET /apologetics/tracks` (shorts
+without scripts), a no-LLM primer returning an `apologetics_track` artifact,
+and `answer`, one LLM call grounded on the track's uploaded shorts in full
+(script, summary, fiction note, further reading; current/watched marked) plus
+a one-line catalogue of every other uploaded short. **Editing the system
+prompt changes what the chat may say**: the shorts are the basis; no facts,
+statistics, quotes or scholars beyond them; shorts are named **by title, never
+by number** (other tracks by name too); the stories' characters are
+fictional — the chat may recall a story but never present its characters as
+real. References become explorer links via `wiki_refs.resolve_scripture_refs`.
+`chatbot/api.py` routes `mode == "apologetics"` in both `post_chat` and
+`_stream_chat_response`.
+
+**Frontend.** The tile opens fetched track choices (`apologeticsTrackChoice`
+in `lib/modeData.ts`); picking one fetches the primer and opens the playlist
+(not at phone width; the chat shows an "Open the playlist" card).
+`ApologeticsTrackArtifact.tsx` plays shorts with the YouTube IFrame API
+(`lib/youtubePlayer.ts`; `youtube-nocookie.com`, `rel=0`; auto-advance cues the
+next short and never autoplays it), marks watched on end or "Mark watched",
+falls back to a "Watch on YouTube" link when a video can't play, and opens
+further-reading refs as `interlinear` artifacts. Progress lives in the
+session's `modeParams` (`trackId`, `watchedShorts`, `currentShort`,
+`trackCompletePrompted`), so reloads and share links keep it. The panel talks
+to `ChatPane` through `lib/apologeticsEvents.ts` ("Ask about this" →
+`Tell me more about "<title>".`; track complete → a once-per-session prompt
+with three follow-up chips). A future CSP must allow `www.youtube.com`,
+`www.youtube-nocookie.com` and `i.ytimg.com`. See
+`docs/superpowers/specs/2026-11-18-defend-the-faith-design.md`.
+
 ## Key Conventions
 
 - HTML templates are Python string literals with `{{{PLACEHOLDER}}}` markers replaced via `.replace()` — not Jinja2.
