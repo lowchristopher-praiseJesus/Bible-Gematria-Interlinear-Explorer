@@ -2094,6 +2094,41 @@ describe('ChatPane', () => {
         .toMatchObject({ trackId: 'jesus-rose', currentShort: 5, watchedShorts: [5] })
     })
 
+    describe('Ask about this on a narrow screen', () => {
+      const desktopMatchMedia = window.matchMedia
+      afterEach(() => {
+        window.matchMedia = desktopMatchMedia
+      })
+      const setNarrow = (narrow: boolean) => {
+        window.matchMedia = vi.fn().mockImplementation((q: string) => ({
+          matches: narrow && q.includes('1023.98'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+          addListener: vi.fn(), removeListener: vi.fn(), onchange: null, dispatchEvent: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+      }
+
+      it('closes the playlist sheet so the chat shows the question and answer', async () => {
+        setNarrow(true)
+        const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose', watchedShorts: [5] })
+        useArtifactStore.setState({ activeArtifact: trackLink, status: 'ready', data: trackLink.params })
+        vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'He died.' })
+        render(<ChatPane sessionId={session.id} />)
+        act(() => emitAsk({ sessionId: session.id, shortNumber: 5, title: 'Did Jesus Really Die on the Cross?' }))
+        expect(useArtifactStore.getState().activeArtifact).toBeNull()
+        expect(await screen.findByText('Tell me more about "Did Jesus Really Die on the Cross?".')).toBeInTheDocument()
+      })
+
+      it('keeps the playlist open beside the chat on a wide screen', async () => {
+        setNarrow(false)
+        const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose', watchedShorts: [5] })
+        useArtifactStore.setState({ activeArtifact: trackLink, status: 'ready', data: trackLink.params })
+        vi.spyOn(chatApi, 'postChatStream').mockResolvedValue({ type: 'chat', message: 'He died.' })
+        render(<ChatPane sessionId={session.id} />)
+        act(() => emitAsk({ sessionId: session.id, shortNumber: 5, title: 'Did Jesus Really Die on the Cross?' }))
+        await screen.findByText('Tell me more about "Did Jesus Really Die on the Cross?".')
+        expect(useArtifactStore.getState().activeArtifact).toEqual(trackLink)
+      })
+    })
+
     it('ignores ask while busy, and asks for another session', async () => {
       const session = useSessionsStore.getState().createSession('apologetics', { trackId: 'jesus-rose' })
       let resolve!: (v: Awaited<ReturnType<typeof chatApi.postChatStream>>) => void

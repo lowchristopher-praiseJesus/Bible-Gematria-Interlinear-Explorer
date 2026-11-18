@@ -819,6 +819,11 @@ export function ChatPane({ sessionId, onNavigateToSession }: Props) {
       // The selected short isn't in sendMessage's session snapshot until the
       // next render, so pass it for this turn explicitly.
       void sendMessageRef.current(`Tell me more about "${e.title}".`, undefined, { currentShort: e.shortNumber })
+      // Below lg the playlist is a sheet covering the chat (App.tsx), so the
+      // question and its answer would be hidden: close it. Progress is in the
+      // session, so "Open the playlist" brings it back where the user was.
+      const narrow = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1023.98px)').matches
+      if (narrow) useArtifactStore.getState().close()
     })
     const offComplete = onTrackComplete((e) => {
       const cur = sessionRef.current
