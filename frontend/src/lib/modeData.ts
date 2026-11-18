@@ -64,5 +64,5 @@ export function resetApologeticsTracksCache(): void {
 /** A Defend the Faith track as a choice pill (mode picker and retry). */
 export function apologeticsTrackChoice(t: ApologeticsTrack): MessageChoice {
   const uploaded = t.shorts.filter((s) => s.youtube_id).length
-  return { label: `${t.title} — ${uploaded} shorts`, modeParams: { trackId: t.id, watchedShorts: [] } }
+  return { label: `${t.title} — ${uploaded} ${uploaded === 1 ? 'short' : 'shorts'}`, modeParams: { trackId: t.id, watchedShorts: [] } }
 }

@@ -122,7 +122,7 @@ describe('ModePickerScreen', () => {
       'Be ready always to give an answer (1 Peter 3:15). Which question would you like to work through?'
     )
     expect(firstSession().messages[1].choices).toEqual([
-      { label: 'Did Jesus rise? — 1 shorts', modeParams: { trackId: 'jesus-rose', watchedShorts: [] } },
+      { label: 'Did Jesus rise? — 1 short', modeParams: { trackId: 'jesus-rose', watchedShorts: [] } },
     ])
   })
 
