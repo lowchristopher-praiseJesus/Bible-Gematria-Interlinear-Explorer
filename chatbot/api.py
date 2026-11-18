@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from chatbot.schemas import (
     BookContextResponse,
     CharactersResponse,
+    ApologeticsTracksResponse,
     ChatRequest,
     ChatResponse,
     DevotionalAudioRequest,
@@ -49,7 +50,7 @@ from chatbot.story_illustrations import (
     synthesize_illustration,
 )
 from chatbot.data.parables import PARABLES
-from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader, passage_search, tabernacle_mode
+from chatbot import wiki_loader, wiki_qa, socratic, hermeneutics, character_chat, character_loader, passage_search, tabernacle_mode, apologetics_mode
 from chatbot.router import (
     build_mode_primer,
     route_deterministic,
@@ -233,6 +234,12 @@ async def list_characters():
     return CharactersResponse(characters=character_loader.list_characters())
 
 
+@router.get("/apologetics/tracks", response_model=ApologeticsTracksResponse)
+async def list_apologetics_tracks():
+    """List the Defend the Faith tracks (shorts without their scripts)."""
+    return ApologeticsTracksResponse(tracks=apologetics_mode.list_tracks())
+
+
 @router.get("/passages/status", response_model=PassagesStatusResponse)
 async def passages_status():
     """Whether "Find passages" can run (the chunk index loaded). Never calls
@@ -396,6 +403,12 @@ async def post_chat(request: ChatRequest):
         # spot panels and their verses, never the generic path.
         if request.mode == "tabernacle":
             result = await tabernacle_mode.answer(request.message, history, request.mode_params)
+            return _with_trace(result)
+
+        # Every turn in a Defend the Faith session is answered from the
+        # track's shorts, never the generic path.
+        if request.mode == "apologetics":
+            result = await apologetics_mode.answer(request.message, history, request.mode_params)
             return _with_trace(result)
 
         # Every turn in a Hermeneutics session needs the phase pipeline (or
@@ -632,6 +645,13 @@ async def _stream_chat_response(
         # Same special case: the reply arrives whole.
         if request.mode == "tabernacle":
             result = await tabernacle_mode.answer(request.message, history, request.mode_params)
+            _note_outcome(result)
+            yield await sse_event("final", {"result": result})
+            return
+
+        # Same special case: the reply arrives whole.
+        if request.mode == "apologetics":
+            result = await apologetics_mode.answer(request.message, history, request.mode_params)
             _note_outcome(result)
             yield await sse_event("final", {"result": result})
             return

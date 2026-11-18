@@ -1344,6 +1344,10 @@ async def build_mode_primer(mode: str, mode_params: Optional[Dict[str, Any]]) ->
         from chatbot import tabernacle_mode
         return tabernacle_mode.primer(mode_params)
 
+    if mode == "apologetics":
+        from chatbot import apologetics_mode
+        return apologetics_mode.primer(mode_params)
+
     if mode == "story":
         return await story_mode.build_primer(mode_params)
 

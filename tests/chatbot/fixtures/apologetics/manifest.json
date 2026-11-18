@@ -1,0 +1,109 @@
+{
+  "tracks": [
+    {
+      "id": "t1",
+      "title": "Track One",
+      "blurb": "First track.",
+      "shorts": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "t2",
+      "title": "Track Two",
+      "blurb": "Second track.",
+      "shorts": [
+        4
+      ]
+    },
+    {
+      "id": "empty",
+      "title": "Empty Track",
+      "blurb": "Nothing uploaded.",
+      "shorts": [
+        5
+      ]
+    }
+  ],
+  "shorts": {
+    "1": {
+      "number": 1,
+      "subject": "Subject 1",
+      "title": "First Short Title",
+      "youtube_id": "yt1",
+      "summary": "Summary one. More text.",
+      "fiction_note": "(The professor and the student are fictional characters.)",
+      "script": "SCRIPT ONE: a student checks the dates.",
+      "further_reading": [
+        {
+          "text": "1 Corinthians 15:3–7",
+          "refs": [
+            "1CO 15:3-7"
+          ]
+        },
+        {
+          "text": "Arrian",
+          "refs": []
+        }
+      ],
+      "thumbnail": "/apologetics/thumbs/01.jpg"
+    },
+    "2": {
+      "number": 2,
+      "subject": "Subject 2",
+      "title": "Second Short Title",
+      "youtube_id": "yt2",
+      "summary": "Summary two.",
+      "fiction_note": null,
+      "script": "SCRIPT TWO body.",
+      "further_reading": [],
+      "thumbnail": "/apologetics/thumbs/02.jpg"
+    },
+    "3": {
+      "number": 3,
+      "subject": "Subject 3",
+      "title": "Subject 3",
+      "youtube_id": null,
+      "summary": "Summary three.",
+      "fiction_note": null,
+      "script": "SCRIPT THREE not uploaded.",
+      "further_reading": [],
+      "thumbnail": "/apologetics/thumbs/03.jpg"
+    },
+    "4": {
+      "number": 4,
+      "subject": "Subject 4",
+      "title": "Other Track Short",
+      "youtube_id": "yt4",
+      "summary": "Summary four is about morality. Second sentence.",
+      "fiction_note": null,
+      "script": "SCRIPT FOUR body.",
+      "further_reading": [],
+      "thumbnail": "/apologetics/thumbs/04.jpg"
+    },
+    "5": {
+      "number": 5,
+      "subject": "Subject 5",
+      "title": "Subject 5",
+      "youtube_id": null,
+      "summary": "Summary five.",
+      "fiction_note": null,
+      "script": "SCRIPT FIVE.",
+      "further_reading": [],
+      "thumbnail": "/apologetics/thumbs/05.jpg"
+    },
+    "6": {
+      "number": 6,
+      "subject": "Subject 6",
+      "title": "Loose Short Title",
+      "youtube_id": "yt6",
+      "summary": "Loose summary first sentence. Another.",
+      "fiction_note": null,
+      "script": "SCRIPT LOOSE body.",
+      "further_reading": [],
+      "thumbnail": "/apologetics/thumbs/06.jpg"
+    }
+  }
+}
