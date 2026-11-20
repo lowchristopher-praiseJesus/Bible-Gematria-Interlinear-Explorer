@@ -2,9 +2,9 @@
   "tracks": [
     {"id": "bible-reliable", "title": "Is the Bible reliable?", "blurb": "How we know the Gospels are early, faithfully copied, grounded in real places, and honest eyewitness accounts.", "shorts": [1, 2, 7, 8]},
     {"id": "jesus-rose", "title": "Did Jesus rise?", "blurb": "Why the disciples' transformation, the death on the cross, and the eyewitnesses point to a real resurrection.", "shorts": [3, 4, 5, 6]},
-    {"id": "morality", "title": "Where does morality come from?", "blurb": "Why right and wrong can't be decided by vote, contract or chemistry, and what that says about God.", "shorts": [9, 10, 11, 12, 13, 14]},
+    {"id": "morality", "title": "Where does morality come from?", "blurb": "Why right and wrong can't be decided by vote, contract or chemistry, and what that says about God.", "shorts": [9, 10, 11, 12, 13, 14, 22]},
     {"id": "designed-universe", "title": "Is the universe designed?", "blurb": "Why a finely tuned cosmos with a beginning, and life written in code, point to a Mind behind it all.", "shorts": [15, 16, 17, 18]},
-    {"id": "problem-of-evil", "title": "Why does God allow evil?", "blurb": "Why a world with real love needs real freedom, and what that means for the evil we see.", "shorts": [19]}
+    {"id": "problem-of-evil", "title": "Why does God allow evil?", "blurb": "Why real love needs real freedom, and why the innocent so often suffer for other people's choices.", "shorts": [19, 20, 21]}
   ],
-  "youtube_ids": {"1": "3hl-YcJKQkk", "2": "TIFHMjGjXA4", "3": "a4ASuGSh-Ek", "4": "o1-JjQA-TbQ", "5": "TK0yn3cjhCY", "6": "qeiqu1FdTEs", "7": "k4lcPyvCWVo", "8": "7HygRgAhW6g", "9": "QoH_J7BUFkc", "10": "sMTCMBsxYY8", "11": "Sx14sr3m_6M", "12": "HLcfmGJ5EhQ", "13": "GJtSSePCZt4", "14": "rcmSKgBurvQ", "15": "ui0qr276Mdo", "16": "RItYXOWVD0c", "17": "w8VPZ18k7bo", "18": "W_q9E-XCZ44", "19": "-AsP4qZH4qs"}
+  "youtube_ids": {"1": "3hl-YcJKQkk", "2": "TIFHMjGjXA4", "3": "a4ASuGSh-Ek", "4": "o1-JjQA-TbQ", "5": "TK0yn3cjhCY", "6": "qeiqu1FdTEs", "7": "k4lcPyvCWVo", "8": "7HygRgAhW6g", "9": "QoH_J7BUFkc", "10": "sMTCMBsxYY8", "11": "Sx14sr3m_6M", "12": "HLcfmGJ5EhQ", "13": "GJtSSePCZt4", "14": "rcmSKgBurvQ", "15": "ui0qr276Mdo", "16": "RItYXOWVD0c", "17": "w8VPZ18k7bo", "18": "W_q9E-XCZ44", "19": "-AsP4qZH4qs", "20": "bTecqSS-N_E", "21": "qHFwMPgznpU", "22": "bZw4upaY3tQ"}
 }
