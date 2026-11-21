@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, Optional
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from chatbot.apologetics_import import parse_description, parse_short_filename  # noqa: E402
+from chatbot.apologetics_import import clean_youtube_title, parse_description, parse_short_filename  # noqa: E402
 
 TRACKS_PATH = ROOT / "chatbot" / "data" / "apologetics_tracks.json"
 MANIFEST_PATH = ROOT / "chatbot" / "data" / "apologetics_shorts.json"
@@ -72,7 +72,7 @@ def build_manifest(source: Path, tracks: Dict[str, Any], fetch_title: Callable[[
         video_id: Optional[str] = ids.get(str(n))
         if video_id:
             try:
-                title = fetch_title(video_id)
+                title = clean_youtube_title(fetch_title(video_id))
             except Exception as exc:  # noqa: BLE001 — any failure is a loud import failure
                 raise ImportError_(f"could not fetch the YouTube title for short #{n} ({video_id}): {exc}") from exc
         else:

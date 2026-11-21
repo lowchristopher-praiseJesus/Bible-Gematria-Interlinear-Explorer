@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from chatbot.apologetics_import import parse_description, parse_further_reading, parse_short_filename
+from chatbot.apologetics_import import clean_youtube_title, parse_description, parse_further_reading, parse_short_filename
 
 FIX = Path(__file__).parent / "fixtures" / "apologetics"
 
@@ -56,3 +56,28 @@ def test_scripture_item_with_trailing_note_keeps_its_ref():
 def test_description_without_scripture():
     d = parse_description((FIX / "10 Divine Lawgiver - description.txt").read_text())
     assert d["further_reading"] and all(i["refs"] == [] for i in d["further_reading"])
+
+
+def test_clean_youtube_title_drops_part_number_hashtags_and_trailing_emoji():
+    assert clean_youtube_title(
+        "Does the Bible Endorse the Slave Trade? Read Exodus 21:16 \u26d3\ufe0f | Part 25 #Shorts"
+    ) == "Does the Bible Endorse the Slave Trade? Read Exodus 21:16"
+    assert clean_youtube_title(
+        "Did God Play Favorites With Canaan? Ask Judge Hale \u2696\ufe0f | Part 24 #Shorts"
+    ) == "Did God Play Favorites With Canaan? Ask Judge Hale"
+    # Collapses the doubled space YouTube leaves where a period was.
+    assert clean_youtube_title("He Tore Down Every Guardrail  Then the Fog Rolled In") == (
+        "He Tore Down Every Guardrail Then the Fog Rolled In"
+    )
+    # Plain titles are untouched.
+    assert clean_youtube_title("Did Jesus Really Die on the Cross?") == "Did Jesus Really Die on the Cross?"
+    assert clean_youtube_title("Why Do Innocent Children Suffer? Follow the Dominoes") == (
+        "Why Do Innocent Children Suffer? Follow the Dominoes"
+    )
+
+
+def test_further_reading_semicolon_list_shares_the_book():
+    items = parse_further_reading("Deuteronomy 15:12–18; 23:15–16 · Exodus 21:2–16")
+    assert [i["refs"] for i in items] == [["DEU 15:12-18", "DEU 23:15-16"], ["EXO 21:2-16"]]
+    # A later segment that isn't a bare chapter[:verse] makes the item plain.
+    assert parse_further_reading("Romans 1:20; see also Acts 17")[0]["refs"] == []
